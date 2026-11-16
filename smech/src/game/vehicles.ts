@@ -29,19 +29,6 @@ export interface VehicleConfig {
 
 export const VEHICLE_ORDER: VehicleType[] = ['warden', 'pyre', 'glacier'];
 
-/**
- * Special weapons that can be scavenged from weapon caches during a run.
- * They mount into the spare hardpoints the chassis does not use out of the box.
- */
-export const MODULE_POOL: WeaponId[] = ['mortar', 'nova', 'overdrive', 'cryo'];
-
-/** Each chassis gravitates towards a different kind of salvage. */
-export const MODULE_AFFINITY: Record<VehicleType, WeaponId[]> = {
-  warden: ['mortar', 'overdrive'],
-  pyre: ['overdrive', 'nova'],
-  glacier: ['cryo', 'nova'],
-};
-
 export const VEHICLES: Record<VehicleType, VehicleConfig> = {
   warden: {
     name: 'WARDEN-9 "OATHKEEPER"',
@@ -150,19 +137,3 @@ export const WEAPON_INFO: Record<
 
 /** Total number of distinct weapons in the arsenal. */
 export const WEAPON_COUNT = Object.keys(WEAPON_INFO).length;
-
-/** Hardpoint keys for the special-weapon rack, in slot order. */
-export const MODULE_KEYS = ['Q', 'E', 'R', 'F'] as const;
-
-/**
- * Decide which special weapon a weapon cache hands over.
- * Chassis affinity wins two times out of three; otherwise the whole pool is
- * rolled. Returns null when the player already owns every module.
- */
-export function pickModule(owned: ReadonlySet<WeaponId>, vehicle: VehicleType, rand: () => number = Math.random): WeaponId | null {
-  const pool = MODULE_POOL.filter((m) => !owned.has(m));
-  if (!pool.length) return null;
-  const affinity = MODULE_AFFINITY[vehicle].filter((m) => pool.includes(m));
-  if (affinity.length && rand() < 0.65) return affinity[Math.floor(rand() * affinity.length)];
-  return pool[Math.floor(rand() * pool.length)];
-}

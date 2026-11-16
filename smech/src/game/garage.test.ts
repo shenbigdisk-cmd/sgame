@@ -1,0 +1,161 @@
+import { beforeEach, describe, expect, it } from 'vitest';
+import {
+  DEFAULT_GARAGE,
+  GARAGE_STORAGE_KEY,
+  buyComponent,
+  STARTING_CREDITS,
+  creditsForRun,
+  equipComponent,
+  grantCredits,
+  loadGarage,
+  renameMech,
+  saveGarage,
+  type GarageState,
+} from './garage';
+import { getComponent, STARTER_COMPONENTS } from './forge';
+import type { GameStats } from './types';
+
+const stats = (over: Partial<GameStats> = {}): GameStats => ({
+  score: 1000,
+  wave: 2,
+  kills: 10,
+  timeSurvived: 60,
+  vehicle: 'warden',
+  perks: [],
+  seed: 'TEST-01',
+  zone: 0,
+  ...over,
+});
+
+beforeEach(() => {
+  localStorage.clear();
+});
+
+describe('garage persistence', () => {
+  it('starts with the starter parts and a starter purse', () => {
+    const garage = loadGarage();
+    expect(garage.credits).toBe(STARTING_CREDITS);
+    for (const id of STARTER_COMPONENTS) expect(garage.owned).toContain(id);
+  });
+
+  it('round-trips through storage', () => {
+    const garage = loadGarage();
+    const spent = grantCredits(garage, 900);
+    saveGarage(spent);
+    const loaded = loadGarage();
+    expect(loaded.credits).toBe(STARTING_CREDITS + 900);
+  });
+
+  it('ignores a corrupted save', () => {
+    localStorage.setItem(GARAGE_STORAGE_KEY, '{not json');
+    expect(loadGarage().credits).toBe(STARTING_CREDITS);
+  });
+
+  it('drops unknown components from a tampered save', () => {
+    localStorage.setItem(
+      GARAGE_STORAGE_KEY,
+      JSON.stringify({ credits: 10, mechName: 'X', owned: ['h_ablation', 'not_a_part'], equipped: { primary: 'not_a_part' } }),
+    );
+    const garage = loadGarage();
+    expect(garage.owned).not.toContain('not_a_part');
+    expect(garage.equipped.primary).not.toBe('not_a_part');
+  });
+
+  it('keeps the starter parts even when a save forgets them', () => {
+    localStorage.setItem(GARAGE_STORAGE_KEY, JSON.stringify({ credits: 0, owned: [], equipped: {} }));
+    const garage = loadGarage();
+    for (const id of STARTER_COMPONENTS) expect(garage.owned).toContain(id);
+  });
+
+  it('never lets a save go negative', () => {
+    localStorage.setItem(GARAGE_STORAGE_KEY, JSON.stringify({ credits: -500, owned: [], equipped: {} }));
+    expect(loadGarage().credits).toBe(0);
+  });
+});
+
+describe('credits', () => {
+  it('pays out for a run', () => {
+    expect(creditsForRun(stats({ score: 2000, wave: 4, kills: 30 }), false)).toBeGreaterThan(0);
+  });
+
+  it('pays more for a better run', () => {
+    const small = creditsForRun(stats({ score: 500, wave: 1, kills: 5 }), false);
+    const large = creditsForRun(stats({ score: 9000, wave: 8, kills: 90 }), false);
+    expect(large).toBeGreaterThan(small);
+  });
+
+  it('pays a bonus for a personal best', () => {
+    const plain = creditsForRun(stats(), false);
+    const best = creditsForRun(stats(), true);
+    expect(best).toBe(plain + 150);
+  });
+
+  it('always pays something for showing up', () => {
+    expect(creditsForRun(stats({ score: 0, wave: 0, kills: 0 }), false)).toBeGreaterThan(0);
+  });
+
+  it('adds credits to the wallet', () => {
+    const next = grantCredits(loadGarage(), 250);
+    expect(next.credits).toBe(STARTING_CREDITS + 250);
+    expect(loadGarage().credits).toBe(STARTING_CREDITS + 250);
+  });
+});
+
+describe('buying and equipping', () => {
+  const rich = (): GarageState => grantCredits(loadGarage(), 5000 - STARTING_CREDITS);
+
+  it('buys a component and takes the credits', () => {
+    const result = buyComponent(rich(), 'h_ablation');
+    expect(result.ok).toBe(true);
+    expect(result.state.owned).toContain('h_ablation');
+    expect(result.state.credits).toBe(5000 - getComponent('h_ablation')!.cost);
+  });
+
+  it('refuses a purchase the player cannot afford', () => {
+    const result = buyComponent({ ...DEFAULT_GARAGE, credits: 1 }, 'h_ablation');
+    expect(result.ok).toBe(false);
+    expect(result.reason).toBe('poor');
+  });
+
+  it('refuses to buy the same component twice', () => {
+    const once = buyComponent(rich(), 'h_ablation').state;
+    const twice = buyComponent(once, 'h_ablation');
+    expect(twice.ok).toBe(false);
+    expect(twice.reason).toBe('owned');
+  });
+
+  it('refuses an unknown component', () => {
+    const result = buyComponent(rich(), 'not_a_component');
+    expect(result.ok).toBe(false);
+    expect(result.reason).toBe('unknown');
+  });
+
+  it('equips an owned component', () => {
+    const bought = buyComponent(rich(), 'h_ablation').state;
+    const next = equipComponent(bought, 'h_ablation');
+    expect(next.equipped.armour).toBe('h_ablation');
+  });
+
+  it('will not equip a component the player does not own', () => {
+    const before = rich();
+    const after = equipComponent(before, 'h_ablation');
+    expect(after.equipped.armour).toBe(before.equipped.armour);
+  });
+
+  it('swaps the two specials instead of duplicating one', () => {
+    let garage = rich();
+    garage = equipComponent(garage, 'x_nova', 'specialQ');
+    garage = equipComponent(garage, 'x_nova', 'specialE');
+    expect(garage.equipped.specialQ).not.toBe(garage.equipped.specialE);
+  });
+
+  it('renames the mech and trims the name', () => {
+    const renamed = renameMech(loadGarage(), '  IRON   VANGUARD  ');
+    expect(renamed.mechName).toBe('IRON VANGUARD');
+    expect(renameMech(loadGarage(), 'x'.repeat(40)).mechName.length).toBeLessThanOrEqual(18);
+  });
+
+  it('falls back to a default name for an empty one', () => {
+    expect(renameMech(loadGarage(), '   ').mechName).toBe(DEFAULT_GARAGE.mechName);
+  });
+});

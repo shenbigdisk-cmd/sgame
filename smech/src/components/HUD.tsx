@@ -205,38 +205,6 @@ function WeaponSlot({ w, accent, onUse }: { w: HudState['weapons'][number]; acce
   );
 }
 
-function ModuleSlot({ w, accent, onUse }: { w: HudState['modules'][number]; accent: string; onUse?: () => void }) {
-  const R = 17;
-  const circ = 2 * Math.PI * R;
-  const ready = w.ready >= 1;
-  const color = ready ? accent : '#ff8a3d';
-  return (
-    <button className="module-slot pointer-events-auto" title={`${w.name} [${w.key}]${w.detail === 'EVOLVED' ? ' / EVOLVED' : ''}`} onClick={onUse}>
-      <div className="module-ring">
-        <svg width="38" height="38" viewBox="-19 -19 38 38">
-          <circle r={R} fill="rgba(0,0,0,0.55)" stroke="rgba(255,255,255,0.12)" strokeWidth="2" />
-          <circle
-            r={R}
-            fill="none"
-            stroke={color}
-            strokeWidth="2.5"
-            strokeDasharray={circ}
-            strokeDashoffset={circ * (1 - w.ready)}
-            transform="rotate(-90)"
-            strokeLinecap="round"
-            style={{ transition: 'stroke-dashoffset 80ms linear', filter: ready ? `drop-shadow(0 0 4px ${color})` : 'none' }}
-          />
-        </svg>
-        <div className="module-icon">
-          <Icon name={WEAPON_ICON[w.id]} size={16} />
-        </div>
-        <div className="module-key" style={{ background: accent }}>{w.key}</div>
-      </div>
-      <div className="module-name">{w.detail === 'EVOLVED' ? 'EVOLVED' : w.short}</div>
-    </button>
-  );
-}
-
 export default function HUD({ hud, vehicle, onWeapon, settings }: Props) {
   const accent = VEHICLES[vehicle].accent;
   const hpRatio = clamp01(hud.hp / hud.maxHp);
@@ -524,14 +492,6 @@ export default function HUD({ hud, vehicle, onWeapon, settings }: Props) {
         </div>
       )}
 
-      {/* scavenged module hardpoints */}
-      {hud.modules.length > 0 && (
-        <div className="module-strip" style={{ right: '2.5%', bottom: `calc(${consoleH} + 1.5% + 78px)`, ['--module-accent' as string]: accent }}>
-          {hud.modules.map((w) => (
-            <ModuleSlot key={w.id} w={w} accent={accent} onUse={() => onWeapon?.(w.id)} />
-          ))}
-        </div>
-      )}
 
       {/* weapon systems */}
       <div className="absolute right-[2.5%] flex items-end gap-0.5" style={{ bottom: `calc(${consoleH} + 1.5%)` }}>
@@ -642,8 +602,8 @@ export default function HUD({ hud, vehicle, onWeapon, settings }: Props) {
           style={{ bottom: `calc(${consoleH} + 2%)`, opacity: hud.time < 12 ? 0.8 : Math.max(0, (16 - hud.time) / 4) }}
         >
           {hud.controls === 'arcade'
-            ? `LMB PRIMARY · RMB / C SECONDARY · ${hud.modules.length ? `${hud.modules.map((m) => m.key).join(' / ')} MODULES · ` : 'Q / E SPECIALS · '}Z SCOPE · M MUSIC`
-            : `WASD DRIVE HULL · MOUSE AIM TURRET · LMB CANNON · RMB / C SECONDARY${hud.modules.length ? ` · ${hud.modules.map((m) => m.key)} MODULES` : ''} · Z SCOPE`}
+            ? `LMB PRIMARY · RMB / C SECONDARY · Q / E SPECIALS · Z SCOPE · M MUSIC`
+            : `WASD DRIVE HULL · MOUSE AIM TURRET · LMB CANNON · RMB / C SECONDARY · Z SCOPE`}
         </div>
       )}
 

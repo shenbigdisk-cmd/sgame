@@ -54,7 +54,20 @@ export default function GameOver({ stats, records = [], onRetry, onMenu }: Props
 
         <div className="text-[10px] tracking-[0.3em] text-zinc-500 mt-2" style={{ fontFamily: MONO }}>
           SECTOR {stats.seed} · PERIMETER LEVEL {stats.zone + 1}
+          {stats.mechName ? ` · ${stats.mechName}` : ''}
         </div>
+
+        {typeof stats.credits === 'number' && stats.credits > 0 && (
+          <div className="gameover-credits mt-4">
+            <span className="text-[10px] tracking-[0.35em] text-zinc-400" style={{ fontFamily: MONO }}>
+              // CREDITS EARNED
+            </span>
+            <strong style={{ fontFamily: DISPLAY, color: '#ffd24a' }}>+{stats.credits.toLocaleString('en-US')} CR</strong>
+            <span className="text-[10px] tracking-[0.2em] text-zinc-500" style={{ fontFamily: MONO }}>
+              SPEND THEM IN THE FORGE
+            </span>
+          </div>
+        )}
         <div className="mt-6 grid grid-cols-3 gap-4">
           {[
             ['WAVES', pad(stats.wave)],

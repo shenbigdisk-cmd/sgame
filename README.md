@@ -2,8 +2,9 @@
 
 A first-person tank and mech combat simulator that runs entirely in the browser.
 Take the gunner's seat of a salvage rig, drop into a procedurally generated
-sector, and survive escalating waves of hostile armour while you scavenge
-upgrades and weapon caches off the sand.
+sector, and survive escalating waves of hostile armour. Credits earned in the
+sand are spent in **THE FORGE**, where you buy components and bolt them into a
+mech that is entirely your own.
 
 Built with **React 19 + TypeScript + Vite + three.js**. Everything you see is
 generated at runtime: the terrain, the districts, the roads, the sky, the
@@ -65,7 +66,6 @@ https://raw.githubusercontent.com/shenbigdisk-cmd/sgame/arena/e2b67aef-sgame/pre
 | `LMB` / `Space` | Primary weapon (autocannons, scattergun, coil repeater) |
 | `RMB` / `C` | Secondary weapon (60mm cannons, flamethrower, cryo grenade) |
 | `Q` / `E` | Chassis special hardpoints |
-| `R` / `F` | Scavenged module hardpoints (once a weapon cache is opened) |
 | `W A S D` | Drive (relative to your view in **EASY**, hull-relative in **SIM**) |
 | `Z` / `MMB` | Scope |
 | `M` | Music on / off |
@@ -114,25 +114,45 @@ rounds, repair swarm, killstreak surge, arc discharger, bulwark field,
 saturation barrage, supply network).
 
 Every weapon has exactly one evolution, and an evolution only appears once you
-own the weapon it upgrades. The scavenged modules evolve too:
+own the weapon it upgrades. The four Forge specials evolve too:
 
-| Module | Evolution | Effect |
+| Forge special | Evolution | Effect |
 | --- | --- | --- |
 | `INCENDIARY MORTARS` | `THERMAL DRUMS` | Pools burn hotter and longer, and never scorch you |
 | `STASIS NOVA` | `GLACIAL SHATTER` | Nova deals 20 damage and leaves enemies brittle |
 | `OVERDRIVE VENT` | `REACTOR PURGE` | Venting restores shield and purges weapon heat |
 | `CRYO LANCE` | `GLACIAL LOCK` | Chilled targets build frost and freeze solid |
 
-### Weapon caches
-Supply pods can fall out of the sky carrying a **WEAPON CACHE**. Opening one
-mounts a spare special weapon into the `R` / `F` hardpoints:
+### THE FORGE
+There is no loot to scavenge. **Credits** are the currency, and they are earned
+by fighting: every run pays out on score, waves cleared, kills and personal
+bests. Open **THE FORGE** from the hangar and spend them.
 
-* **INCENDIARY MORTARS** — mark an area, then bury it under a shell storm
-* **STASIS NOVA** — a freezing pulse that locks hostiles in place
-* **OVERDRIVE VENT** — vent the reactor for speed, reload and a burn nova
-* **CRYO LANCE** — a single devastating lance that freezes what it hits
+Eight slots make up a mech, and every one of them is yours to fill:
 
-Each of them can then be evolved and tuned with its own upgrade line.
+| Slot | What it takes | Example |
+| --- | --- | --- |
+| `FRAME` | The chassis you walk out in — always free | `WARDEN`, `PYRE`, `GLACIER` |
+| `PRIMARY` | The trigger weapon | Rotary autocannons, scattergun, coil repeater |
+| `SECONDARY` | The heavy weapon | 60mm cannons, cryo grenade, Dragon's Breath |
+| `SPECIAL · Q` | One of the Forge specials | Homing missiles, skyfall slam, longbow railgun |
+| `SPECIAL · E` | A second special | Sentry turret, cinder mines, veil smoke |
+| `ARMOUR` | Hull plating | Lattice armour, ablative carapace |
+| `REACTOR` | Shield and power | Fused capacitor, titan reactor |
+| `DRIVE` | Legs and speed | Sprint servos, atlas legs |
+
+Components are bought once and kept forever. Mounting one applies its stat
+deltas to the frame baseline, so a heavy carapace raises your hull and costs
+you top speed — the trade-offs are yours to make. The Forge shows the live
+build statistics as you work, and the mech you assemble is the mech you take
+into the arena.
+
+### Persistence
+Credits, every component you own, the mech name and the exact build you
+mounted are written to `localStorage` under `steel-horizon:garage:v1`, so the
+Forge is exactly where you left it when you come back. Cockpit settings
+(sensitivity, field of view, invert look, render quality, volumes, crosshair,
+performance readout) and the hall-of-fame records are stored alongside them.
 
 ### Feedback
 Procedural audio (weapons, explosions, engines, ambience and an adaptive
@@ -140,11 +160,6 @@ score) is synthesised with the Web Audio API and spatialised with stereo pan,
 distance muffling and speed-of-sound delay. The HUD tracks hull, shield,
 heat, cooldowns, a radar, target telemetry, kill streaks and incoming damage
 directions.
-
-### Persistence
-Cockpit settings (sensitivity, field of view, invert look, render quality,
-volumes, crosshair, performance readout) and the hall-of-fame records are
-stored in `localStorage`.
 
 ---
 
@@ -160,6 +175,7 @@ smech/
    ├─ App.tsx               # screen flow: hangar → arena → debrief
    ├─ components/
    │  ├─ Menu.tsx           # hangar: chassis, loadout, legend, config, hall of fame
+   │  ├─ Forge.tsx          # THE FORGE: buy components, mount them, name the mech
    │  ├─ GameView.tsx       # canvas host, pause menu, loading screen
    │  ├─ HUD.tsx            # cockpit instruments, radar, crosshair, modules
    │  ├─ UpgradeScreen.tsx  # between-wave reward draft
@@ -179,6 +195,8 @@ smech/
       ├─ particles.ts       # instanced billboard particle system
       ├─ readiness.ts       # pure weapon-readiness and aim-assist maths
       ├─ vehicles.ts        # chassis + weapon catalogue
+      ├─ forge.ts           # THE FORGE component catalogue and build resolution
+      ├─ garage.ts          # credits, owned components, equipped slots, persistence
       ├─ upgrades.ts        # upgrade catalogue and reward rolling
       ├─ weaponEffects.ts   # beam / lightning visuals
       ├─ audio.ts           # procedural Web Audio engine

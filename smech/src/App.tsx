@@ -1,4 +1,4 @@
-import { useCallback, useRef, useState } from 'react';
+import { useCallback, useMemo, useRef, useState } from 'react';
 import Menu from './components/Menu';
 import GameView from './components/GameView';
 import GameOver from './components/GameOver';
@@ -6,6 +6,15 @@ import { AudioManager } from './game/audio';
 import { randomSeedCode } from './game/world';
 import { loadSettings, saveSettings, type Settings } from './game/settings';
 import { loadRecords, submitRecord } from './game/records';
+import { buildConfig } from './game/forge';
+import {
+  creditsForRun,
+  garageStepWeight,
+  grantCredits,
+  loadGarage,
+  saveGarage,
+  type GarageState,
+} from './game/garage';
 import type { ControlMode, GameStats, VehicleType } from './game/types';
 
 type Screen = 'menu' | 'playing' | 'gameover';
@@ -19,6 +28,12 @@ export default function App() {
   const [session, setSession] = useState(0);
   const [settings, setSettings] = useState<Settings>(() => loadSettings());
   const [records, setRecords] = useState(() => loadRecords());
+  // The mech the player builds in the forge, and the credits it was bought with.
+  const [garage, setGarage] = useState<GarageState>(() => loadGarage());
+  // The built configuration must keep a stable identity: the simulation
+  // rebuilds itself whenever it changes, and a fresh object every render
+  // would rebuild it in a loop.
+  const build = useMemo(() => buildConfig(garage.equipped), [garage.equipped]);
   // The audio graph outlives a single run, so it is kept in a ref and mirrored
   // into state (only for rendering) — never read a ref during render.
   const audioRef = useRef<AudioManager | null>(null);
@@ -56,12 +71,27 @@ export default function App() {
   const handleGameOver = useCallback((s: GameStats) => {
     const { records: next, isBest, rank } = submitRecord(s);
     setRecords(next);
-    setStats({ ...s, isBest, rank });
+    // Winning in the sand pays out credits for the forge.
+    const earned = creditsForRun(s, isBest);
+    setGarage((current) => grantCredits(current, earned));
+    setStats({ ...s, isBest, rank, credits: earned, mechName: garage.mechName });
     setScreen('gameover');
-  }, []);
+  }, [garage.mechName]);
 
   if (screen === 'menu') {
-    return <Menu onStart={start} settings={settings} onSettings={updateSettings} records={records} />;
+    return (
+      <Menu
+        onStart={start}
+        settings={settings}
+        onSettings={updateSettings}
+        records={records}
+        garage={garage}
+        onGarage={(next: GarageState) => {
+          setGarage(next);
+          saveGarage(next);
+        }}
+      />
+    );
   }
 
   return (
@@ -70,6 +100,9 @@ export default function App() {
         <GameView
           key={session}
           vehicle={vehicle}
+          config={build}
+          stepWeight={garageStepWeight(garage)}
+          mechName={garage.mechName}
           controls={controls}
           seed={seed}
           audio={audio}

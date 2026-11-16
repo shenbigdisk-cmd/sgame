@@ -39,7 +39,7 @@ export interface UpgradeDef {
   max?: number;
 }
 
-export type DropKind = 'repair' | 'shield' | 'overcharge' | 'rapid' | 'emp' | 'score' | 'weapon';
+export type DropKind = 'repair' | 'shield' | 'overcharge' | 'rapid' | 'emp' | 'score';
 
 export interface HudBuff {
   id: string;
@@ -149,8 +149,6 @@ export interface HudState {
   /** lateral movement, -1 (left) .. 1 (right) */
   lean: number;
   weapons: HudWeapon[];
-  /** extra special weapons scavenged from weapon caches */
-  modules: HudWeapon[];
   /** pending upgrade choice (null when nothing to pick) */
   offer: UpgradeDef[] | null;
   perks: { name: string; icon: string; count: number }[];
@@ -195,9 +193,13 @@ export interface GameStats {
   kills: number;
   timeSurvived: number;
   vehicle: VehicleType;
+  /** the name of the mech the player took into the pits */
+  mechName?: string;
   perks: string[];
   seed: string;
   zone: number;
+  /** credits this run paid out */
+  credits?: number;
   /** true when the run set a new personal best */
   isBest?: boolean;
   /** position in the hall of fame (0 = first) */

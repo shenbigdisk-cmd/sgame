@@ -6,7 +6,6 @@ interface Props {
   game: Game | null;
   accent: string;
   weapons: HudWeapon[];
-  modules?: HudWeapon[];
 }
 
 const DISPLAY = "'Orbitron', 'Share Tech Mono', monospace";
@@ -16,7 +15,7 @@ const DISPLAY = "'Orbitron', 'Share Tech Mono', monospace";
  * movement (relative to where you are looking), drag anywhere on the right to
  * aim, and big fire buttons.
  */
-export default function TouchControls({ game, accent, weapons, modules = [] }: Props) {
+export default function TouchControls({ game, accent, weapons }: Props) {
   const [stick, setStick] = useState<{ active: boolean; ox: number; oy: number; dx: number; dy: number }>({ active: false, ox: 0, oy: 0, dx: 0, dy: 0 });
   const lookId = useRef<number | null>(null);
   const lookLast = useRef({ x: 0, y: 0 });
@@ -132,7 +131,7 @@ export default function TouchControls({ game, accent, weapons, modules = [] }: P
 
       {/* special weapon hardpoints */}
       <div className="absolute right-5 top-[24%] flex flex-wrap gap-2 justify-end" style={{ maxWidth: '58vw' }}>
-        {[...specials, ...modules].map((weapon) => (
+        {specials.map((weapon) => (
           <button
             key={`${weapon.id}-${weapon.key}`}
             className="min-w-[74px] rounded px-2 py-3 text-[10px] tracking-wider disabled:opacity-40"

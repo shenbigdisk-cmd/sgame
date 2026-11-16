@@ -40,12 +40,12 @@ describe('upgrade catalogue', () => {
     }
   });
 
-  it('gives every scavenged module weapon an evolution', () => {
+  it('gives every Forge special an evolution', () => {
     // The engine gates behaviour on evolved('mortar' | 'nova' | 'overdrive' | 'cryo');
     // a missing evolution would leave those branches permanently unreachable.
     const evoIds = new Set(EVOLUTIONS.map((e) => e.id));
-    for (const moduleWeapon of ['mortar', 'nova', 'overdrive', 'cryo'] as WeaponId[]) {
-      expect(evoIds.has(`evo_${moduleWeapon}`)).toBe(true);
+    for (const special of ['mortar', 'nova', 'overdrive', 'cryo'] as WeaponId[]) {
+      expect(evoIds.has(`evo_${special}`)).toBe(true);
     }
   });
 
@@ -116,13 +116,13 @@ describe('rollOffer', () => {
     expect(offer.length).toBeGreaterThan(0);
   });
 
-  it('only offers module evolutions once the module is mounted', () => {
-    const moduleEvos = ['evo_mortar', 'evo_nova', 'evo_overdrive', 'evo_cryo'];
-    const withoutModules = new Set<WeaponId>(['autocannon', 'cannon', 'missiles', 'turret']);
+  it('only offers special evolutions once that special is mounted', () => {
+    const specialEvos = ['evo_mortar', 'evo_nova', 'evo_overdrive', 'evo_cryo'];
+    const withoutSpecials = new Set<WeaponId>(['autocannon', 'cannon', 'missiles', 'turret']);
     for (let i = 0; i < 80; i++) {
-      const offer = rollOffer(new Map(), withoutModules);
+      const offer = rollOffer(new Map(), withoutSpecials);
       for (const upgrade of offer) {
-        if (moduleEvos.includes(upgrade.id)) expect(upgrade.id).toBe('never');
+        if (specialEvos.includes(upgrade.id)) expect(upgrade.id).toBe('never');
       }
     }
     const withMortar = new Set<WeaponId>(['autocannon', 'cannon', 'missiles', 'turret', 'mortar']);

@@ -7,11 +7,17 @@ import HUD from './HUD';
 import TouchControls from './TouchControls';
 import UpgradeScreen from './UpgradeScreen';
 import SettingsPanel from './SettingsPanel';
-import { VEHICLES } from '../game/vehicles';
+import { VEHICLES, type VehicleConfig } from '../game/vehicles';
 import FullscreenButton from './FullscreenButton';
 
 interface Props {
   vehicle: VehicleType;
+  /** the built mech configuration from the forge */
+  config?: VehicleConfig;
+  /** enemy difficulty weight carried by the equipped frame */
+  stepWeight?: number;
+  /** the name the player gave the mech */
+  mechName?: string;
   controls: ControlMode;
   seed: string;
   audio: AudioManager;
@@ -27,7 +33,7 @@ const MONO = "'Share Tech Mono', 'Courier New', monospace";
 const isTouchDevice = () =>
   typeof window !== 'undefined' && ('ontouchstart' in window || (navigator.maxTouchPoints ?? 0) > 0) && window.matchMedia('(pointer: coarse)').matches;
 
-export default function GameView({ vehicle, controls, seed, audio, settings, onSettings, onGameOver, onAbort }: Props) {
+export default function GameView({ vehicle, config, stepWeight, mechName, controls, seed, audio, settings, onSettings, onGameOver, onAbort }: Props) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const gameRef = useRef<Game | null>(null);
   const [game, setGame] = useState<Game | null>(null);
@@ -61,6 +67,9 @@ export default function GameView({ vehicle, controls, seed, audio, settings, onS
         g = new Game({
           canvas,
           vehicle,
+          config,
+          stepWeight,
+          mechName,
           controls,
           seed,
           audio,
@@ -90,7 +99,7 @@ export default function GameView({ vehicle, controls, seed, audio, settings, onS
       gameRef.current = null;
       setGame(null);
     };
-  }, [vehicle, controls, seed, audio, touch]);
+  }, [vehicle, config, stepWeight, mechName, controls, seed, audio, touch]);
 
   // live cockpit preferences are pushed into the running simulation
   useEffect(() => {
@@ -114,7 +123,7 @@ export default function GameView({ vehicle, controls, seed, audio, settings, onS
     <div className="app-viewport relative w-full bg-black overflow-hidden" style={{ touchAction: 'none' }}>
       <canvas ref={canvasRef} className="absolute inset-0 w-full h-full block" />
       {hud && <HUD hud={hud} vehicle={vehicle} settings={settings} onWeapon={(id) => gameRef.current?.useWeapon(id)} />}
-      {touch && <TouchControls game={game} accent={accent} weapons={hud?.weapons ?? []} modules={hud?.modules ?? []} />}
+      {touch && <TouchControls game={game} accent={accent} weapons={hud?.weapons ?? []} />}
       {hud?.offer && <UpgradeScreen hud={hud} accent={accent} onPick={(i) => gameRef.current?.pickUpgrade(i)} onHover={() => audio.playUiHover()} />}
       {loading && (
         <div className="absolute inset-0 z-40 flex flex-col items-center justify-center gap-5 bg-[#070d0f] text-center" role="status" aria-live="polite">
@@ -180,9 +189,6 @@ export default function GameView({ vehicle, controls, seed, audio, settings, onS
                 <span><b className="text-zinc-200">Z</b> scope</span>
                 <span><b className="text-zinc-200">M</b> music on / off</span>
                 <span><b className="text-zinc-200">ESC</b> pause</span>
-                {hud && hud.modules.length > 0 && (
-                  <span><b className="text-zinc-200">{hud.modules.map((m) => m.key).join(' / ')}</b> scavenged modules</span>
-                )}
               </div>
             ) : (
               <div className="mt-5 text-left">

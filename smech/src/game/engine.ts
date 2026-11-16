@@ -6,7 +6,7 @@ import { OutputPass } from 'three/examples/jsm/postprocessing/OutputPass.js';
 import type { AudioManager } from './audio';
 import type { ControlMode, DropKind, EnemyKind, GameStats, HudState, HudTarget, HudWeapon, RadarBlip, UpgradeDef, VehicleType, WeaponId } from './types';
 import { defaultStats, rollOffer, type PlayerStats } from './upgrades';
-import { MODULE_KEYS, VEHICLES, WEAPON_INFO, pickModule, type VehicleConfig } from './vehicles';
+import { VEHICLES, WEAPON_INFO, type VehicleConfig } from './vehicles';
 import { DEFAULT_SETTINGS, type Settings } from './settings';
 import { createBar, createMechMesh, createTankMesh, setShadows, type Palette } from './enemyMeshes';
 import { aimAssist, cooldownReadiness, secondaryReadiness, triggerReadiness } from './readiness';
@@ -64,14 +64,14 @@ const ENEMIES: Record<EnemyKind, EnemyConfig> = {
 const BOSS_NAME = 'WARLORD';
 const DROP_LABEL: Record<DropKind, string> = {
   repair: 'REPAIR KIT', shield: 'SHIELD BATTERY', overcharge: 'OVERCHARGE ROUNDS',
-  rapid: 'RAPID RELOAD', emp: 'EMP CHARGE', score: 'SALVAGE CACHE', weapon: 'WEAPON CACHE',
+  rapid: 'RAPID RELOAD', emp: 'EMP CHARGE', score: 'SALVAGE CACHE',
 };
 const DROP_COLOR: Record<DropKind, number> = {
   repair: 0x4dff88, shield: 0x59c8ff, overcharge: 0xff9a3d,
-  rapid: 0xffe14a, emp: 0xb07dff, score: 0xffd24a, weapon: 0xff6bd5,
+  rapid: 0xffe14a, emp: 0xb07dff, score: 0xffd24a,
 };
 const DROP_WEIGHTS: [DropKind, number][] = [
-  ['repair', 30], ['shield', 17], ['overcharge', 16], ['rapid', 13], ['emp', 9], ['score', 7], ['weapon', 12],
+  ['repair', 30], ['shield', 17], ['overcharge', 16], ['rapid', 13], ['emp', 9], ['score', 12],
 ];
 
 const PALETTES: Record<EnemyKind | 'wreck', Palette> = {
@@ -242,6 +242,12 @@ interface FeedItem {
 export interface GameOptions {
   canvas: HTMLCanvasElement;
   vehicle: VehicleType;
+  /** the name the player gave the mech */
+  mechName?: string;
+  /** the built mech configuration; defaults to the stock chassis */
+  config?: VehicleConfig;
+  /** enemy difficulty weight carried by the equipped frame */
+  stepWeight?: number;
   controls?: ControlMode;
   /** sector seed code; a random one is generated when omitted */
   seed?: string;
@@ -288,6 +294,8 @@ export class Game {
   private opts: GameOptions;
   private cfg: VehicleConfig;
   private vehicle: VehicleType;
+  /** the name the player gave the mech */
+  private mechName = '';
 
   private running = false;
   private paused = true;
@@ -322,8 +330,7 @@ export class Game {
   // progression / weapon systems
   private stats: PlayerStats = defaultStats();
   private settings: Settings = { ...DEFAULT_SETTINGS };
-  /** special weapons scavenged from weapon caches, mounted after the chassis hardpoints */
-  private modules: WeaponId[] = [];
+  /** upgrade stacks taken during the run, keyed by upgrade id */
   private taken = new Map<string, number>();
   private perkList: { name: string; icon: string }[] = [];
   private owned = new Set<WeaponId>();
@@ -482,11 +489,12 @@ export class Game {
     this.opts = opts;
     this.seedCode = opts.seed && opts.seed.trim() ? opts.seed.trim().toUpperCase() : randomSeedCode();
     this.layout = generateLayout(this.seedCode);
-    this.stepWeight = { warden: 1, pyre: 1.5, glacier: 0.75 }[opts.vehicle];
+    this.stepWeight = opts.stepWeight ?? { warden: 1, pyre: 1.5, glacier: 0.75 }[opts.vehicle];
     this.canvas = opts.canvas;
     this.audio = opts.audio;
     this.vehicle = opts.vehicle;
-    this.cfg = VEHICLES[opts.vehicle];
+    this.cfg = opts.config ?? VEHICLES[opts.vehicle];
+    this.mechName = opts.mechName?.trim() || this.cfg.name;
     this.hp = this.cfg.maxHp;
     this.stats.shieldMax = this.cfg.shield;
     this.shieldHp = this.cfg.shield;
@@ -838,9 +846,6 @@ export class Game {
     if (e.code === 'KeyM' && !e.repeat) this.audio.toggleMusic();
     if (!e.repeat && e.code === 'KeyQ') this.useWeapon(this.cfg.loadout.abilityQ);
     if (!e.repeat && e.code === 'KeyE') this.useWeapon(this.cfg.loadout.abilityE);
-    // scavenged hardpoints: the first module answers to R, the second to F
-    if (!e.repeat && e.code === 'KeyR') this.useModule(0);
-    if (!e.repeat && e.code === 'KeyF') this.useModule(1);
     if (e.code === 'Digit1' || e.code === 'Numpad1') this.pickUpgrade(0);
     if (e.code === 'Digit2' || e.code === 'Numpad2') this.pickUpgrade(1);
     if (e.code === 'Digit3' || e.code === 'Numpad3') this.pickUpgrade(2);
@@ -971,6 +976,7 @@ export class Game {
           kills: this.kills,
           timeSurvived: this.time,
           vehicle: this.vehicle,
+          mechName: this.mechName,
           perks: this.perkList.map((p) => p.name),
           seed: this.seedCode,
           zone: this.zone,
@@ -1861,13 +1867,6 @@ export class Game {
     }
   }
 
-  /** Fire the scavenged module mounted in the given hardpoint, if any. */
-  private useModule(slot: number) {
-    const id = this.modules[slot];
-    if (!id) return;
-    this.useWeapon(id);
-  }
-
   /** Pyre vents the reactor: a burn nova plus 10s+ of speed and reload. */
   private fireOverdrive() {
     const stacks = this.stats.overdriveStacks;
@@ -2659,37 +2658,7 @@ export class Game {
         this.score += 600;
         this.addFeed('SALVAGE CACHE  +600');
         break;
-      case 'weapon':
-        this.grantModule();
-        break;
     }
-  }
-
-  /**
-   * Mount a scavenged special weapon into one of the spare hardpoints.
-   * Caches that cannot be used are sold for salvage instead of vanishing.
-   */
-  private grantModule() {
-    const spare = MODULE_KEYS.length - 2 - this.modules.length;
-    if (spare <= 0) {
-      this.score += 750;
-      this.addFeed('HARDPOINTS FULL — CACHE SOLD FOR 750');
-      return;
-    }
-    const pick = pickModule(this.owned, this.vehicle);
-    if (!pick) {
-      this.score += 750;
-      this.addFeed('CACHE EMPTY — SALVAGE SOLD FOR 750');
-      return;
-    }
-    this.owned.add(pick);
-    this.modules.push(pick);
-    this.weaponCd[pick] = 0;
-    const key = MODULE_KEYS[2 + this.modules.length - 1];
-    this.setMessage(`${WEAPON_INFO[pick].name} ONLINE`);
-    this.addFeed(`WEAPON CACHE — ${WEAPON_INFO[pick].name} MOUNTED [${key}]`);
-    this.audio.playUpgrade();
-    this.shake = Math.max(this.shake, 0.12);
   }
 
   // -------------------------------------------------------------------------
@@ -3746,14 +3715,6 @@ export class Game {
       const px = clamp(this.pos.x + Math.sin(a) * 18, -this.arenaR + 20, this.arenaR - 20);
       const pz = clamp(this.pos.z + Math.cos(a) * 18, -this.arenaR + 20, this.arenaR - 20);
       if (!this.obstacles.some((o) => obsDist(o, px, pz) < 2)) this.spawnPickup(px, pz);
-      // guarantee an early weapon cache so the spare hardpoints are discoverable
-      if (this.modules.length === 0 && this.wave <= 2) {
-        const d = rand(38, 62);
-        const wx = clamp(this.pos.x + Math.sin(a + 1.1) * d, -this.arenaR + 20, this.arenaR - 20);
-        const wz = clamp(this.pos.z + Math.cos(a + 1.1) * d, -this.arenaR + 20, this.arenaR - 20);
-        this.spawnDrop(wx, wz, 'weapon');
-        this.addFeed('WEAPON CACHE INBOUND — SCAVENGE A MODULE');
-      }
     }
   }
 
@@ -4185,10 +4146,6 @@ export class Game {
       const info = WEAPON_INFO[id];
       return { id, name: info.name, short: info.short, key: info.key, owned: true, ready: slotReady(id), active: 0, detail: this.evolved(id) ? 'EVOLVED' : slotDetail(id) };
     });
-    const modules: HudWeapon[] = this.modules.map((id, i) => {
-      const info = WEAPON_INFO[id];
-      return { id, name: info.name, short: info.short, key: MODULE_KEYS[2 + i] ?? `M${i + 1}`, owned: true, ready: slotReady(id), active: 0, detail: this.evolved(id) ? 'EVOLVED' : slotDetail(id) };
-    });
     const perkMap = new Map<string, { name: string; icon: string; count: number }>();
     for (const p of this.perkList) {
       const cur = perkMap.get(p.name);
@@ -4204,7 +4161,6 @@ export class Game {
       shieldStatus: this.shieldBroken ? 'restarting' : this.shieldHp < s.shieldMax && this.shieldDelay === 0 ? 'recharging' : 'online',
       shieldDelay: this.shieldDelay,
       weapons,
-      modules,
       offer: this.offer,
       perks: [...perkMap.values()],
       boss,
@@ -4281,7 +4237,7 @@ export class Game {
       time: this.time,
       zoom: this.zoom,
       target,
-      vehicleName: this.cfg.name,
+      vehicleName: this.mechName,
       controls: this.controls,
       autoAlign: this.controls === 'arcade' && Math.abs(this.speed) < 1.2,
       lean: this.lean,

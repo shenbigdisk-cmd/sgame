@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { aimAssist, cooldownReadiness, isModuleWeapon, moduleKey, secondaryReadiness, triggerReadiness } from './readiness';
+import { aimAssist, cooldownReadiness, secondaryReadiness, triggerReadiness } from './readiness';
 
 describe('trigger readiness', () => {
   it('reports free heat for heat weapons', () => {
@@ -83,21 +83,5 @@ describe('aim assist', () => {
   it('survives a broken stat', () => {
     expect(aimAssist(Number.NaN)).toBe(0);
     expect(aimAssist(Number.POSITIVE_INFINITY)).toBe(1.6);
-  });
-});
-
-describe('module hardpoints', () => {
-  it('binds the first module to R and the second to F', () => {
-    expect(moduleKey(0)).toBe('R');
-    expect(moduleKey(1)).toBe('F');
-  });
-
-  it('recognises the scavenged module weapons', () => {
-    expect(isModuleWeapon('mortar')).toBe(true);
-    expect(isModuleWeapon('nova')).toBe(true);
-    expect(isModuleWeapon('overdrive')).toBe(true);
-    expect(isModuleWeapon('cryo')).toBe(true);
-    expect(isModuleWeapon('missiles')).toBe(false);
-    expect(isModuleWeapon('turret')).toBe(false);
   });
 });

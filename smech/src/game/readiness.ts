@@ -1,5 +1,3 @@
-import type { WeaponId } from './types';
-
 /**
  * Weapon readiness — how far along a trigger is towards being usable.
  *
@@ -38,7 +36,7 @@ export function triggerReadiness(t: TriggerReadiness): number {
 }
 
 /**
- * Readiness of a cooldown weapon (cryo grenade, special modules).
+ * Readiness of a cooldown weapon (cryo grenade, special weapons).
  *
  * `cooldownTime` must be the value the cooldown was primed with, not a
  * freshly computed one: upgrades picked mid-cooldown would otherwise make the
@@ -94,14 +92,4 @@ export function aimAssist(multiplier: number, max = 1.6): number {
   if (multiplier <= 0) return 0;
   if (!Number.isFinite(multiplier)) return max;
   return multiplier > max ? max : multiplier;
-}
-
-/** The hardpoint key a scavenged module is bound to. */
-export function moduleKey(slot: number): string {
-  return slot === 0 ? 'R' : 'F';
-}
-
-/** True when the given weapon id is bound to a scavenged module hardpoint. */
-export function isModuleWeapon(id: WeaponId): boolean {
-  return id === 'mortar' || id === 'nova' || id === 'overdrive' || id === 'cryo';
 }
