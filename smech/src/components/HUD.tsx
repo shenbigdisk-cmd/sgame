@@ -1,11 +1,13 @@
 import type { HudState, VehicleType, RadarBlip, WeaponId } from '../game/types';
 import { VEHICLES } from '../game/vehicles';
+import type { Settings } from '../game/settings';
 import { Icon } from './Icons';
 
 interface Props {
   hud: HudState;
   vehicle: VehicleType;
   onWeapon?: (id: WeaponId) => void;
+  settings?: Settings;
 }
 
 const TWO_PI = Math.PI * 2;
@@ -203,7 +205,39 @@ function WeaponSlot({ w, accent, onUse }: { w: HudState['weapons'][number]; acce
   );
 }
 
-export default function HUD({ hud, vehicle, onWeapon }: Props) {
+function ModuleSlot({ w, accent, onUse }: { w: HudState['modules'][number]; accent: string; onUse?: () => void }) {
+  const R = 17;
+  const circ = 2 * Math.PI * R;
+  const ready = w.ready >= 1;
+  const color = ready ? accent : '#ff8a3d';
+  return (
+    <button className="module-slot pointer-events-auto" title={`${w.name} [${w.key}]${w.detail === 'EVOLVED' ? ' / EVOLVED' : ''}`} onClick={onUse}>
+      <div className="module-ring">
+        <svg width="38" height="38" viewBox="-19 -19 38 38">
+          <circle r={R} fill="rgba(0,0,0,0.55)" stroke="rgba(255,255,255,0.12)" strokeWidth="2" />
+          <circle
+            r={R}
+            fill="none"
+            stroke={color}
+            strokeWidth="2.5"
+            strokeDasharray={circ}
+            strokeDashoffset={circ * (1 - w.ready)}
+            transform="rotate(-90)"
+            strokeLinecap="round"
+            style={{ transition: 'stroke-dashoffset 80ms linear', filter: ready ? `drop-shadow(0 0 4px ${color})` : 'none' }}
+          />
+        </svg>
+        <div className="module-icon">
+          <Icon name={WEAPON_ICON[w.id]} size={16} />
+        </div>
+        <div className="module-key" style={{ background: accent }}>{w.key}</div>
+      </div>
+      <div className="module-name">{w.detail === 'EVOLVED' ? 'EVOLVED' : w.short}</div>
+    </button>
+  );
+}
+
+export default function HUD({ hud, vehicle, onWeapon, settings }: Props) {
   const isTank = false;
   const accent = VEHICLES[vehicle].accent;
   const hpRatio = clamp01(hud.hp / hud.maxHp);
@@ -266,10 +300,31 @@ export default function HUD({ hud, vehicle, onWeapon }: Props) {
         <Stat label="HOSTILES" value={pad(hud.enemiesLeft)} accent={hud.enemiesLeft > 0 ? '#ff6b6b' : accent} />
         <Stat label="SCORE" value={pad(hud.score, 6)} accent={accent} />
       </div>
+
+      {/* wave modifier */}
+      {hud.waveTag && (
+        <div className="absolute left-[2.5%]" style={{ top: '6.6%' }}>
+          <span
+            className="text-[9px] tracking-[0.3em] px-2 py-0.5 rounded whitespace-nowrap"
+            style={{ background: 'rgba(0,0,0,0.5)', border: `1px solid ${accent}55`, color: accent, fontFamily: DISPLAY }}
+          >
+            {hud.waveTag}
+          </span>
+        </div>
+      )}
       {/* top-right */}
       <div className="absolute top-[1.6%] right-[2.5%] flex gap-5 md:gap-8 text-right items-end flex-col md:flex-row">
         <Stat label="MISSION TIME" value={fmtTime(hud.time)} accent={accent} />
         <Stat label="KILLS" value={pad(hud.kills)} accent={accent} />
+      </div>
+
+      {/* music state */}
+      <div
+        className="absolute right-[2.5%] text-[9px] tracking-[0.25em] opacity-70"
+        style={{ top: '6.6%', textShadow: '0 1px 3px #000', color: hud.musicOn ? accent : '#8b8b8b' }}
+        title={hud.musicOn ? 'Music on (M)' : 'Music off (M)'}
+      >
+        {hud.musicOn ? '♪ SCORE ON' : '♪̸ SCORE OFF'}
       </div>
 
       {/* compass */}
@@ -397,7 +452,7 @@ export default function HUD({ hud, vehicle, onWeapon }: Props) {
       ))}
 
       {/* crosshair */}
-      {hud.alive && (
+      {hud.alive && settings?.crosshair !== false && (
         <svg className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2" width="180" height="180" viewBox="-90 -90 180 180">
           <circle r={R} fill="none" stroke={accent} strokeOpacity="0.2" strokeWidth="2" />
           <circle
@@ -470,12 +525,28 @@ export default function HUD({ hud, vehicle, onWeapon }: Props) {
         </div>
       )}
 
+      {/* scavenged module hardpoints */}
+      {hud.modules.length > 0 && (
+        <div className="module-strip" style={{ right: '2.5%', bottom: `calc(${consoleH} + 1.5% + 78px)`, ['--module-accent' as string]: accent }}>
+          {hud.modules.map((w) => (
+            <ModuleSlot key={w.id} w={w} accent={accent} onUse={() => onWeapon?.(w.id)} />
+          ))}
+        </div>
+      )}
+
       {/* weapon systems */}
       <div className="absolute right-[2.5%] flex items-end gap-0.5" style={{ bottom: `calc(${consoleH} + 1.5%)` }}>
         {hud.weapons.map((w) => (
           <WeaponSlot key={w.id} w={w} accent={accent} onUse={w.key === 'Q' || w.key === 'E' ? () => onWeapon?.(w.id) : undefined} />
         ))}
       </div>
+
+      {/* performance readout */}
+      {settings?.showFps && (
+        <div className="perf-readout" style={{ bottom: `calc(${consoleH} + 1.5%)`, left: '2.5%', top: 'auto', transform: 'none' }}>
+          {Math.round(hud.fps)} FPS
+        </div>
+      )}
 
       {/* bottom console */}
       <div className="absolute left-0 right-0 bottom-0 flex items-center justify-between px-[2.5%] gap-4" style={{ height: consoleH }}>
@@ -572,8 +643,8 @@ export default function HUD({ hud, vehicle, onWeapon }: Props) {
           style={{ bottom: `calc(${consoleH} + 2%)`, opacity: hud.time < 12 ? 0.8 : Math.max(0, (16 - hud.time) / 4) }}
         >
           {hud.controls === 'arcade'
-            ? 'LMB PRIMARY · RMB SECONDARY · Q / E SPECIALS · Z SCOPE · M MUSIC'
-            : 'WASD DRIVE HULL · MOUSE AIM TURRET · LMB CANNON · RMB MACHINE GUN · Z SCOPE'}
+            ? `LMB PRIMARY · RMB / C SECONDARY · ${hud.modules.length ? `${hud.modules.map((m) => m.key).join(' / ')} MODULES · ` : 'Q / E SPECIALS · '}Z SCOPE · M MUSIC`
+            : `WASD DRIVE HULL · MOUSE AIM TURRET · LMB CANNON · RMB / C SECONDARY${hud.modules.length ? ` · ${hud.modules.map((m) => m.key)} MODULES` : ''} · Z SCOPE`}
         </div>
       )}
 

@@ -1,8 +1,10 @@
 import type { GameStats } from '../game/types';
 import { VEHICLES } from '../game/vehicles';
+import type { RunRecord } from '../game/records';
 
 interface Props {
   stats: GameStats;
+  records?: RunRecord[];
   onRetry: (freshSector: boolean) => void;
   onMenu: () => void;
 }
@@ -20,11 +22,12 @@ function rank(score: number) {
   return { title: 'RECRUIT', color: '#c8c8c8' };
 }
 
-export default function GameOver({ stats, onRetry, onMenu }: Props) {
+export default function GameOver({ stats, records = [], onRetry, onMenu }: Props) {
   const accent = VEHICLES[stats.vehicle].accent;
   const r = rank(stats.score);
   const mins = Math.floor(stats.timeSurvived / 60);
   const secs = Math.floor(stats.timeSurvived % 60);
+  const best = records[0]?.score ?? 0;
   return (
     <div className="gameover-screen absolute inset-0 z-20 flex items-center justify-center bg-black/80 text-zinc-100 p-6" style={{ backdropFilter: 'blur(6px)' }}>
       <div className="gameover-content w-full max-w-2xl rounded-lg p-8 md:p-10 text-center" style={{ background: 'rgba(8,10,14,0.92)', border: `1px solid ${accent}55`, boxShadow: `0 0 60px ${accent}22` }}>
@@ -34,6 +37,11 @@ export default function GameOver({ stats, onRetry, onMenu }: Props) {
         <h2 className="mt-3 text-2xl md:text-4xl font-black tracking-[0.2em] whitespace-nowrap" style={{ fontFamily: DISPLAY, color: '#fff', textShadow: '0 0 24px rgba(255,60,60,0.5)' }}>
           HULL DESTROYED
         </h2>
+        {stats.isBest && (
+          <div className="mt-4 inline-block px-4 py-1 rounded text-[11px] tracking-[0.4em]" style={{ fontFamily: DISPLAY, color: '#ffd24a', border: '1px solid #ffd24a66', background: 'rgba(255,210,74,0.08)' }}>
+            ★ NEW PERSONAL BEST
+          </div>
+        )}
         <div className="mt-6 text-5xl md:text-6xl font-black" style={{ fontFamily: DISPLAY, color: accent, textShadow: `0 0 30px ${accent}66` }}>
           {pad(stats.score, 6)}
         </div>
@@ -44,7 +52,7 @@ export default function GameOver({ stats, onRetry, onMenu }: Props) {
           RANK: {r.title}
         </div>
 
-        <div className="mt-2 text-[10px] tracking-[0.3em] text-zinc-500" style={{ fontFamily: MONO }}>
+        <div className="text-[10px] tracking-[0.3em] text-zinc-500 mt-2" style={{ fontFamily: MONO }}>
           SECTOR {stats.seed} · PERIMETER LEVEL {stats.zone + 1}
         </div>
         <div className="mt-6 grid grid-cols-3 gap-4">
@@ -76,6 +84,32 @@ export default function GameOver({ stats, onRetry, onMenu }: Props) {
                 </span>
               ))}
             </div>
+          </div>
+        )}
+
+        {records.length > 0 && (
+          <div className="mt-5 text-left">
+            <div className="text-[10px] tracking-[0.35em] text-zinc-400 mb-2" style={{ fontFamily: MONO }}>
+              // HALL OF FAME
+            </div>
+            <div className="records-panel">
+              <div className="records-list">
+                {records.slice(0, 5).map((rec, i) => (
+                  <div key={`${rec.at}-${i}`} className={`records-row ${i === 0 ? 'is-best' : ''}`}>
+                    <span>{pad(i + 1)}</span>
+                    <span>
+                      {pad(rec.score, 6)} <em>· WAVE {pad(rec.wave)} · {VEHICLES[rec.vehicle]?.shortName ?? 'MECH'}</em>
+                    </span>
+                    <span>{pad(rec.timeSurvived / 60)}:{pad(rec.timeSurvived % 60)}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+            {best > 0 && !stats.isBest && (
+              <div className="mt-2 text-[10px] tracking-[0.2em] text-zinc-500" style={{ fontFamily: MONO }}>
+                BEST {pad(best, 6)} · {pad(best - stats.score)} SHORT
+              </div>
+            )}
           </div>
         )}
 

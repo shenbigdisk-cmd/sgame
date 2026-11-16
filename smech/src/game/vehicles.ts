@@ -29,6 +29,19 @@ export interface VehicleConfig {
 
 export const VEHICLE_ORDER: VehicleType[] = ['warden', 'pyre', 'glacier'];
 
+/**
+ * Special weapons that can be scavenged from weapon caches during a run.
+ * They mount into the spare hardpoints the chassis does not use out of the box.
+ */
+export const MODULE_POOL: WeaponId[] = ['mortar', 'nova', 'overdrive', 'cryo'];
+
+/** Each chassis gravitates towards a different kind of salvage. */
+export const MODULE_AFFINITY: Record<VehicleType, WeaponId[]> = {
+  warden: ['mortar', 'overdrive'],
+  pyre: ['overdrive', 'nova'],
+  glacier: ['cryo', 'nova'],
+};
+
 export const VEHICLES: Record<VehicleType, VehicleConfig> = {
   warden: {
     name: 'WARDEN-9 "OATHKEEPER"',
@@ -122,7 +135,7 @@ export const WEAPON_INFO: Record<
   scatter: { name: 'SCRAP SCATTERGUN', short: 'SCATTERGUN', description: 'Six barrels of close-range persuasion.', cooldown: 1.05, icon: 'scatter', key: 'LMB' },
   coil: { name: 'COIL REPEATER', short: 'COIL REPEATER', description: 'Hypervelocity needles. Precise and punishing.', cooldown: 0, icon: 'coil', key: 'LMB' },
   flame: { name: "DRAGON'S BREATH", short: 'FLAMETHROWER', description: 'A cone of liquid fire. Sets mechs ablaze.', cooldown: 0, icon: 'flame', key: 'RMB' },
-  cryo: { name: 'CRYO LANCE', short: 'CRYO LANCE', description: 'A freezing beam that slows what it touches.', cooldown: 0, icon: 'cryo', key: 'RMB' },
+  cryo: { name: 'CRYO LANCE', short: 'CRYO LANCE', description: 'A freezing lance that locks a target in frost.', cooldown: 3.5, icon: 'cryo', key: 'RMB' },
   cryoball: { name: 'CRYO GRENADE', short: 'CRYO GRENADE', description: 'Lobbed ice charge that freezes everything in the blast.', cooldown: 2.8, icon: 'cryoball', key: 'RMB' },
   jump: { name: 'SKYFALL SLAM', short: 'JUMP SLAM', description: 'Rocket-jump forward and crash down with a fiery shockwave.', cooldown: 10, icon: 'jump', key: 'Q' },
   mines: { name: 'CINDER MINES', short: 'MINES', description: 'Deploy proximity mines that detonate into fire.', cooldown: 9, icon: 'mines', key: 'E' },
@@ -134,3 +147,22 @@ export const WEAPON_INFO: Record<
   rail: { name: 'LONGBOW RAILGUN', short: 'RAILGUN', description: 'An instant lightning beam. Lethal precision.', cooldown: 8, icon: 'target', key: 'Q' },
   nova: { name: 'STASIS NOVA', short: 'STASIS NOVA', description: 'A freezing pulse that locks enemies in place.', cooldown: 15, icon: 'nova', key: 'E' },
 };
+
+/** Total number of distinct weapons in the arsenal. */
+export const WEAPON_COUNT = Object.keys(WEAPON_INFO).length;
+
+/** Hardpoint keys for the special-weapon rack, in slot order. */
+export const MODULE_KEYS = ['Q', 'E', 'R', 'F'] as const;
+
+/**
+ * Decide which special weapon a weapon cache hands over.
+ * Chassis affinity wins two times out of three; otherwise the whole pool is
+ * rolled. Returns null when the player already owns every module.
+ */
+export function pickModule(owned: ReadonlySet<WeaponId>, vehicle: VehicleType, rand: () => number = Math.random): WeaponId | null {
+  const pool = MODULE_POOL.filter((m) => !owned.has(m));
+  if (!pool.length) return null;
+  const affinity = MODULE_AFFINITY[vehicle].filter((m) => pool.includes(m));
+  if (affinity.length && rand() < 0.65) return affinity[Math.floor(rand() * affinity.length)];
+  return pool[Math.floor(rand() * pool.length)];
+}

@@ -81,6 +81,7 @@ export class AudioManager {
   private wading: { gain: GainNode; src: AudioBufferSourceNode } | null = null;
   private music: MusicState | null = null;
   private musicOn = true;
+  private musicVolume = 0.6;
   private lastMg = 0;
   private mgCount = 0;
 
@@ -138,13 +139,19 @@ export class AudioManager {
     this.master.gain.value = clamp(v, 0, 1);
   }
 
+  /** Music level, independent of the master volume. */
+  setMusicVolume(v: number) {
+    this.musicVolume = clamp(v, 0, 1);
+    this.musicGain.gain.setTargetAtTime(this.musicOn ? 0.17 * this.musicVolume : 0, this.ctx.currentTime, 0.25);
+  }
+
   isMusicOn() {
     return this.musicOn;
   }
 
   toggleMusic() {
     this.musicOn = !this.musicOn;
-    this.musicGain.gain.setTargetAtTime(this.musicOn ? 0.17 : 0, this.ctx.currentTime, 0.25);
+    this.musicGain.gain.setTargetAtTime(this.musicOn ? 0.17 * this.musicVolume : 0, this.ctx.currentTime, 0.25);
     return this.musicOn;
   }
 

@@ -1,15 +1,21 @@
 import { useState } from 'react';
 import type { ControlMode, VehicleType, WeaponId } from '../game/types';
-import { VEHICLE_ORDER, VEHICLES, WEAPON_INFO } from '../game/vehicles';
+import { VEHICLE_ORDER, VEHICLES, WEAPON_COUNT, WEAPON_INFO } from '../game/vehicles';
 import { randomSeedCode } from '../game/world';
+import type { Settings } from '../game/settings';
+import type { RunRecord } from '../game/records';
 import wardenImage from '../assets/mech.jpg';
 import pyreImage from '../assets/cinder.jpg';
 import glacierImage from '../assets/phantom.jpg';
 import { Icon } from './Icons';
+import SettingsPanel from './SettingsPanel';
 import FullscreenButton from './FullscreenButton';
 
 interface Props {
   onStart: (vehicle: VehicleType, controls: ControlMode, seed: string) => void;
+  settings: Settings;
+  onSettings: (settings: Settings) => void;
+  records: RunRecord[];
 }
 
 const IMAGES: Record<VehicleType, string> = {
@@ -21,11 +27,15 @@ const IMAGES: Record<VehicleType, string> = {
 const SLOT_KEYS: Record<string, string> = { primary: 'LMB', secondary: 'RMB', abilityQ: 'Q', abilityE: 'E' };
 const SLOT_LABELS: Record<string, string> = { primary: 'PRIMARY', secondary: 'SECONDARY', abilityQ: 'SPECIAL · Q', abilityE: 'SPECIAL · E' };
 
-export default function Menu({ onStart }: Props) {
+type Tab = 'arsenal' | 'legend' | 'config' | 'records';
+
+const pad = (n: number, w = 2) => String(Math.max(0, Math.floor(n))).padStart(w, '0');
+
+export default function Menu({ onStart, settings, onSettings, records }: Props) {
   const [selected, setSelected] = useState<VehicleType>('warden');
   const [controls, setControls] = useState<ControlMode>('arcade');
   const [seed, setSeed] = useState(() => randomSeedCode());
-  const [tab, setTab] = useState<'arsenal' | 'legend'>('arsenal');
+  const [tab, setTab] = useState<Tab>('arsenal');
   const vehicle = VEHICLES[selected];
   const loadout = (Object.keys(vehicle.loadout) as (keyof typeof vehicle.loadout)[]).map((slot) => ({
     slot,
@@ -69,7 +79,9 @@ export default function Menu({ onStart }: Props) {
             <div className="hangar-tabs" role="tablist" aria-label="Gladiator details">
               <button role="tab" aria-selected={tab === 'arsenal'} onClick={() => setTab('arsenal')}>ARSENAL</button>
               <button role="tab" aria-selected={tab === 'legend'} onClick={() => setTab('legend')}>THE LEGEND</button>
-              <span>12 UNIQUE WEAPONS</span>
+              <button role="tab" aria-selected={tab === 'config'} onClick={() => setTab('config')}>CONFIG</button>
+              <button role="tab" aria-selected={tab === 'records'} onClick={() => setTab('records')}>HALL OF FAME</button>
+              <span>{WEAPON_COUNT} UNIQUE WEAPONS</span>
             </div>
             {tab === 'arsenal' ? <div className="loadout-weapons loadout-weapons-4" role="tabpanel" aria-label="Arsenal">
               {loadout.map(({ slot, id }) => (
@@ -83,9 +95,38 @@ export default function Menu({ onStart }: Props) {
                   </div>
                 </div>
               ))}
-            </div> : <div className="legend-panel" role="tabpanel" aria-label="The legend">
+              <div className="loadout-weapon loadout-note" style={{ gridColumn: '1 / -1' }}>
+                <div className="loadout-key" style={{ opacity: 0.4 }}>+</div>
+                <div>
+                  <strong>SPARE HARDPOINTS</strong>
+                  <span className="slot-tag">WEAPON CACHES</span>
+                  <span>Salvage weapon caches from the sky to mount mortars, stasis novas, reactor vents and cryo lances into the R and F hardpoints.</span>
+                </div>
+              </div>
+            </div> : tab === 'legend' ? <div className="legend-panel" role="tabpanel" aria-label="The legend">
               <p>{vehicle.backstory}</p>
               <p className="chassis-style"><span>HOW TO FIGHT:</span> {vehicle.style}</p>
+            </div> : tab === 'config' ? <div role="tabpanel" aria-label="Cockpit configuration">
+              <SettingsPanel settings={settings} onChange={onSettings} accent={vehicle.accent} />
+            </div> : <div role="tabpanel" aria-label="Hall of fame">
+              <div className="records-panel" style={{ marginTop: 14 }}>
+                <h4>BEST RUNS IN THE PITS</h4>
+                {records.length === 0 ? (
+                  <div className="records-empty">NO RUNS RECORDED YET — THE SAND IS WAITING.</div>
+                ) : (
+                  <div className="records-list">
+                    {records.map((rec, i) => (
+                      <div key={`${rec.at}-${i}`} className={`records-row ${i === 0 ? 'is-best' : ''}`}>
+                        <span>{pad(i + 1)}</span>
+                        <span>
+                          {pad(rec.score, 6)} <em>· WAVE {pad(rec.wave)} · {VEHICLES[rec.vehicle]?.shortName ?? 'MECH'} · {rec.seed}</em>
+                        </span>
+                        <span>{pad(rec.timeSurvived / 60)}:{pad(rec.timeSurvived % 60)}</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
             </div>}
             </div>
             <p className="field-note">AUTOMATIC SHIELD / EXPLOSIVE DRUMS / PROCEDURAL ARENAS</p>
@@ -94,7 +135,7 @@ export default function Menu({ onStart }: Props) {
         </main>
 
         <section className="vehicle-selection" aria-label="Select your gladiator">
-          <div className="selection-heading"><span>CHOOSE YOUR GLADIATOR</span><span>03 MECHS · 12 UNIQUE WEAPONS</span></div>
+          <div className="selection-heading"><span>CHOOSE YOUR GLADIATOR</span><span>03 MECHS · {WEAPON_COUNT} UNIQUE WEAPONS</span></div>
           <div className="vehicle-list vehicle-list-3">
             {VEHICLE_ORDER.map((id, index) => {
               const item = VEHICLES[id];
@@ -126,7 +167,7 @@ export default function Menu({ onStart }: Props) {
             </div>
             <p>Every seed builds a new map.</p>
           </div>
-          <div className="footer-help">LMB PRIMARY <i /> RMB SECONDARY <i /> Q / E SPECIALS</div>
+          <div className="footer-help">LMB PRIMARY <i /> RMB / C SECONDARY <i /> Q / E SPECIALS</div>
           <button className="deploy-button" type="button" onClick={() => onStart(selected, controls, seed.trim() || randomSeedCode())}>
             <span>ENTER THE ARENA</span><span aria-hidden="true">-&gt;</span>
           </button>

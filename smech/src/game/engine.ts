@@ -6,7 +6,11 @@ import { OutputPass } from 'three/examples/jsm/postprocessing/OutputPass.js';
 import type { AudioManager } from './audio';
 import type { ControlMode, DropKind, EnemyKind, GameStats, HudState, HudTarget, HudWeapon, RadarBlip, UpgradeDef, VehicleType, WeaponId } from './types';
 import { defaultStats, rollOffer, type PlayerStats } from './upgrades';
-import { VEHICLES, WEAPON_INFO, type VehicleConfig } from './vehicles';
+import { MODULE_KEYS, VEHICLES, WEAPON_INFO, pickModule, type VehicleConfig } from './vehicles';
+import { DEFAULT_SETTINGS, type Settings } from './settings';
+import { createBar, createMechMesh, createTankMesh, setShadows, type Palette } from './enemyMeshes';
+import { aimAssist, cooldownReadiness, secondaryReadiness, triggerReadiness } from './readiness';
+import { ParticleSystem } from './particles';
 import { WeaponEffects } from './weaponEffects';
 import { MAX_ZONE, START_RADIUS, WORLD_RADIUS, buildMap, districtAt, generateLayout, heightAt, inWater, nearObstacles, obsCorners, obsDist, obsResolve, randomSeedCode, zoneRadius, type ExplosiveBarrel, type Layout, type MapResult, type Obstacle } from './world';
 
@@ -60,22 +64,15 @@ const ENEMIES: Record<EnemyKind, EnemyConfig> = {
 const BOSS_NAME = 'WARLORD';
 const DROP_LABEL: Record<DropKind, string> = {
   repair: 'REPAIR KIT', shield: 'SHIELD BATTERY', overcharge: 'OVERCHARGE ROUNDS',
-  rapid: 'RAPID RELOAD', emp: 'EMP CHARGE', score: 'SALVAGE CACHE',
+  rapid: 'RAPID RELOAD', emp: 'EMP CHARGE', score: 'SALVAGE CACHE', weapon: 'WEAPON CACHE',
 };
 const DROP_COLOR: Record<DropKind, number> = {
   repair: 0x4dff88, shield: 0x59c8ff, overcharge: 0xff9a3d,
-  rapid: 0xffe14a, emp: 0xb07dff, score: 0xffd24a,
+  rapid: 0xffe14a, emp: 0xb07dff, score: 0xffd24a, weapon: 0xff6bd5,
 };
 const DROP_WEIGHTS: [DropKind, number][] = [
-  ['repair', 30], ['shield', 18], ['overcharge', 18], ['rapid', 14], ['emp', 10], ['score', 10],
+  ['repair', 30], ['shield', 17], ['overcharge', 16], ['rapid', 13], ['emp', 9], ['score', 7], ['weapon', 12],
 ];
-
-interface Palette {
-  hull: number;
-  dark: number;
-  glow: number;
-  glowIntensity: number;
-}
 
 const PALETTES: Record<EnemyKind | 'wreck', Palette> = {
   tank: { hull: 0x6e3b2c, dark: 0x2a2a2e, glow: 0xff3b1f, glowIntensity: 2.5 },
@@ -249,6 +246,8 @@ export interface GameOptions {
   /** sector seed code; a random one is generated when omitted */
   seed?: string;
   audio: AudioManager;
+  /** cockpit preferences (sensitivity, fov, quality…) */
+  settings?: Settings;
   onHud: (h: HudState) => void;
   onGameOver: (s: GameStats) => void;
   onPause: (paused: boolean) => void;
@@ -256,289 +255,6 @@ export interface GameOptions {
 
 // ---------------------------------------------------------------------------
 // Particle system (instanced billboards)
-// ---------------------------------------------------------------------------
-const PARTICLE_VERT = `
-attribute vec4 pColor;
-varying vec4 vColor;
-varying vec2 vUv;
-void main() {
-  vColor = pColor;
-  vUv = uv;
-  vec3 center = vec3(instanceMatrix[3][0], instanceMatrix[3][1], instanceMatrix[3][2]);
-  float s = instanceMatrix[0][0];
-  vec4 mv = modelViewMatrix * vec4(center, 1.0);
-  mv.xy += position.xy * s;
-  gl_Position = projectionMatrix * mv;
-}`;
-
-const PARTICLE_FRAG = `
-varying vec4 vColor;
-varying vec2 vUv;
-void main() {
-  float d = length(vUv - 0.5) * 2.0;
-  float a = smoothstep(1.0, 0.15, d) * vColor.a;
-  if (a < 0.004) discard;
-  gl_FragColor = vec4(vColor.rgb, a);
-}`;
-
-interface ParticleSpec {
-  x: number; y: number; z: number;
-  vx: number; vy: number; vz: number;
-  life: number;
-  size0: number; size1: number;
-  c0: [number, number, number];
-  c1: [number, number, number];
-  grav: number;
-  drag: number;
-  alpha: number;
-}
-
-class ParticleSystem {
-  mesh: THREE.InstancedMesh;
-  private cap: number;
-  private count = 0;
-  private pos: Float32Array;
-  private vel: Float32Array;
-  private life: Float32Array;
-  private maxLife: Float32Array;
-  private size: Float32Array; // size0,size1 pairs
-  private col: Float32Array; // c0 rgb, c1 rgb
-  private grav: Float32Array;
-  private drag: Float32Array;
-  private alpha: Float32Array;
-  private colorAttr: THREE.InstancedBufferAttribute;
-
-  constructor(capacity: number, additive: boolean) {
-    this.cap = capacity;
-    this.pos = new Float32Array(capacity * 3);
-    this.vel = new Float32Array(capacity * 3);
-    this.life = new Float32Array(capacity);
-    this.maxLife = new Float32Array(capacity);
-    this.size = new Float32Array(capacity * 2);
-    this.col = new Float32Array(capacity * 6);
-    this.grav = new Float32Array(capacity);
-    this.drag = new Float32Array(capacity);
-    this.alpha = new Float32Array(capacity);
-    const geo = new THREE.PlaneGeometry(1, 1);
-    this.colorAttr = new THREE.InstancedBufferAttribute(new Float32Array(capacity * 4), 4);
-    this.colorAttr.setUsage(THREE.DynamicDrawUsage);
-    geo.setAttribute('pColor', this.colorAttr);
-    const mat = new THREE.ShaderMaterial({
-      vertexShader: PARTICLE_VERT,
-      fragmentShader: PARTICLE_FRAG,
-      transparent: true,
-      depthWrite: false,
-      blending: additive ? THREE.AdditiveBlending : THREE.NormalBlending,
-    });
-    this.mesh = new THREE.InstancedMesh(geo, mat, capacity);
-    this.mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
-    this.mesh.frustumCulled = false;
-    this.mesh.count = 0;
-  }
-
-  emit(p: ParticleSpec) {
-    let i = this.count;
-    if (i >= this.cap) i = Math.floor(Math.random() * this.cap);
-    else this.count++;
-    this.pos[i * 3] = p.x; this.pos[i * 3 + 1] = p.y; this.pos[i * 3 + 2] = p.z;
-    this.vel[i * 3] = p.vx; this.vel[i * 3 + 1] = p.vy; this.vel[i * 3 + 2] = p.vz;
-    this.life[i] = p.life;
-    this.maxLife[i] = p.life;
-    this.size[i * 2] = p.size0; this.size[i * 2 + 1] = p.size1;
-    this.col[i * 6] = p.c0[0]; this.col[i * 6 + 1] = p.c0[1]; this.col[i * 6 + 2] = p.c0[2];
-    this.col[i * 6 + 3] = p.c1[0]; this.col[i * 6 + 4] = p.c1[1]; this.col[i * 6 + 5] = p.c1[2];
-    this.grav[i] = p.grav;
-    this.drag[i] = p.drag;
-    this.alpha[i] = p.alpha;
-  }
-
-  private copy(from: number, to: number) {
-    for (let k = 0; k < 3; k++) {
-      this.pos[to * 3 + k] = this.pos[from * 3 + k];
-      this.vel[to * 3 + k] = this.vel[from * 3 + k];
-    }
-    this.life[to] = this.life[from];
-    this.maxLife[to] = this.maxLife[from];
-    this.size[to * 2] = this.size[from * 2];
-    this.size[to * 2 + 1] = this.size[from * 2 + 1];
-    for (let k = 0; k < 6; k++) this.col[to * 6 + k] = this.col[from * 6 + k];
-    this.grav[to] = this.grav[from];
-    this.drag[to] = this.drag[from];
-    this.alpha[to] = this.alpha[from];
-  }
-
-  update(dt: number) {
-    const m = this.mesh.instanceMatrix.array as Float32Array;
-    const c = this.colorAttr.array as Float32Array;
-    for (let i = 0; i < this.count; i++) {
-      this.life[i] -= dt;
-      if (this.life[i] <= 0) {
-        this.count--;
-        if (i < this.count) this.copy(this.count, i);
-        i--;
-        continue;
-      }
-      const d = 1 - this.drag[i] * dt;
-      this.vel[i * 3] *= d;
-      this.vel[i * 3 + 1] = this.vel[i * 3 + 1] * d - this.grav[i] * dt;
-      this.vel[i * 3 + 2] *= d;
-      this.pos[i * 3] += this.vel[i * 3] * dt;
-      this.pos[i * 3 + 1] += this.vel[i * 3 + 1] * dt;
-      this.pos[i * 3 + 2] += this.vel[i * 3 + 2] * dt;
-      const t = 1 - this.life[i] / this.maxLife[i];
-      const s = this.size[i * 2] + (this.size[i * 2 + 1] - this.size[i * 2]) * t;
-      const o = i * 16;
-      m[o] = s; m[o + 1] = 0; m[o + 2] = 0; m[o + 3] = 0;
-      m[o + 4] = 0; m[o + 5] = s; m[o + 6] = 0; m[o + 7] = 0;
-      m[o + 8] = 0; m[o + 9] = 0; m[o + 10] = s; m[o + 11] = 0;
-      m[o + 12] = this.pos[i * 3]; m[o + 13] = this.pos[i * 3 + 1]; m[o + 14] = this.pos[i * 3 + 2]; m[o + 15] = 1;
-      const ci = i * 6;
-      c[i * 4] = this.col[ci] + (this.col[ci + 3] - this.col[ci]) * t;
-      c[i * 4 + 1] = this.col[ci + 1] + (this.col[ci + 4] - this.col[ci + 1]) * t;
-      c[i * 4 + 2] = this.col[ci + 2] + (this.col[ci + 5] - this.col[ci + 2]) * t;
-      c[i * 4 + 3] = this.alpha[i] * (1 - t * t);
-    }
-    this.mesh.count = this.count;
-    this.mesh.instanceMatrix.needsUpdate = true;
-    this.colorAttr.needsUpdate = true;
-  }
-}
-
-// ---------------------------------------------------------------------------
-// Mesh factories
-// ---------------------------------------------------------------------------
-function setShadows(obj: THREE.Object3D) {
-  obj.traverse((o) => {
-    if ((o as THREE.Mesh).isMesh) {
-      o.castShadow = true;
-      o.receiveShadow = true;
-    }
-  });
-}
-
-function makeMats(p: Palette) {
-  const hull = new THREE.MeshStandardMaterial({ color: p.hull, roughness: 0.72, metalness: 0.35, emissive: 0xffffff, emissiveIntensity: 0 });
-  const dark = new THREE.MeshStandardMaterial({ color: p.dark, roughness: 0.9, metalness: 0.25 });
-  const glow = new THREE.MeshStandardMaterial({ color: p.glow, emissive: p.glow, emissiveIntensity: p.glowIntensity });
-  return { hull, dark, glow };
-}
-
-function createTankMesh(p: Palette) {
-  const { hull, dark, glow } = makeMats(p);
-  const group = new THREE.Group();
-  const body = new THREE.Mesh(new THREE.BoxGeometry(4.6, 1.3, 6.6), hull);
-  body.position.y = 1.2;
-  const glacis = new THREE.Mesh(new THREE.BoxGeometry(4.6, 0.7, 1.8), hull);
-  glacis.position.set(0, 1.05, 3.55);
-  glacis.rotation.x = 0.55;
-  const trackL = new THREE.Mesh(new THREE.BoxGeometry(1.3, 1.2, 7.0), dark);
-  trackL.position.set(2.65, 0.6, 0);
-  const trackR = trackL.clone();
-  trackR.position.x = -2.65;
-  const skirtL = new THREE.Mesh(new THREE.BoxGeometry(1.4, 0.4, 6.8), hull);
-  skirtL.position.set(2.65, 1.35, 0);
-  const skirtR = skirtL.clone();
-  skirtR.position.x = -2.65;
-  const turret = new THREE.Group();
-  turret.position.set(0, 1.85, -0.4);
-  const tBody = new THREE.Mesh(new THREE.BoxGeometry(3.2, 1.0, 3.8), hull);
-  tBody.position.y = 0.5;
-  const tBack = new THREE.Mesh(new THREE.BoxGeometry(2.4, 0.8, 1.2), dark);
-  tBack.position.set(0, 0.5, -2.3);
-  const mantlet = new THREE.Mesh(new THREE.BoxGeometry(1.5, 0.9, 0.9), dark);
-  mantlet.position.set(0, 0.5, 2.0);
-  const barrel = new THREE.Mesh(new THREE.CylinderGeometry(0.17, 0.21, 5.6, 10), dark);
-  barrel.rotation.x = Math.PI / 2;
-  barrel.position.set(0, 0.5, 4.8);
-  const hatch = new THREE.Mesh(new THREE.CylinderGeometry(0.55, 0.55, 0.3, 10), dark);
-  hatch.position.set(0.8, 1.1, -0.6);
-  const sensor = new THREE.Mesh(new THREE.BoxGeometry(0.6, 0.22, 0.12), glow);
-  sensor.position.set(-0.9, 0.85, 1.92);
-  const lampL = new THREE.Mesh(new THREE.BoxGeometry(0.4, 0.25, 0.1), glow);
-  lampL.position.set(1.6, 1.5, 3.32);
-  const lampR = lampL.clone();
-  lampR.position.x = -1.6;
-  turret.add(tBody, tBack, mantlet, barrel, hatch, sensor);
-  group.add(body, glacis, trackL, trackR, skirtL, skirtR, turret, lampL, lampR);
-  setShadows(group);
-  return { group, turret, flashMats: [hull] };
-}
-
-function createMechMesh(p: Palette, heavy: boolean) {
-  const s = heavy ? 1.75 : 1;
-  const { hull, dark, glow } = makeMats(p);
-  const group = new THREE.Group();
-  const legs: THREE.Object3D[] = [];
-  for (const side of [-1, 1]) {
-    const hip = new THREE.Group();
-    hip.position.set(side * 0.95 * s, 2.55 * s, 0);
-    const upper = new THREE.Mesh(new THREE.BoxGeometry(0.6 * s, 1.5 * s, 0.75 * s), hull);
-    upper.position.y = -0.75 * s;
-    const knee = new THREE.Mesh(new THREE.SphereGeometry(0.42 * s, 8, 8), dark);
-    knee.position.y = -1.5 * s;
-    const lower = new THREE.Mesh(new THREE.BoxGeometry(0.48 * s, 1.4 * s, 0.6 * s), dark);
-    lower.position.set(0, -2.0 * s, 0.1 * s);
-    const foot = new THREE.Mesh(new THREE.BoxGeometry(0.95 * s, 0.3 * s, 1.5 * s), dark);
-    foot.position.set(0, -2.55 * s, 0.3 * s);
-    hip.add(upper, knee, lower, foot);
-    group.add(hip);
-    legs.push(hip);
-  }
-  const pelvis = new THREE.Mesh(new THREE.BoxGeometry(2.0 * s, 0.6 * s, 1.0 * s), dark);
-  pelvis.position.y = 2.65 * s;
-  group.add(pelvis);
-
-  const torso = new THREE.Group();
-  torso.position.y = 2.95 * s;
-  const chest = new THREE.Mesh(new THREE.BoxGeometry(2.6 * s, 1.7 * s, 2.0 * s), hull);
-  chest.position.y = 0.85 * s;
-  const plate = new THREE.Mesh(new THREE.BoxGeometry(2.0 * s, 1.0 * s, 0.4 * s), dark);
-  plate.position.set(0, 0.8 * s, 1.1 * s);
-  const head = new THREE.Mesh(new THREE.BoxGeometry(1.0 * s, 0.7 * s, 0.95 * s), hull);
-  head.position.set(0, 1.95 * s, 0.4 * s);
-  const eye = new THREE.Mesh(new THREE.BoxGeometry(0.75 * s, 0.14 * s, 0.1 * s), glow);
-  eye.position.set(0, 1.98 * s, 0.9 * s);
-  torso.add(chest, plate, head, eye);
-  for (const side of [-1, 1]) {
-    const arm = new THREE.Group();
-    arm.position.set(side * 1.8 * s, 1.0 * s, 0);
-    const shoulder = new THREE.Mesh(new THREE.BoxGeometry(0.9 * s, 1.1 * s, 1.1 * s), hull);
-    const gunHouse = new THREE.Mesh(new THREE.BoxGeometry(0.6 * s, 0.6 * s, 1.6 * s), dark);
-    gunHouse.position.set(0, -0.2 * s, 1.0 * s);
-    const gun = new THREE.Mesh(new THREE.CylinderGeometry(0.15 * s, 0.17 * s, 2.4 * s, 10), dark);
-    gun.rotation.x = Math.PI / 2;
-    gun.position.set(0, -0.2 * s, 2.6 * s);
-    arm.add(shoulder, gunHouse, gun);
-    if (heavy) {
-      const pod = new THREE.Mesh(new THREE.BoxGeometry(1.0 * s, 0.8 * s, 1.3 * s), dark);
-      pod.position.set(0, 0.95 * s, 0.1 * s);
-      const tips = new THREE.Mesh(new THREE.BoxGeometry(0.7 * s, 0.5 * s, 0.1 * s), glow);
-      tips.position.set(0, 0.95 * s, 0.76 * s);
-      arm.add(pod, tips);
-    }
-    torso.add(arm);
-  }
-  group.add(torso);
-  setShadows(group);
-  return { group, torso, legs, flashMats: [hull] };
-}
-
-function createBar() {
-  const bar = new THREE.Group();
-  const bg = new THREE.Mesh(
-    new THREE.PlaneGeometry(4.2, 0.5),
-    new THREE.MeshBasicMaterial({ color: 0x1a0000, transparent: true, opacity: 0.75, depthTest: false, depthWrite: false }),
-  );
-  bg.renderOrder = 20;
-  const fgGeo = new THREE.PlaneGeometry(4, 0.34);
-  fgGeo.translate(2, 0, 0);
-  const fg = new THREE.Mesh(fgGeo, new THREE.MeshBasicMaterial({ color: 0xff3b3b, depthTest: false, depthWrite: false }));
-  fg.position.set(-2, 0, 0.01);
-  fg.renderOrder = 21;
-  bar.add(bg, fg);
-  return { bar, fg };
-}
-
 const SKY_VERT = `
 varying vec3 vWorld;
 void main() {
@@ -599,12 +315,15 @@ export class Game {
   private shellDrop = SHELL_GRAVITY;
   /** injected input (touch controls / on-screen buttons) */
   private padMove = { x: 0, y: 0 };
-  private padFire = { cannon: false, mg: false };
+  private padFire = { primary: false, secondary: false };
   private padSensitivity = 1;
   private touchMode = false;
 
   // progression / weapon systems
   private stats: PlayerStats = defaultStats();
+  private settings: Settings = { ...DEFAULT_SETTINGS };
+  /** special weapons scavenged from weapon caches, mounted after the chassis hardpoints */
+  private modules: WeaponId[] = [];
   private taken = new Map<string, number>();
   private perkList: { name: string; icon: string }[] = [];
   private owned = new Set<WeaponId>();
@@ -658,8 +377,13 @@ export class Game {
   private mgHeat = 0;
   private mgOverheat = false;
   private secHeat = 0;
-  private secTimer = 0;
   private secOverheat = false;
+  /** cooldown of the cryo grenade (seconds) */
+  private secCd = 0;
+  /** the cooldown `secCd` was primed with — used for an accurate readiness bar */
+  private secCdMax = 0;
+  /** interval between two beam ticks (flamethrower / cryo lance) */
+  private beamCd = 0;
   private mines: Mine[] = [];
   private smokeClouds: SmokeCloud[] = [];
   private jumpT = 0;
@@ -786,15 +510,24 @@ export class Game {
     const gl = this.renderer.getContext();
     const gpuInfo = gl.getExtension('WEBGL_debug_renderer_info');
     const gpuName = gpuInfo ? String(gl.getParameter(gpuInfo.UNMASKED_RENDERER_WEBGL)) : '';
-    if (/swiftshader|llvmpipe|softpipe/i.test(gpuName)) {
+    const software = /swiftshader|llvmpipe|softpipe/i.test(gpuName);
+    if (software) {
       // Software renderers need a smaller render target to remain responsive.
       this.quality = 0;
       this.renderer.setPixelRatio(0.65);
       this.renderer.setSize(window.innerWidth, window.innerHeight, false);
       this.renderer.shadowMap.enabled = false;
+    } else if (this.settings.quality === 'low') {
+      // Explicitly light mode: no bloom, no shadows, native resolution.
+      this.quality = 0;
+      this.renderer.setPixelRatio(1);
+      this.renderer.shadowMap.enabled = false;
     }
+    this.audio.setVolume(this.settings.volume);
+    this.audio.setMusicVolume(this.settings.music);
 
-    this.camera = new THREE.PerspectiveCamera(70, window.innerWidth / window.innerHeight, 0.1, 1500);
+    this.camera = new THREE.PerspectiveCamera(this.settings.fov, window.innerWidth / window.innerHeight, 0.1, 1500);
+    this.fovCurrent = this.settings.fov;
     this.scene.add(this.camera);
     this.scene.fog = new THREE.Fog(this.layout.theme.fog, this.layout.theme.fogNear, this.layout.theme.fogFar);
 
@@ -988,17 +721,18 @@ export class Game {
   }
 
   /** Fire buttons held down. */
-  setPadFire(cannon: boolean, mg: boolean) {
-    this.padFire.cannon = cannon;
-    this.padFire.mg = mg;
+  setPadFire(primary: boolean, secondary: boolean) {
+    this.padFire.primary = primary;
+    this.padFire.secondary = secondary;
   }
 
   /** Aim drag from a touch surface, in pixels. */
   addPadLook(dx: number, dy: number) {
     if (!this.alive) return;
-    const sens = 0.0032 * this.padSensitivity * (this.zoom ? 0.5 : 1);
+    const sens = 0.0032 * this.padSensitivity * this.settings.sensitivity * (this.zoom ? 0.5 : 1);
     this.turretYaw -= dx * sens;
-    this.pitch = clamp(this.pitch - dy * sens, -0.3, 0.4);
+    const ddy = this.settings.invertY ? dy : -dy;
+    this.pitch = clamp(this.pitch + ddy * sens, -0.3, 0.4);
   }
 
   setPadSensitivity(s: number) {
@@ -1024,6 +758,24 @@ export class Game {
 
   isTouchMode() {
     return this.touchMode;
+  }
+
+  /** Live cockpit preferences — the pause menu can change these mid-run. */
+  applySettings(settings: Settings) {
+    this.settings = { ...this.settings, ...settings };
+    this.fovCurrent = this.settings.fov;
+    this.camera.fov = this.settings.fov;
+    this.camera.updateProjectionMatrix();
+    this.audio.setVolume(this.settings.volume);
+    this.audio.setMusicVolume(this.settings.music);
+    if (this.settings.quality === 'low' && this.quality > 0) {
+      this.quality = 0;
+      this.renderer.shadowMap.enabled = false;
+    }
+  }
+
+  getSettings(): Settings {
+    return { ...this.settings };
   }
 
   /** Debug helper: spawn an enemy a given distance ahead of the turret. */
@@ -1086,6 +838,9 @@ export class Game {
     if (e.code === 'KeyM' && !e.repeat) this.audio.toggleMusic();
     if (!e.repeat && e.code === 'KeyQ') this.useWeapon(this.cfg.loadout.abilityQ);
     if (!e.repeat && e.code === 'KeyE') this.useWeapon(this.cfg.loadout.abilityE);
+    // scavenged hardpoints: the first module answers to R, the second to F
+    if (!e.repeat && e.code === 'KeyR') this.useModule(0);
+    if (!e.repeat && e.code === 'KeyF') this.useModule(1);
     if (e.code === 'Digit1' || e.code === 'Numpad1') this.pickUpgrade(0);
     if (e.code === 'Digit2' || e.code === 'Numpad2') this.pickUpgrade(1);
     if (e.code === 'Digit3' || e.code === 'Numpad3') this.pickUpgrade(2);
@@ -1099,9 +854,10 @@ export class Game {
   };
   private onMouseMove = (e: MouseEvent) => {
     if (!this.isLocked() || !this.alive) return;
-    const sens = 0.0021 * (this.zoom ? 0.45 : 1);
+    const sens = 0.0021 * this.settings.sensitivity * (this.zoom ? 0.45 : 1);
     this.turretYaw -= e.movementX * sens;
-    this.pitch = clamp(this.pitch - e.movementY * sens, -0.3, 0.4);
+    const dy = this.settings.invertY ? e.movementY : -e.movementY;
+    this.pitch = clamp(this.pitch + dy * sens, -0.3, 0.4);
   };
   private onMouseDown = (e: MouseEvent) => {
     if (!this.isLocked()) return;
@@ -1123,6 +879,8 @@ export class Game {
       this.paused = true;
       this.keys.clear();
       this.mouse.left = this.mouse.right = false;
+      // The upgrade screen owns the viewport: keep the pause veil hidden but
+      // leave the simulation frozen.
       this.opts.onPause(false);
       return;
     }
@@ -1156,6 +914,7 @@ export class Game {
   private perfSamples = 0;
   private perfSlow = 0;
   private quality = 2; // 2 = bloom full, 1 = bloom low-res, 0 = bloom off
+  private fps = 60;
 
   private loop = () => {
     if (!this.running) return;
@@ -1381,10 +1140,11 @@ export class Game {
     const rate = (this.buffT.haste > 0 || this.buffT.overdrive > 0 ? 1.3 : 1) * (rapid ? 1.35 : 1);
     this.cannonCd = Math.max(0, this.cannonCd - dt * rate);
     this.mgTimer -= dt * rate;
-    this.secTimer -= dt * rate;
+    this.secCd = Math.max(0, this.secCd - dt);
+    this.beamCd = Math.max(0, this.beamCd - dt);
     if (this.reloading && this.cannonCd <= 0) { this.reloading = false; this.audio.playReady(); }
-    const priHeld = this.mouse.left || this.keys.has('Space') || this.padFire.cannon;
-    const secHeld = this.mouse.right || this.keys.has('KeyF') || this.padFire.mg;
+    const priHeld = this.mouse.left || this.keys.has('Space') || this.padFire.primary;
+    const secHeld = this.mouse.right || this.keys.has('KeyC') || this.padFire.secondary;
     if (priHeld && !this.mgOverheat) {
       if (c.loadout.primary === 'scatter') {
         if (this.cannonCd <= 0) this.fireScatter();
@@ -1403,10 +1163,10 @@ export class Game {
     if (c.loadout.secondary === 'cannon') {
       if (secHeld && this.cannonCd <= 0) this.fireCannon();
     } else if (c.loadout.secondary === 'cryoball') {
-      if (secHeld && this.secTimer <= 0) this.throwCryoBall();
-    } else if (secHeld && !this.secOverheat && this.secTimer <= 0) {
-      this.fireBeam();
-      this.secTimer = 0.12;
+      if (secHeld && this.secCd <= 0) this.throwCryoBall();
+    } else if (secHeld && !this.secOverheat && this.beamCd <= 0) {
+      this.fireBeam(this.cfg.loadout.secondary === 'flame' ? 'flame' : 'cryo');
+      this.beamCd = 0.12;
       if (!noHeat) this.secHeat = Math.min(1, this.secHeat + 0.035 * this.stats.mgHeatMul);
       if (this.secHeat >= 1) this.secOverheat = true;
     }
@@ -1466,7 +1226,7 @@ export class Game {
       if (d > 240 || d < 3) continue;
       const cos = v.divideScalar(d).dot(dir);
       const ang = Math.acos(clamp(cos, -1, 1));
-      const tol = (0.038 + e.radius * 0.008) * Math.min(1.6, this.stats.assistMul);
+      const tol = (0.038 + e.radius * 0.008) * this.aimAssist;
       if (ang > tol || !this.hasLOS(from, e.pos, 0, e.height * 0.5)) continue;
       const score = -ang * 3 - d * 0.004;
       if (score > bestScore) {
@@ -1555,7 +1315,7 @@ export class Game {
       'player', 'shell', muzzle, vel,
       c.cannonDamage * this.stats.cannonDmgMul * dmgBuff * (over ? 2 : 1),
       c.splash * this.stats.splashMul * (over ? 1.6 : 1),
-      this.shellDrop, 6, assist ? 2.2 * this.stats.assistMul : 0, assist,
+      this.shellDrop, 6, assist ? 2.2 * this.aimAssist : 0, assist,
     );
     this.projectiles[this.projectiles.length - 1].weapon = 'cannon';
     this.armRecoil[this.armSide > 0 ? 1 : 0] = 1;
@@ -1585,7 +1345,7 @@ export class Game {
     const spread = coil ? 0.003 : 0.009;
     vel.add(new THREE.Vector3(rand(-spread, spread), rand(-spread, spread), rand(-spread, spread))).normalize().multiplyScalar(coil ? 340 : 270);
     const assist = this.assistTarget(muzzle, dir);
-    this.spawnProjectile('player', 'bullet', muzzle, vel, c.mgDamage * this.stats.mgDmgMul * (this.buffT.overcharge > 0 ? 1.35 : 1), 0, 0, 0.8, assist ? 2.5 * this.stats.assistMul : 0, assist);
+    this.spawnProjectile('player', 'bullet', muzzle, vel, c.mgDamage * this.stats.mgDmgMul * (this.buffT.overcharge > 0 ? 1.35 : 1), 0, 0, 0.8, assist ? 2.5 * this.aimAssist : 0, assist);
     const shot = this.projectiles[this.projectiles.length - 1];
     shot.weapon = c.loadout.primary;
     shot.charged = !coil && this.evolved('autocannon') && this.primaryShots % 6 === 0;
@@ -1656,13 +1416,13 @@ export class Game {
   }
 
   /** Hold-to-fire secondaries: flamethrower (pyre) and cryo lance (glacier). */
-  private fireBeam() {
-    const flame = this.cfg.loadout.secondary === 'flame';
+  private fireBeam(kind: 'flame' | 'cryo', discrete = false) {
+    const flame = kind === 'flame';
     this.camera.updateMatrixWorld();
     const muzzle = this.camera.localToWorld(this.muzzleLocal('mg').clone());
     const origin = this.camera.position.clone();
     const direction = this.camera.getWorldDirection(new THREE.Vector3());
-    const range = flame ? 30 + (this.stats.flameDmgMul - 1) * 5 : 70;
+    const range = flame ? 30 + (this.stats.flameDmgMul - 1) * 5 : discrete ? 95 : 70;
     const coverDistance = this.traceCover(origin, direction, range);
     const hits = this.enemies.filter((enemy) => {
       if (!enemy.alive) return false;
@@ -1681,19 +1441,20 @@ export class Game {
         enemy.burnTime = 2.5;
         enemy.burnDps = 5 * this.stats.flameDmgMul;
       } else {
-        this.beamHit(enemy, 3.8 * this.stats.cryoDmgMul);
-        enemy.slowTime = Math.max(enemy.slowTime, 2.4 * this.stats.cryoSlowMul);
+        // The hardpoint lance is a single decisive shot; the handheld one ticks.
+        this.beamHit(enemy, (discrete ? 30 : 3.8) * this.stats.cryoDmgMul);
+        enemy.slowTime = Math.max(enemy.slowTime, (discrete ? 4.5 : 2.4) * this.stats.cryoSlowMul);
         if (this.evolved('cryo') && enemy.freezeLock <= 0) {
-          enemy.cryoCharge++;
+          enemy.cryoCharge += discrete ? 2 : 1;
           if (enemy.cryoCharge >= 10) {
             enemy.stunTime = Math.max(enemy.stunTime, enemy.boss ? 0.65 : 1.8);
             enemy.freezeLock = 4;
             enemy.cryoCharge = 0;
-            this.addFeed('ABSOLUTE ZERO - TARGET FROZEN');
+            this.addFeed('GLACIAL LOCK - TARGET FROZEN');
           }
         }
       }
-      this.elementBurst(this.enemyCenter(enemy), flame ? 'fire' : 'ice', 3);
+      this.elementBurst(this.enemyCenter(enemy), flame ? 'fire' : 'ice', discrete ? 12 : 3);
     }
     const visualRange = Math.min(range, coverDistance);
     if (flame) {
@@ -1711,12 +1472,12 @@ export class Game {
       }
       this.audio.playFlame();
     } else {
-      this.weaponFx.beam(muzzle, beamEnd, 0x8de3ff, 0.045, 0.14);
-      this.elementBurst(beamEnd, 'ice', 5);
+      this.weaponFx.beam(muzzle, beamEnd, 0x8de3ff, discrete ? 0.085 : 0.045, discrete ? 0.24 : 0.14);
+      this.elementBurst(beamEnd, 'ice', discrete ? 14 : 5);
       this.audio.playCryo();
     }
     this.muzzleLight.position.copy(this.muzzleLocal('mg'));
-    this.muzzleLight.intensity = flame ? 160 : 110;
+    this.muzzleLight.intensity = flame ? 160 : discrete ? 320 : 110;
     this.makeNoise(55);
   }
 
@@ -1888,7 +1649,8 @@ export class Game {
     const mesh = ball.mesh as THREE.Mesh;
     mesh.material = this.mats.playerRocket;
     mesh.scale.setScalar(1.35);
-    this.secTimer = this.cryoCooldown;
+    this.secCd = this.cryoCooldown;
+    this.secCdMax = this.cryoCooldown;
     this.muzzleFlash(muzzle, direction, 0.45);
     this.audio.playCryo();
     this.makeNoise(60);
@@ -1984,6 +1746,63 @@ export class Game {
     return Math.round(this.cfg.maxHp * this.stats.maxHpMul);
   }
 
+  /**
+   * Aim assist strength, clamped so a stack of targeting computers can never
+   * bend shots past the cone the cockpit advertises.
+   */
+  private get aimAssist() {
+    return aimAssist(this.stats.assistMul);
+  }
+
+  /** Readiness of the primary weapon, 0..1 (heat weapons report free heat). */
+  private primaryReadiness(): number {
+    const pri = this.cfg.loadout.primary;
+    return triggerReadiness({
+      isHeat: pri === 'autocannon' || pri === 'coil',
+      heat: this.mgHeat,
+      overheat: this.mgOverheat,
+      reloadRemaining: this.cannonCd,
+      reloadTime: this.cfg.cannonReload * this.stats.reloadMul,
+    });
+  }
+
+  /** Readiness of the secondary weapon, 0..1. */
+  private secondaryReadiness(): number {
+    const sec = this.cfg.loadout.secondary;
+    return secondaryReadiness({
+      kind: sec === 'cannon' ? 'cannon' : sec === 'cryoball' ? 'cryoball' : 'beam',
+      reloadRemaining: this.cannonCd,
+      reloadTime: this.cfg.cannonReload * this.stats.reloadMul,
+      cooldownRemaining: this.secCd,
+      cooldownTime: this.secCdMax,
+      heat: this.secHeat,
+      overheat: this.secOverheat,
+    });
+  }
+
+  /** Readiness of any weapon slot, 0..1 — the single source of truth. */
+  private weaponReadiness(id: WeaponId): number {
+    if (id === this.cfg.loadout.primary) return this.primaryReadiness();
+    if (id === this.cfg.loadout.secondary) return this.secondaryReadiness();
+    const full = this.weaponCooldown(id);
+    if (full <= 0) return 1;
+    return cooldownReadiness(this.weaponCd[id], full);
+  }
+
+  /** Full recharge time of a special weapon, including every upgrade. */
+  private weaponCooldown(id: WeaponId): number {
+    const info = WEAPON_INFO[id];
+    const s = this.stats;
+    switch (id) {
+      case 'missiles': return info.cooldown * s.missileCdMul;
+      case 'mortar': return info.cooldown * s.strikeCdMul;
+      case 'cryo': return info.cooldown * s.reloadMul;
+      case 'jump': return info.cooldown * (1 - 0.18 * (this.taken.get('jump_charge') ?? 0));
+      case 'smoke': return info.cooldown * (1 - 0.25 * (this.taken.get('smoke_belt') ?? 0));
+      default: return info.cooldown;
+    }
+  }
+
   /** Q / E abilities. Every mech owns exactly its own four weapons. */
   useWeapon(id: WeaponId) {
     if (!this.alive || this.paused || this.upgrading || !this.owned.has(id) || this.weaponCd[id] > 0) return;
@@ -1991,13 +1810,13 @@ export class Game {
     if (id === 'missiles') {
       this.missileQueue = s.missileCount;
       this.missileTimer = 0;
-      this.weaponCd.missiles = WEAPON_INFO.missiles.cooldown * s.missileCdMul;
+      this.weaponCd.missiles = this.weaponCooldown('missiles');
       this.addFeed('MISSILE SALVO AWAY');
     } else if (id === 'rail') {
-      this.weaponCd.rail = WEAPON_INFO.rail.cooldown;
+      this.weaponCd.rail = this.weaponCooldown('rail');
       this.fireRail();
     } else if (id === 'turret') {
-      this.weaponCd.turret = WEAPON_INFO.turret.cooldown;
+      this.weaponCd.turret = this.weaponCooldown('turret');
       this.deployTurret();
     } else if (id === 'mortar') {
       // mark the point the player is aiming at (ground hit, or max range)
@@ -2016,31 +1835,42 @@ export class Game {
       marker.position.copy(target);
       this.scene.add(marker);
       this.strikes.push({ marker, pos: target, timer: 2.4, shells: s.strikeShells, shellTimer: 0 });
-      this.weaponCd.mortar = WEAPON_INFO.mortar.cooldown * s.strikeCdMul;
+      this.weaponCd.mortar = this.weaponCooldown('mortar');
       this.audio.playMortar();
       this.audio.playStrikeCall();
       this.addFeed('INCENDIARY MORTARS INBOUND');
     } else if (id === 'jump') {
-      this.weaponCd.jump = WEAPON_INFO.jump.cooldown * (1 - 0.18 * (this.taken.get('jump_charge') ?? 0));
+      this.weaponCd.jump = this.weaponCooldown('jump');
       this.startJump();
     } else if (id === 'mines') {
-      this.weaponCd.mines = WEAPON_INFO.mines.cooldown;
+      this.weaponCd.mines = this.weaponCooldown('mines');
       this.deployMines();
     } else if (id === 'smoke') {
-      this.weaponCd.smoke = WEAPON_INFO.smoke.cooldown * (1 - 0.25 * (this.taken.get('smoke_belt') ?? 0));
+      this.weaponCd.smoke = this.weaponCooldown('smoke');
       this.throwSmoke();
     } else if (id === 'overdrive') {
-      this.weaponCd.overdrive = WEAPON_INFO.overdrive.cooldown;
+      this.weaponCd.overdrive = this.weaponCooldown('overdrive');
       this.fireOverdrive();
     } else if (id === 'nova') {
-      this.weaponCd.nova = WEAPON_INFO.nova.cooldown;
+      this.weaponCd.nova = this.weaponCooldown('nova');
       this.fireNova();
+    } else if (id === 'cryo') {
+      this.weaponCd.cryo = this.weaponCooldown('cryo');
+      this.fireBeam('cryo', true);
+      this.shake = Math.max(this.shake, 0.08);
     }
+  }
+
+  /** Fire the scavenged module mounted in the given hardpoint, if any. */
+  private useModule(slot: number) {
+    const id = this.modules[slot];
+    if (!id) return;
+    this.useWeapon(id);
   }
 
   /** Pyre vents the reactor: a burn nova plus 10s+ of speed and reload. */
   private fireOverdrive() {
-    const stacks = this.taken.get('overdrive_up') ?? 0;
+    const stacks = this.stats.overdriveStacks;
     this.buffT.overdrive = 8 + 4 * stacks;
     if (this.evolved('overdrive')) {
       this.shieldHp = Math.min(this.stats.shieldMax, this.shieldHp + 50);
@@ -2049,7 +1879,7 @@ export class Game {
       this.secHeat = 0;
       this.secOverheat = false;
     }
-    const dmg = 40 + 20 * stacks;
+    const dmg = 40 * (1 + 0.4 * stacks);
     const radius = 16;
     const center = new THREE.Vector3(this.pos.x, this.pos.y + 1.2, this.pos.z);
     this.explosion(center, 1.4);
@@ -2486,7 +2316,7 @@ export class Game {
     // launch outward/upward, then the homing steers it in
     const vel = dir.clone().addScaledVector(rightOf(this.turretYaw, this.tmpC), side * 0.45).add(new THREE.Vector3(0, 0.35, 0)).normalize().multiplyScalar(70);
     const dmg = 23 * this.stats.missileDmgMul;
-    this.spawnProjectile('player', 'rocket', muzzle, vel, dmg, 6 * this.stats.splashMul * (1 + this.stats.surge * 0.4), 0, 6, assist ? 4.5 * this.stats.assistMul : 0, assist);
+    this.spawnProjectile('player', 'rocket', muzzle, vel, dmg, 6 * this.stats.splashMul * (1 + this.stats.surge * 0.4), 0, 6, assist ? 4.5 * this.aimAssist : 0, assist);
     const last = this.projectiles[this.projectiles.length - 1];
     (last.mesh as THREE.Mesh).material = this.mats.playerRocket;
     this.muzzleFlash(muzzle, dir, 0.5);
@@ -2575,14 +2405,15 @@ export class Game {
       case 'shield_cap': s.shieldMax += 60; if (!this.shieldBroken) this.shieldHp += 60; break;
       case 'shield_cd': s.shieldCdMul *= 0.7; break;
       case 'mortar_shells': s.strikeShells += 1; break;
-      case 'mortar_cd': s.strikeCdMul *= 0.7; break;
+      case 'mortar_cd': s.strikeCdMul *= 0.75; break;
       case 'turret_up': s.turretDmgMul += 0.4; s.turretLifeMul += 0.5; break;
-      case 'overdrive_up': break; // duration/damage scale with stacks at fire time
+      case 'overdrive_up': s.overdriveStacks += 1; break;
       case 'belt': s.mgDmgMul += 0.35; break;
       case 'coilcap': s.mgDmgMul += 0.35; break;
       case 'napalm': s.flameDmgMul += 0.4; break;
       case 'deepfreeze': s.cryoDmgMul += 0.35; s.cryoSlowMul += 0.5; break;
       case 'nova_radius': s.empRadiusMul += 0.3; break;
+      case 'cryo_lance': s.cryoDmgMul += 0.4; s.cryoSlowMul += 0.5; break;
       case 'rail_damage': s.railDmgMul += 0.35; break;
       case 'salvage': s.salvage += 0.25; break;
       case 'veteran': s.maxHpMul += 0.1; this.hp = Math.min(this.maxHp, this.hp + 30); break;
@@ -2633,7 +2464,7 @@ export class Game {
     this.keys.clear();
     this.mouse.left = this.mouse.right = false;
     this.padMove.x = this.padMove.y = 0;
-    this.padFire.cannon = this.padFire.mg = false;
+    this.padFire.primary = this.padFire.secondary = false;
     this.opts.onHud(this.buildHud());
     if (this.isLocked()) document.exitPointerLock();
   }
@@ -2828,7 +2659,37 @@ export class Game {
         this.score += 600;
         this.addFeed('SALVAGE CACHE  +600');
         break;
+      case 'weapon':
+        this.grantModule();
+        break;
     }
+  }
+
+  /**
+   * Mount a scavenged special weapon into one of the spare hardpoints.
+   * Caches that cannot be used are sold for salvage instead of vanishing.
+   */
+  private grantModule() {
+    const spare = MODULE_KEYS.length - 2 - this.modules.length;
+    if (spare <= 0) {
+      this.score += 750;
+      this.addFeed('HARDPOINTS FULL — CACHE SOLD FOR 750');
+      return;
+    }
+    const pick = pickModule(this.owned, this.vehicle);
+    if (!pick) {
+      this.score += 750;
+      this.addFeed('CACHE EMPTY — SALVAGE SOLD FOR 750');
+      return;
+    }
+    this.owned.add(pick);
+    this.modules.push(pick);
+    this.weaponCd[pick] = 0;
+    const key = MODULE_KEYS[2 + this.modules.length - 1];
+    this.setMessage(`${WEAPON_INFO[pick].name} ONLINE`);
+    this.addFeed(`WEAPON CACHE — ${WEAPON_INFO[pick].name} MOUNTED [${key}]`);
+    this.audio.playUpgrade();
+    this.shake = Math.max(this.shake, 0.12);
   }
 
   // -------------------------------------------------------------------------
@@ -3370,9 +3231,9 @@ export class Game {
     const f = fwd(e.aimYaw, this.tmpA);
     const r = rightOf(e.aimYaw, this.tmpB);
     const muzzle = this.tmpC.copy(e.pos);
-    let speed = 100;
+    let speed: number;
     let gravity = 0;
-    let spread = 0.02;
+    let spread: number;
     const sc = e.boss ? 1.35 : 1;
     if (e.kind === 'tank') {
       muzzle.addScaledVector(f, 7.2);
@@ -3885,6 +3746,14 @@ export class Game {
       const px = clamp(this.pos.x + Math.sin(a) * 18, -this.arenaR + 20, this.arenaR - 20);
       const pz = clamp(this.pos.z + Math.cos(a) * 18, -this.arenaR + 20, this.arenaR - 20);
       if (!this.obstacles.some((o) => obsDist(o, px, pz) < 2)) this.spawnPickup(px, pz);
+      // guarantee an early weapon cache so the spare hardpoints are discoverable
+      if (this.modules.length === 0 && this.wave <= 2) {
+        const d = rand(38, 62);
+        const wx = clamp(this.pos.x + Math.sin(a + 1.1) * d, -this.arenaR + 20, this.arenaR - 20);
+        const wz = clamp(this.pos.z + Math.cos(a + 1.1) * d, -this.arenaR + 20, this.arenaR - 20);
+        this.spawnDrop(wx, wz, 'weapon');
+        this.addFeed('WEAPON CACHE INBOUND — SCAVENGE A MODULE');
+      }
     }
   }
 
@@ -4167,11 +4036,9 @@ export class Game {
 
   private updateCamera(dt: number) {
     const c = this.cfg;
-    let bob = 0;
-    let roll = 0;
     const sf = Math.min(1, Math.abs(this.speed) / c.maxSpeed);
-    bob = Math.sin(this.walkPhase) * 0.09 * sf;
-    roll = Math.sin(this.walkPhase * 0.5) * 0.012 * sf;
+    const bob = Math.sin(this.walkPhase) * 0.09 * sf;
+    let roll = Math.sin(this.walkPhase * 0.5) * 0.012 * sf;
     // lean into lateral movement (arcade strafing) so the player feels the shift
     roll -= this.lean * 0.055;
     // follow the slope: pitch/roll the view with the terrain under the vehicle
@@ -4290,12 +4157,8 @@ export class Game {
     const sec = this.cfg.loadout.secondary;
     const priIsHeat = pri === 'autocannon' || pri === 'coil';
     const secIsHeat = sec === 'flame' || sec === 'cryo';
-    const priReady = priIsHeat ? (this.mgOverheat ? 0 : 1 - this.mgHeat) : 1 - clamp(this.cannonCd / (this.cfg.cannonReload * s.reloadMul), 0, 1);
-    const secReady = sec === 'cannon'
-      ? 1 - clamp(this.cannonCd / (this.cfg.cannonReload * s.reloadMul), 0, 1)
-      : sec === 'cryoball'
-        ? 1 - clamp(this.secTimer / this.cryoCooldown, 0, 1)
-        : this.secOverheat ? 0 : 1 - this.secHeat;
+    const priReady = this.primaryReadiness();
+    const secReady = this.secondaryReadiness();
     const slotDetail = (id: WeaponId): string => {
       switch (id) {
         case 'missiles': return `${s.missileCount} GUIDED`;
@@ -4317,16 +4180,14 @@ export class Game {
         default: return '';
       }
     };
-    const slotReady = (id: WeaponId): number => {
-      if (id === pri) return priReady;
-      if (id === sec) return secReady;
-      const info = WEAPON_INFO[id];
-      const cdMul = id === 'missiles' ? s.missileCdMul : id === 'mortar' ? s.strikeCdMul : 1;
-      return 1 - clamp(this.weaponCd[id] / (info.cooldown * cdMul), 0, 1);
-    };
+    const slotReady = (id: WeaponId): number => this.weaponReadiness(id);
     const weapons: HudWeapon[] = [pri, sec, this.cfg.loadout.abilityQ, this.cfg.loadout.abilityE].map((id) => {
       const info = WEAPON_INFO[id];
       return { id, name: info.name, short: info.short, key: info.key, owned: true, ready: slotReady(id), active: 0, detail: this.evolved(id) ? 'EVOLVED' : slotDetail(id) };
+    });
+    const modules: HudWeapon[] = this.modules.map((id, i) => {
+      const info = WEAPON_INFO[id];
+      return { id, name: info.name, short: info.short, key: MODULE_KEYS[2 + i] ?? `M${i + 1}`, owned: true, ready: slotReady(id), active: 0, detail: this.evolved(id) ? 'EVOLVED' : slotDetail(id) };
     });
     const perkMap = new Map<string, { name: string; icon: string; count: number }>();
     for (const p of this.perkList) {
@@ -4343,6 +4204,7 @@ export class Game {
       shieldStatus: this.shieldBroken ? 'restarting' : this.shieldHp < s.shieldMax && this.shieldDelay === 0 ? 'recharging' : 'online',
       shieldDelay: this.shieldDelay,
       weapons,
+      modules,
       offer: this.offer,
       perks: [...perkMap.values()],
       boss,
@@ -4365,6 +4227,7 @@ export class Game {
       waveTag: this.waveActive ? this.waveTag : '',
       musicOn: this.audio.isMusicOn(),
       expandAge: this.time - this.expandTime,
+      fps: this.fps,
       overchargeCount: this.stats.overcharge > 0 ? 5 - (this.shotCounter % 5) : 0,
       buffs: ([
         ['overcharge', 'OVERCHARGE', 'bolt', 25],

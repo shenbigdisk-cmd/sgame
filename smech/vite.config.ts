@@ -16,4 +16,13 @@ export default defineConfig({
       "@": path.resolve(__dirname, "src"),
     },
   },
+  server: {
+    // The dev server is only ever bound to the local machine; allow the
+    // sandbox preview host as well so the live preview keeps working.
+    allowedHosts: ["localhost", ".localhost", ".e2b.app"],
+  },
+  build: {
+    target: "es2020",
+    chunkSizeWarningLimit: 3000,
+  },
 });

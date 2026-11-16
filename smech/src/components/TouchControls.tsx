@@ -6,6 +6,7 @@ interface Props {
   game: Game | null;
   accent: string;
   weapons: HudWeapon[];
+  modules?: HudWeapon[];
 }
 
 const DISPLAY = "'Orbitron', 'Share Tech Mono', monospace";
@@ -15,12 +16,12 @@ const DISPLAY = "'Orbitron', 'Share Tech Mono', monospace";
  * movement (relative to where you are looking), drag anywhere on the right to
  * aim, and big fire buttons.
  */
-export default function TouchControls({ game, accent, weapons }: Props) {
+export default function TouchControls({ game, accent, weapons, modules = [] }: Props) {
   const [stick, setStick] = useState<{ active: boolean; ox: number; oy: number; dx: number; dy: number }>({ active: false, ox: 0, oy: 0, dx: 0, dy: 0 });
   const lookId = useRef<number | null>(null);
   const lookLast = useRef({ x: 0, y: 0 });
   const stickId = useRef<number | null>(null);
-  const [firing, setFiring] = useState<{ cannon: boolean; mg: boolean }>({ cannon: false, mg: false });
+  const [firing, setFiring] = useState<{ primary: boolean; secondary: boolean }>({ primary: false, secondary: false });
 
   useEffect(() => {
     game?.setTouchMode(true);
@@ -78,19 +79,26 @@ export default function TouchControls({ game, accent, weapons }: Props) {
     onStickMove(e.clientX, e.clientY);
   };
   const endStick = (e: React.PointerEvent) => {
-    if (stickId.current !== e.pointerId) return;
-    stickId.current = null;
-    setStick({ active: false, ox: 0, oy: 0, dx: 0, dy: 0 });
-    game?.setPadMove(0, 0);
+    if (stickId.current === e.pointerId) {
+      stickId.current = null;
+      setStick({ active: false, ox: 0, oy: 0, dx: 0, dy: 0 });
+      game?.setPadMove(0, 0);
+    }
   };
 
-  const fireRef = useRef({ cannon: false, mg: false });
-  const setFire = (which: 'cannon' | 'mg', on: boolean) => {
-    if (which === 'cannon') fireRef.current.cannon = on;
-    else fireRef.current.mg = on;
+  const fireRef = useRef({ primary: false, secondary: false });
+  const setFire = (which: 'primary' | 'secondary', on: boolean) => {
+    if (which === 'primary') fireRef.current.primary = on;
+    else fireRef.current.secondary = on;
     setFiring({ ...fireRef.current });
-    game?.setPadFire(fireRef.current.cannon, fireRef.current.mg);
+    game?.setPadFire(fireRef.current.primary, fireRef.current.secondary);
   };
+
+  // The cockpit always reports the two trigger weapons first, tagged by their
+  // hardpoint key — look them up instead of assuming a fixed array order.
+  const primary = weapons.find((w) => w.key === 'LMB');
+  const secondary = weapons.find((w) => w.key === 'RMB');
+  const specials = weapons.filter((w) => w.key === 'Q' || w.key === 'E');
 
   return (
     <div className="absolute inset-0 z-10" style={{ touchAction: 'none' }}>
@@ -122,45 +130,65 @@ export default function TouchControls({ game, accent, weapons }: Props) {
         </div>
       )}
 
-      {/* fire buttons */}
-      <div className="absolute right-5 top-[24%] flex gap-2">
-        {weapons.filter((weapon) => weapon.key === 'Q' || weapon.key === 'E').map((weapon) => (
+      {/* special weapon hardpoints */}
+      <div className="absolute right-5 top-[24%] flex flex-wrap gap-2 justify-end" style={{ maxWidth: '58vw' }}>
+        {[...specials, ...modules].map((weapon) => (
           <button
-            key={weapon.id}
-            className="min-w-[74px] rounded px-2 py-3 text-[10px] tracking-wider"
+            key={`${weapon.id}-${weapon.key}`}
+            className="min-w-[74px] rounded px-2 py-3 text-[10px] tracking-wider disabled:opacity-40"
             style={{ fontFamily: DISPLAY, border: `1px solid ${accent}`, background: 'rgba(0,0,0,0.68)', color: accent, opacity: weapon.ready >= 1 ? 1 : 0.5 }}
+            disabled={weapon.ready < 1}
             onPointerDown={(e) => { e.preventDefault(); game?.useWeapon(weapon.id); }}
           >
-            {weapon.key}<br />{weapon.name}
+            {weapon.key}<br />{weapon.short}
           </button>
         ))}
       </div>
+
+      {/* trigger buttons: the secondary sits above the primary so the thumb can rest on it */}
       <div className="absolute right-5 bottom-24 flex flex-col items-end gap-3">
         <button
           className="rounded-full flex items-center justify-center active:scale-95 transition-transform"
-          style={{ width: 74, height: 74, background: firing.mg ? '#ff8a3d' : 'rgba(20,12,8,0.6)', border: `2px solid ${accent}`, color: '#fff', fontFamily: DISPLAY }}
+          style={{
+            width: 74,
+            height: 74,
+            background: firing.secondary ? '#ff8a3d' : 'rgba(20,12,8,0.6)',
+            border: `2px solid ${accent}`,
+            color: '#fff',
+            fontFamily: DISPLAY,
+            opacity: secondary && secondary.ready < 1 ? 0.55 : 1,
+          }}
           onPointerDown={(e) => {
             e.preventDefault();
-            setFire('mg', true);
+            setFire('secondary', true);
           }}
-          onPointerUp={() => setFire('mg', false)}
-          onPointerLeave={() => setFire('mg', false)}
-          onPointerCancel={() => setFire('mg', false)}
+          onPointerUp={() => setFire('secondary', false)}
+          onPointerLeave={() => setFire('secondary', false)}
+          onPointerCancel={() => setFire('secondary', false)}
         >
-          <span className="text-[10px] tracking-[0.2em]">{weapons[1]?.detail ?? 'SEC'}</span>
+          <span className="text-[10px] tracking-[0.2em]">{secondary?.short ?? 'SEC'}</span>
         </button>
         <button
           className="rounded-full flex items-center justify-center active:scale-95 transition-transform"
-          style={{ width: 96, height: 96, background: firing.cannon ? accent : 'rgba(20,12,8,0.6)', border: `3px solid ${accent}`, color: firing.cannon ? '#000' : '#fff', fontFamily: DISPLAY, boxShadow: `0 0 20px ${accent}55` }}
+          style={{
+            width: 96,
+            height: 96,
+            background: firing.primary ? accent : 'rgba(20,12,8,0.6)',
+            border: `3px solid ${accent}`,
+            color: firing.primary ? '#000' : '#fff',
+            fontFamily: DISPLAY,
+            boxShadow: `0 0 20px ${accent}55`,
+            opacity: primary && primary.ready < 1 ? 0.6 : 1,
+          }}
           onPointerDown={(e) => {
             e.preventDefault();
-            setFire('cannon', true);
+            setFire('primary', true);
           }}
-          onPointerUp={() => setFire('cannon', false)}
-          onPointerLeave={() => setFire('cannon', false)}
-          onPointerCancel={() => setFire('cannon', false)}
+          onPointerUp={() => setFire('primary', false)}
+          onPointerLeave={() => setFire('primary', false)}
+          onPointerCancel={() => setFire('primary', false)}
         >
-          <span className="text-xs tracking-[0.2em]">{weapons[0]?.detail ?? 'FIRE'}</span>
+          <span className="text-xs tracking-[0.2em]">{primary?.short ?? 'FIRE'}</span>
         </button>
       </div>
 

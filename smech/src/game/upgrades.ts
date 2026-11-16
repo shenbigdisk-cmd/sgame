@@ -40,6 +40,7 @@ export interface PlayerStats {
   bulwark: number; // shield capacity + recharge
   surge: number; // missile barrage size
   dropRate: number; // supply drop frequency
+  overdriveStacks: number; // overdrive vent tuning
 }
 
 export const defaultStats = (): PlayerStats => ({
@@ -80,6 +81,7 @@ export const defaultStats = (): PlayerStats => ({
   bulwark: 0,
   surge: 0,
   dropRate: 0,
+  overdriveStacks: 0,
 });
 
 export const EVOLUTIONS: UpgradeDef[] = [
@@ -139,6 +141,11 @@ export const UPGRADES: UpgradeDef[] = [
   { id: 'mine_stock', name: 'EXTRA CHARGES', desc: 'Carry +2 mines and deploy one extra per use.', rarity: 'rare', icon: 'mines', tag: 'WEAPON', max: 2 },
   { id: 'smoke_belt', name: 'CANISTER BELT', desc: 'Smoke recharges 25% faster and lingers longer.', rarity: 'common', icon: 'smoke', tag: 'WEAPON', max: 2 },
   { id: 'ice_capacity', name: 'CRYO CANISTER', desc: 'Ice grenade blast +20% wider and recharges faster.', rarity: 'rare', icon: 'cryoball', tag: 'WEAPON', max: 2 },
+  { id: 'mortar_shells', name: 'HEAP SHELLS', desc: '+1 incendiary shell in every mortar strike.', rarity: 'rare', icon: 'mortar', tag: 'WEAPON', max: 3 },
+  { id: 'mortar_cd', name: 'QUICK LAUNCH', desc: 'Mortar pod recharges 30% faster.', rarity: 'common', icon: 'clock', tag: 'WEAPON', max: 3 },
+  { id: 'overdrive_up', name: 'REACTOR TUNING', desc: 'Overdrive lasts 4s longer and burns 40% hotter.', rarity: 'rare', icon: 'overdrive', tag: 'WEAPON', max: 3 },
+  { id: 'nova_radius', name: 'FIELD EXPANSION', desc: 'Stasis nova reaches 30% further and freezes for longer.', rarity: 'rare', icon: 'nova', tag: 'WEAPON', max: 3 },
+  { id: 'cryo_lance', name: 'DEEP CRYO LANCE', desc: '+40% cryo lance damage and a much stronger slow.', rarity: 'rare', icon: 'cryo', tag: 'WEAPON', max: 3 },
 
   // ---- systems ----
   { id: 'targeting', name: 'TARGETING COMPUTER', desc: 'Stronger aim assist and faster target lock for guided weapons.', rarity: 'rare', icon: 'radar', tag: 'SYSTEM', max: 2 },
@@ -193,8 +200,10 @@ export function rollOffer(taken: Map<string, number>, owned: Set<WeaponId>): Upg
         return owned.has('coil');
       case 'napalm':
         return owned.has('flame');
+      case 'cryo_lance':
+        return owned.has('cryo');
       case 'deepfreeze':
-        return owned.has('cryoball');
+        return owned.has('cryo') || owned.has('cryoball');
       case 'sig_cluster':
       case 'sig_overcharge':
         return hasAny(owned, ['cannon', 'scatter']);

@@ -39,7 +39,7 @@ export interface UpgradeDef {
   max?: number;
 }
 
-export type DropKind = 'repair' | 'shield' | 'overcharge' | 'rapid' | 'emp' | 'score';
+export type DropKind = 'repair' | 'shield' | 'overcharge' | 'rapid' | 'emp' | 'score' | 'weapon';
 
 export interface HudBuff {
   id: string;
@@ -150,6 +150,8 @@ export interface HudState {
   /** lateral movement, -1 (left) .. 1 (right) */
   lean: number;
   weapons: HudWeapon[];
+  /** extra special weapons scavenged from weapon caches */
+  modules: HudWeapon[];
   /** pending upgrade choice (null when nothing to pick) */
   offer: UpgradeDef[] | null;
   perks: { name: string; icon: string; count: number }[];
@@ -184,6 +186,8 @@ export interface HudState {
   waveTag: string;
   musicOn: boolean;
   expandAge: number;
+  /** smoothed frames per second, for the optional performance readout */
+  fps: number;
 }
 
 export interface GameStats {
@@ -195,4 +199,8 @@ export interface GameStats {
   perks: string[];
   seed: string;
   zone: number;
+  /** true when the run set a new personal best */
+  isBest?: boolean;
+  /** position in the hall of fame (0 = first) */
+  rank?: number;
 }
