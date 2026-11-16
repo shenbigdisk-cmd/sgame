@@ -1,3 +1,5 @@
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { EVOLUTIONS, UPGRADES, defaultStats, rollOffer } from './upgrades';
 import type { WeaponId } from './types';
@@ -35,6 +37,27 @@ describe('upgrade catalogue', () => {
   it('only evolves weapons that exist', () => {
     for (const evo of EVOLUTIONS) {
       expect(ALL).toContain(evo.evolves!);
+    }
+  });
+
+  it('gives every scavenged module weapon an evolution', () => {
+    // The engine gates behaviour on evolved('mortar' | 'nova' | 'overdrive' | 'cryo');
+    // a missing evolution would leave those branches permanently unreachable.
+    const evoIds = new Set(EVOLUTIONS.map((e) => e.id));
+    for (const moduleWeapon of ['mortar', 'nova', 'overdrive', 'cryo'] as WeaponId[]) {
+      expect(evoIds.has(`evo_${moduleWeapon}`)).toBe(true);
+    }
+  });
+
+  it('backs every evolution hook the engine uses', () => {
+    // Guards against the engine calling evolved(x) for an evolution that does
+    // not exist, which silently disables the whole branch.
+    const source = readFileSync(resolve(process.cwd(), 'src/game/engine.ts'), 'utf8');
+    const hooked = [...source.matchAll(/evolved\('([a-z]+)'\)/g)].map((m) => m[1]);
+    expect(hooked.length).toBeGreaterThan(0);
+    const evoIds = new Set(EVOLUTIONS.map((e) => e.id));
+    for (const weapon of hooked) {
+      expect(evoIds.has(`evo_${weapon}`)).toBe(true);
     }
   });
 });
@@ -91,5 +114,23 @@ describe('rollOffer', () => {
   it('still produces choices for a chassis with nothing extra', () => {
     const offer = rollOffer(new Map(), new Set<WeaponId>(['autocannon', 'cannon', 'missiles', 'turret']));
     expect(offer.length).toBeGreaterThan(0);
+  });
+
+  it('only offers module evolutions once the module is mounted', () => {
+    const moduleEvos = ['evo_mortar', 'evo_nova', 'evo_overdrive', 'evo_cryo'];
+    const withoutModules = new Set<WeaponId>(['autocannon', 'cannon', 'missiles', 'turret']);
+    for (let i = 0; i < 80; i++) {
+      const offer = rollOffer(new Map(), withoutModules);
+      for (const upgrade of offer) {
+        if (moduleEvos.includes(upgrade.id)) expect(upgrade.id).toBe('never');
+      }
+    }
+    const withMortar = new Set<WeaponId>(['autocannon', 'cannon', 'missiles', 'turret', 'mortar']);
+    let seen = 0;
+    for (let i = 0; i < 200; i++) {
+      const offer = rollOffer(new Map(), withMortar);
+      if (offer.some((u) => u.id === 'evo_mortar')) seen++;
+    }
+    expect(seen).toBeGreaterThan(0);
   });
 });

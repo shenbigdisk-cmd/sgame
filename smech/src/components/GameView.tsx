@@ -131,8 +131,18 @@ export default function GameView({ vehicle, controls, seed, audio, settings, onS
           className="absolute inset-0 z-20 flex items-center justify-center cursor-pointer select-none"
           style={{ background: 'rgba(0,0,0,0.55)', backdropFilter: 'blur(2px)' }}
           onClick={() => gameRef.current?.requestPointerLock()}
+          role="dialog"
+          aria-modal="true"
+          aria-label={everLocked ? 'Simulation paused' : 'Cockpit ready'}
         >
-          <div className="pause-panel text-center px-8 py-8 rounded-lg" style={{ background: 'rgba(8,10,14,0.85)', border: `1px solid ${accent}66`, boxShadow: `0 0 50px ${accent}22` }}>
+          <div
+            className="pause-panel text-center px-8 py-8 rounded-lg"
+            style={{ background: 'rgba(8,10,14,0.85)', border: `1px solid ${accent}66`, boxShadow: `0 0 50px ${accent}22` }}
+            // Everything inside the panel is interactive: tabs, sliders and
+            // buttons must not bubble up to the overlay, or changing a setting
+            // would immediately resume the simulation and close this menu.
+            onClick={(event) => event.stopPropagation()}
+          >
             <div className="text-[10px] tracking-[0.5em] text-zinc-400" style={{ fontFamily: MONO }}>
               {everLocked ? '// SIMULATION PAUSED' : '// COCKPIT READY'}
             </div>

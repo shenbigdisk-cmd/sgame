@@ -108,7 +108,6 @@ export interface HudState {
   shieldActive: boolean;
   shieldStatus: 'online' | 'recharging' | 'restarting';
   shieldDelay: number;
-  cannonReady: number; // 0..1 (primary readiness, drives the crosshair ring)
   mgHeat: number; // 0..1
   mgOverheat: boolean;
   priName: string;

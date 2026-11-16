@@ -4248,7 +4248,6 @@ export class Game {
         const falling = this.drops.find((d) => d.falling);
         return falling ? { label: DROP_LABEL[falling.kind], seconds: clamp((falling.group.position.y - falling.pos.y) / 45, 0, 30) } : undefined;
       })(),
-      cannonReady: priReady,
       mgHeat: priIsHeat ? this.mgHeat : 0,
       mgOverheat: priIsHeat && this.mgOverheat,
       priName: WEAPON_INFO[pri].short,

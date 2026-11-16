@@ -238,20 +238,19 @@ function ModuleSlot({ w, accent, onUse }: { w: HudState['modules'][number]; acce
 }
 
 export default function HUD({ hud, vehicle, onWeapon, settings }: Props) {
-  const isTank = false;
   const accent = VEHICLES[vehicle].accent;
   const hpRatio = clamp01(hud.hp / hud.maxHp);
   const hpColor = hpRatio > 0.5 ? '#62ff7a' : hpRatio > 0.25 ? '#ffc23d' : '#ff4d4d';
   const heading = ((((-hud.turretYaw * 180) / Math.PI) % 360) + 360) % 360;
   const hullRel = wrap(hud.hullYaw - hud.turretYaw);
   const spdRatio = clamp01(Math.abs(hud.speed) / hud.maxSpeed);
-  const ready = hud.cannonReady >= 1;
+  const ready = hud.priReady >= 1;
   const msgOpacity = hud.messageAge < 2.6 ? 1 : Math.max(0, 1 - (hud.messageAge - 2.6) / 0.8);
   const low = hpRatio < 0.3 && hud.alive;
   const pulse = (Math.sin(hud.time * 7) + 1) / 2;
   const R = 44;
   const circ = 2 * Math.PI * R;
-  const consoleH = isTank ? '15%' : '12%';
+  const consoleH = '12%';
 
   const compass: { off: number; label: string; major: boolean }[] = [];
   for (let h = 0; h < 360; h += 15) {
@@ -461,7 +460,7 @@ export default function HUD({ hud, vehicle, onWeapon, settings }: Props) {
             stroke={ready ? accent : '#ff8a3d'}
             strokeWidth="2.5"
             strokeDasharray={circ}
-            strokeDashoffset={circ * (1 - hud.cannonReady)}
+            strokeDashoffset={circ * (1 - hud.priReady)}
             transform="rotate(-90)"
             strokeLinecap="round"
             style={{ transition: 'stroke-dashoffset 60ms linear' }}
@@ -631,7 +630,7 @@ export default function HUD({ hud, vehicle, onWeapon, settings }: Props) {
             >
               {hud.seenBy > 0 ? `EXPOSED · ${hud.seenBy}` : hud.detected > 0 ? `HUNTED · ${hud.detected}` : 'CONCEALED'}
             </div>
-            <Radar blips={hud.blips} hullRel={hullRel} accent={accent} size={isTank ? 104 : 92} />
+            <Radar blips={hud.blips} hullRel={hullRel} accent={accent} size={92} />
           </div>
         </div>
       </div>

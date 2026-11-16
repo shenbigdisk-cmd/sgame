@@ -97,6 +97,10 @@ export const EVOLUTIONS: UpgradeDef[] = [
   { id: 'evo_cryoball', name: 'ABSOLUTE ZERO', desc: 'Ice grenades freeze for 2 extra seconds and leave targets brittle: +25% damage taken for 5s.', rarity: 'epic', icon: 'cryoball', tag: 'SIGNATURE', signature: true, evolution: true, evolves: 'cryoball', max: 1 },
   { id: 'evo_rail', name: 'CHAIN REACTION', desc: 'Your railgun lightning jumps to two more targets for 55% and 35% damage.', rarity: 'epic', icon: 'target', tag: 'SIGNATURE', signature: true, evolution: true, evolves: 'rail', max: 1 },
   { id: 'evo_smoke', name: 'CHOKE SCREEN', desc: 'Smoke is wider, lasts 5s longer, and recharges 30 shield points while you stand in it.', rarity: 'epic', icon: 'smoke', tag: 'SIGNATURE', signature: true, evolution: true, evolves: 'smoke', max: 1 },
+  { id: 'evo_mortar', name: 'THERMAL DRUMS', desc: 'Mortar pools burn 55% hotter and 65% longer, and your own fire never scorches you.', rarity: 'epic', icon: 'mortar', tag: 'SIGNATURE', signature: true, evolution: true, evolves: 'mortar', max: 1 },
+  { id: 'evo_nova', name: 'GLACIAL SHATTER', desc: 'The stasis nova deals 20 damage and leaves enemies brittle for 6s: they take 25% more damage.', rarity: 'epic', icon: 'nova', tag: 'SIGNATURE', signature: true, evolution: true, evolves: 'nova', max: 1 },
+  { id: 'evo_overdrive', name: 'REACTOR PURGE', desc: 'Venting overdrive restores 50 shield, breaks the shield lock, and purges all weapon heat.', rarity: 'epic', icon: 'overdrive', tag: 'SIGNATURE', signature: true, evolution: true, evolves: 'overdrive', max: 1 },
+  { id: 'evo_cryo', name: 'GLACIAL LOCK', desc: 'Chilled targets accumulate frost. Every 10 stacks freezes them solid for 4 seconds.', rarity: 'epic', icon: 'cryo', tag: 'SIGNATURE', signature: true, evolution: true, evolves: 'cryo', max: 1 },
 ];
 
 export const UPGRADES: UpgradeDef[] = [

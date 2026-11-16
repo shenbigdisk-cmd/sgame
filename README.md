@@ -108,10 +108,20 @@ shield is refilled and you choose one of three rewards.
 ### Rewards
 Upgrades roll as **STANDARD / RARE / UNIQ** and cover hull, weapon, system and
 signature categories. Weapons can be **evolved** into stronger forms
-(`STATIC LINK`, `CONCUSSION CORE`, `CRYO SHATTER`, …), and signature upgrades
+(`STATIC LINK`, `CONCUSSION CORE`, `ABSOLUTE ZERO`, …), and signature upgrades
 introduce new mechanics (cluster munitions, reactive armour, overcharged
 rounds, repair swarm, killstreak surge, arc discharger, bulwark field,
 saturation barrage, supply network).
+
+Every weapon has exactly one evolution, and an evolution only appears once you
+own the weapon it upgrades. The scavenged modules evolve too:
+
+| Module | Evolution | Effect |
+| --- | --- | --- |
+| `INCENDIARY MORTARS` | `THERMAL DRUMS` | Pools burn hotter and longer, and never scorch you |
+| `STASIS NOVA` | `GLACIAL SHATTER` | Nova deals 20 damage and leaves enemies brittle |
+| `OVERDRIVE VENT` | `REACTOR PURGE` | Venting restores shield and purges weapon heat |
+| `CRYO LANCE` | `GLACIAL LOCK` | Chilled targets build frost and freeze solid |
 
 ### Weapon caches
 Supply pods can fall out of the sky carrying a **WEAPON CACHE**. Opening one
