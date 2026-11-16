@@ -7,6 +7,10 @@ dist-ssr/
 build/
 *.local
 
+# The published single-file build (smech/scripts/prepare-preview.mjs) is
+# intentionally committed under preview/ so the game can be played straight
+# from a raw file URL.
+
 # Test / coverage output
 coverage/
 .vitest/

@@ -35,6 +35,24 @@ npm run test       # vitest
 npm run check      # all three
 ```
 
+### Playing the published build
+
+The production build inlines every asset — JavaScript, CSS and three.js — into
+one HTML file, so it can be served from any static host. `preview/index.html` in
+this repository is that file, regenerated with:
+
+```bash
+npm run build
+npm run preview:prepare   # copies dist/index.html -> ../preview/index.html
+```
+
+It is committed on purpose so the game can be opened straight from a raw file
+URL, with no server and no install step:
+
+```
+https://raw.githubusercontent.com/shenbigdisk-cmd/sgame/arena/e2b67aef-sgame/preview/index.html
+```
+
 ---
 
 ## Controls
