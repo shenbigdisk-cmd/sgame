@@ -141,6 +141,8 @@ Eight slots make up a mech, and every one of them is yours to fill:
 | `REACTOR` | Shield and power | Fused capacitor, titan reactor |
 | `DRIVE` | Legs and speed | Sprint servos, atlas legs |
 
+![THE FORGE: build your mech](docs/screenshot-forge.png)
+
 Components are bought once and kept forever. Mounting one applies its stat
 deltas to the frame baseline, so a heavy carapace raises your hull and costs
 you top speed — the trade-offs are yours to make. The Forge shows the live
