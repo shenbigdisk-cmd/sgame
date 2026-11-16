@@ -1,0 +1,249 @@
+import type { UpgradeDef, WeaponId } from './types';
+
+/** Multipliers and flat bonuses accumulated from picked upgrades. */
+export interface PlayerStats {
+  maxHpMul: number;
+  regen: number;
+  reloadMul: number;
+  cannonDmgMul: number;
+  splashMul: number;
+  mgHeatMul: number;
+  mgDmgMul: number;
+  speedMul: number;
+  critChance: number;
+  pickupMul: number;
+  missileCount: number;
+  missileCdMul: number;
+  missileDmgMul: number;
+  shieldMax: number;
+  shieldCdMul: number;
+  strikeShells: number;
+  strikeCdMul: number;
+  railDmgMul: number;
+  empRadiusMul: number;
+  turretDmgMul: number;
+  turretLifeMul: number;
+  flameDmgMul: number;
+  cryoDmgMul: number;
+  cryoSlowMul: number;
+  assistMul: number;
+  armor: number; // flat damage reduction 0..0.5
+  salvage: number; // score multiplier
+  vampire: number; // hp per kill
+  // signature mechanics (stacks)
+  cluster: number; // submunitions per cannon shell
+  reactive: number; // reactive armor shockwave damage
+  overcharge: number; // every Nth cannon shot is overcharged
+  nanites: number; // passive hull + shield regeneration
+  haste: number; // killstreak surge buff
+  arc: number; // auto chain-lightning damage
+  bulwark: number; // shield capacity + recharge
+  surge: number; // missile barrage size
+  dropRate: number; // supply drop frequency
+}
+
+export const defaultStats = (): PlayerStats => ({
+  maxHpMul: 1,
+  regen: 0,
+  reloadMul: 1,
+  cannonDmgMul: 1,
+  splashMul: 1,
+  mgHeatMul: 1,
+  mgDmgMul: 1,
+  speedMul: 1,
+  critChance: 0,
+  pickupMul: 1,
+  missileCount: 4,
+  missileCdMul: 1,
+  missileDmgMul: 1,
+  shieldMax: 80,
+  shieldCdMul: 1,
+  strikeShells: 3,
+  strikeCdMul: 1,
+  railDmgMul: 1,
+  empRadiusMul: 1,
+  turretDmgMul: 1,
+  turretLifeMul: 1,
+  flameDmgMul: 1,
+  cryoDmgMul: 1,
+  cryoSlowMul: 1,
+  assistMul: 1,
+  armor: 0,
+  salvage: 1,
+  vampire: 0,
+  cluster: 0,
+  reactive: 0,
+  overcharge: 0,
+  nanites: 0,
+  haste: 0,
+  arc: 0,
+  bulwark: 0,
+  surge: 0,
+  dropRate: 0,
+});
+
+export const EVOLUTIONS: UpgradeDef[] = [
+  { id: 'evo_autocannon', name: 'STATIC LINK', desc: 'Every sixth autocannon round arcs to a nearby enemy on impact for 14 lightning damage.', rarity: 'epic', icon: 'bolt', tag: 'SIGNATURE', signature: true, evolution: true, evolves: 'autocannon', max: 1 },
+  { id: 'evo_cannon', name: 'CONCUSSION CORE', desc: 'Cannon explosions briefly stun every enemy caught in the blast.', rarity: 'epic', icon: 'blast', tag: 'SIGNATURE', signature: true, evolution: true, evolves: 'cannon', max: 1 },
+  { id: 'evo_missiles', name: 'HUNTER SWARM', desc: '+2 missiles per salvo. Smart targeting distributes missiles across visible enemies.', rarity: 'epic', icon: 'missile', tag: 'SIGNATURE', signature: true, evolution: true, evolves: 'missiles', max: 1 },
+  { id: 'evo_turret', name: 'ARC SENTRY', desc: 'Your sentry becomes a lightning turret. Each shot jumps to a second target.', rarity: 'epic', icon: 'turret', tag: 'SIGNATURE', signature: true, evolution: true, evolves: 'turret', max: 1 },
+  { id: 'evo_scatter', name: 'SLAG SHOT', desc: 'Scattergun pellets ignite targets, adding 8 burn damage per second for 3 seconds.', rarity: 'epic', icon: 'scatter', tag: 'SIGNATURE', signature: true, evolution: true, evolves: 'scatter', max: 1 },
+  { id: 'evo_flame', name: 'FIRESTORM', desc: 'Burning enemies explode on death, damaging and igniting nearby challengers.', rarity: 'epic', icon: 'flame', tag: 'SIGNATURE', signature: true, evolution: true, evolves: 'flame', max: 1 },
+  { id: 'evo_jump', name: 'METEOR SLAM', desc: 'Jump slam radius +35% and leaves a burning crater where you land.', rarity: 'epic', icon: 'jump', tag: 'SIGNATURE', signature: true, evolution: true, evolves: 'jump', max: 1 },
+  { id: 'evo_mines', name: 'CLUSTER MINES', desc: 'Deploy three mines at once. Mine blasts are 50% larger and ignite enemies.', rarity: 'epic', icon: 'mines', tag: 'SIGNATURE', signature: true, evolution: true, evolves: 'mines', max: 1 },
+  { id: 'evo_coil', name: 'SPLINTER NEEDLES', desc: 'Coil rounds deal 45% more damage against chilled or frozen enemies.', rarity: 'epic', icon: 'coil', tag: 'SIGNATURE', signature: true, evolution: true, evolves: 'coil', max: 1 },
+  { id: 'evo_cryoball', name: 'ABSOLUTE ZERO', desc: 'Ice grenades freeze for 2 extra seconds and leave targets brittle: +25% damage taken for 5s.', rarity: 'epic', icon: 'cryoball', tag: 'SIGNATURE', signature: true, evolution: true, evolves: 'cryoball', max: 1 },
+  { id: 'evo_rail', name: 'CHAIN REACTION', desc: 'Your railgun lightning jumps to two more targets for 55% and 35% damage.', rarity: 'epic', icon: 'target', tag: 'SIGNATURE', signature: true, evolution: true, evolves: 'rail', max: 1 },
+  { id: 'evo_smoke', name: 'CHOKE SCREEN', desc: 'Smoke is wider, lasts 5s longer, and recharges 30 shield points while you stand in it.', rarity: 'epic', icon: 'smoke', tag: 'SIGNATURE', signature: true, evolution: true, evolves: 'smoke', max: 1 },
+];
+
+export const UPGRADES: UpgradeDef[] = [
+  ...EVOLUTIONS,
+  // ---- signature upgrades: new mechanics ----
+  { id: 'sig_cluster', name: 'CLUSTER MUNITIONS', desc: 'Cannon and scatter shells split into 6 bomblets on impact.', rarity: 'epic', icon: 'blast', tag: 'SIGNATURE', signature: true, max: 1 },
+  { id: 'sig_reactive', name: 'REACTIVE ARMOR', desc: 'Taking a hit detonates an armor-piercing shockwave around you. 4s cooldown.', rarity: 'epic', icon: 'shield', tag: 'SIGNATURE', signature: true, max: 1 },
+  { id: 'sig_overcharge', name: 'OVERCHARGED ROUNDS', desc: 'Every 5th shell is overcharged: double damage, much bigger blast.', rarity: 'epic', icon: 'bolt', tag: 'SIGNATURE', signature: true, max: 1 },
+  { id: 'sig_nanites', name: 'REPAIR SWARM', desc: 'Nanites continuously rebuild hull armor and recharge your shield, even under fire.', rarity: 'epic', icon: 'regen', tag: 'SIGNATURE', signature: true, max: 1 },
+  { id: 'sig_haste', name: 'KILLSTREAK SURGE', desc: 'Chaining 3 kills triggers a surge: 30% faster reload and 20% more speed for 8 seconds.', rarity: 'epic', icon: 'gear', tag: 'SIGNATURE', signature: true, max: 1 },
+  { id: 'sig_arc', name: 'ARC DISCHARGER', desc: 'Every 6 seconds lightning arcs to the nearest hostile inside 45m.', rarity: 'epic', icon: 'bolt', tag: 'SIGNATURE', signature: true, max: 1 },
+  { id: 'sig_bulwark', name: 'BULWARK FIELD', desc: 'Your shield holds +90 points and recharges 35% faster.', rarity: 'epic', icon: 'battery', tag: 'SIGNATURE', signature: true, max: 1 },
+  { id: 'sig_surge', name: 'SATURATION BARRAGE', desc: 'Missile salvos fire +2 warheads and their blasts are 40% wider.', rarity: 'epic', icon: 'missile', tag: 'SIGNATURE', signature: true, max: 1 },
+  { id: 'sig_scavenger', name: 'SUPPLY NETWORK', desc: 'Supply drops arrive 35% more often and land closer to you.', rarity: 'epic', icon: 'magnet', tag: 'SIGNATURE', signature: true, max: 1 },
+
+  // ---- hull ----
+  { id: 'armor', name: 'COMPOSITE PLATING', desc: '+25% max armor and repair 25% now.', rarity: 'common', icon: 'armor', tag: 'HULL' },
+  { id: 'regen', name: 'REPAIR CREW', desc: 'Regenerate 2 armor per second.', rarity: 'rare', icon: 'wrench', tag: 'HULL', max: 3 },
+  { id: 'ablative', name: 'ABLATIVE LAYERS', desc: 'All incoming damage reduced by 10%.', rarity: 'rare', icon: 'rock', tag: 'HULL', max: 4 },
+  { id: 'drive', name: 'TUNED DRIVETRAIN', desc: '+15% top speed and acceleration.', rarity: 'common', icon: 'gear', tag: 'HULL', max: 4 },
+  { id: 'medkit', name: 'FIELD REPAIR', desc: 'Fully repair the hull right now.', rarity: 'common', icon: 'wrench', tag: 'HULL' },
+  { id: 'magnet', name: 'SALVAGE MAGNET', desc: 'Repair kits heal 50% more and drop 50% more often.', rarity: 'common', icon: 'magnet', tag: 'HULL', max: 2 },
+  { id: 'vampire', name: 'SCAVENGER CORE', desc: 'Restore 8 armor for every kill.', rarity: 'rare', icon: 'blood', tag: 'HULL', max: 3 },
+
+  // ---- weapons (generic) ----
+  { id: 'autoloader', name: 'AUTOLOADER', desc: 'Gun firing and reload delays are 15% shorter.', rarity: 'common', icon: 'reload', tag: 'WEAPON', max: 4 },
+  { id: 'he', name: 'HE SHELLS', desc: '+25% shell damage, +25% blast radius.', rarity: 'common', icon: 'blast', tag: 'WEAPON', max: 4 },
+  { id: 'crit', name: 'TUNGSTEN PENETRATORS', desc: '+15% chance for any hit to deal double damage.', rarity: 'rare', icon: 'target', tag: 'WEAPON', max: 4 },
+  { id: 'coolant', name: 'LIQUID COOLANT', desc: 'Heat weapons build 30% less heat.', rarity: 'common', icon: 'snow', tag: 'WEAPON', max: 3 },
+  { id: 'ap', name: 'AP ROUNDS', desc: '+40% bullet damage.', rarity: 'common', icon: 'armor', tag: 'WEAPON', max: 4 },
+
+  // ---- weapons (per-mech) ----
+  { id: 'belt', name: 'EXTENDED BELTS', desc: '+35% autocannon damage.', rarity: 'common', icon: 'reload', tag: 'WEAPON', max: 3 },
+  { id: 'coilcap', name: 'OVERCLOCKED COILS', desc: '+35% coil repeater damage.', rarity: 'common', icon: 'bolt', tag: 'WEAPON', max: 3 },
+  { id: 'napalm', name: 'PRESSURIZED NAPALM', desc: '+40% flamethrower damage and longer reach.', rarity: 'rare', icon: 'flame', tag: 'WEAPON', max: 3 },
+  { id: 'deepfreeze', name: 'DEEP FREEZE', desc: '+35% cryo damage and 50% stronger slow.', rarity: 'rare', icon: 'cryo', tag: 'WEAPON', max: 3 },
+  { id: 'missile_count', name: 'EXTENDED RACKS', desc: '+2 missiles per salvo.', rarity: 'rare', icon: 'missile', tag: 'WEAPON', max: 3 },
+  { id: 'missile_cd', name: 'RAPID RELOAD RACKS', desc: 'Missile pod recharges 25% faster. +15% missile damage.', rarity: 'common', icon: 'clock', tag: 'WEAPON', max: 3 },
+  { id: 'turret_up', name: 'SENTRY PROTOCOLS', desc: 'Sentry turret: +40% damage, +50% lifetime.', rarity: 'rare', icon: 'turret', tag: 'WEAPON', max: 3 },
+  { id: 'rail_damage', name: 'RAIL CAPACITORS', desc: 'Railgun damage increased by 35%.', rarity: 'rare', icon: 'target', tag: 'WEAPON', max: 3 },
+  { id: 'jump_charge', name: 'SLAM THRUSTERS', desc: 'Jump slam recharges 20% faster and hits a 15% wider area.', rarity: 'rare', icon: 'jump', tag: 'WEAPON', max: 2 },
+  { id: 'mine_stock', name: 'EXTRA CHARGES', desc: 'Carry +2 mines and deploy one extra per use.', rarity: 'rare', icon: 'mines', tag: 'WEAPON', max: 2 },
+  { id: 'smoke_belt', name: 'CANISTER BELT', desc: 'Smoke recharges 25% faster and lingers longer.', rarity: 'common', icon: 'smoke', tag: 'WEAPON', max: 2 },
+  { id: 'ice_capacity', name: 'CRYO CANISTER', desc: 'Ice grenade blast +20% wider and recharges faster.', rarity: 'rare', icon: 'cryoball', tag: 'WEAPON', max: 2 },
+
+  // ---- systems ----
+  { id: 'targeting', name: 'TARGETING COMPUTER', desc: 'Stronger aim assist and faster target lock for guided weapons.', rarity: 'rare', icon: 'radar', tag: 'SYSTEM', max: 2 },
+  { id: 'shield_cap', name: 'CAPACITOR BANKS', desc: 'Shield absorbs +60 damage.', rarity: 'common', icon: 'battery', tag: 'SYSTEM', max: 3 },
+  { id: 'shield_cd', name: 'FLUX REGULATOR', desc: 'Your shield begins recharging 30% sooner after damage.', rarity: 'rare', icon: 'bolt', tag: 'SYSTEM', max: 2 },
+  { id: 'salvage', name: 'BOUNTY CONTRACT', desc: '+25% score from all kills.', rarity: 'common', icon: 'coin', tag: 'SYSTEM', max: 3 },
+  { id: 'veteran', name: 'VETERAN INSTINCT', desc: '+10% hull capacity and repair 30 hull. Always available.', rarity: 'rare', icon: 'armor', tag: 'HULL' },
+  { id: 'laurels', name: 'CHAMPION\'S RESOLVE', desc: '+30 shield capacity. Fully recharge your shield.', rarity: 'epic', icon: 'shield', tag: 'SYSTEM', signature: true },
+];
+
+const RARITY_WEIGHT: Record<UpgradeDef['rarity'], number> = { common: 10, rare: 5, epic: 1.7 };
+
+function hasAny(owned: Set<WeaponId>, ids: WeaponId[]) {
+  return ids.some((id) => owned.has(id));
+}
+
+/** One STANDARD, one RARE and one UNIQ bonus per victory — always useful to this mech. */
+export function rollOffer(taken: Map<string, number>, owned: Set<WeaponId>): UpgradeDef[] {
+  const available = UPGRADES.filter((u) => {
+    if (u.max !== undefined && (taken.get(u.id) ?? 0) >= u.max) return false;
+    if (u.evolution) return !!u.evolves && owned.has(u.evolves);
+    switch (u.id) {
+      case 'missile_count':
+      case 'missile_cd':
+        return owned.has('missiles');
+      case 'mortar_shells':
+      case 'mortar_cd':
+        return owned.has('mortar');
+      case 'turret_up':
+        return owned.has('turret');
+      case 'evo_jump':
+      case 'jump_charge':
+        return owned.has('jump');
+      case 'evo_mines':
+      case 'mine_stock':
+        return owned.has('mines');
+      case 'evo_smoke':
+      case 'smoke_belt':
+        return owned.has('smoke');
+      case 'evo_cryoball':
+      case 'ice_capacity':
+        return owned.has('cryoball');
+      case 'overdrive_up':
+        return owned.has('overdrive');
+      case 'rail_damage':
+        return owned.has('rail');
+      case 'nova_radius':
+        return owned.has('nova');
+      case 'belt':
+        return owned.has('autocannon');
+      case 'coilcap':
+        return owned.has('coil');
+      case 'napalm':
+        return owned.has('flame');
+      case 'deepfreeze':
+        return owned.has('cryoball');
+      case 'sig_cluster':
+      case 'sig_overcharge':
+        return hasAny(owned, ['cannon', 'scatter']);
+      case 'sig_surge':
+        return hasAny(owned, ['missiles', 'mortar']);
+      case 'ap':
+        return hasAny(owned, ['autocannon', 'coil']);
+      case 'he':
+        return hasAny(owned, ['cannon', 'scatter', 'mortar']);
+      default:
+        return true;
+    }
+  });
+  const weighted = (pool: UpgradeDef[]) => {
+    const total = pool.reduce((s, u) => s + RARITY_WEIGHT[u.rarity], 0);
+    let r = Math.random() * total;
+    for (const u of pool) {
+      r -= RARITY_WEIGHT[u.rarity];
+      if (r <= 0) return u;
+    }
+    return pool[pool.length - 1];
+  };
+  const result: UpgradeDef[] = [];
+  const pool = [...available];
+  // UNIQ slot: prefer a signature mechanic
+  const epics = pool.filter((u) => u.rarity === 'epic');
+  if (epics.length) {
+    const evolutions = epics.filter((u) => u.evolution);
+    const pick = evolutions.length && Math.random() < 0.85 ? evolutions[Math.floor(Math.random() * evolutions.length)] : weighted(epics);
+    result.push(pick);
+    pool.splice(pool.indexOf(pick), 1);
+  }
+  for (const rarity of ['rare', 'common'] as const) {
+    let slot = pool.filter((u) => u.rarity === rarity);
+    const weaponChoices = slot.filter((u) => u.tag === 'WEAPON');
+    if (rarity === 'rare' && weaponChoices.length && Math.random() < 0.75) slot = weaponChoices;
+    if (slot.length) {
+      const pick = weighted(slot);
+      result.push(pick);
+      pool.splice(pool.indexOf(pick), 1);
+    }
+  }
+  // fill any gaps from whatever remains
+  while (result.length < 3 && pool.length) {
+    const pick = weighted(pool);
+    result.push(pick);
+    pool.splice(pool.indexOf(pick), 1);
+  }
+  // order: standard, rare, uniq
+  const order = { common: 0, rare: 1, epic: 2 };
+  return result.sort((a, b) => order[a.rarity] - order[b.rarity]);
+}

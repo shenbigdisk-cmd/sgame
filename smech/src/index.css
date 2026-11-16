@@ -1,0 +1,486 @@
+@import "tailwindcss";
+
+html,
+body,
+#root {
+  margin: 0;
+  padding: 0;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  background: #000;
+  overscroll-behavior: none;
+}
+
+body {
+  -webkit-font-smoothing: antialiased;
+}
+
+.hangar {
+  position: relative;
+  height: 100dvh;
+  overflow: hidden;
+  color: #eef1ea;
+  background: #0d1719;
+  font-family: 'Share Tech Mono', 'Courier New', monospace;
+}
+.hangar-art, .hangar-shade { position: absolute; inset: 0; pointer-events: none; }
+.hangar-art { animation: fade-in 500ms ease both; }
+.hangar-art img { width: 100%; height: 100%; object-fit: cover; object-position: 65% 22%; filter: saturate(.72) brightness(.72); }
+.hangar-shade {
+  background: linear-gradient(90deg, rgba(7, 15, 16, .98) 0%, rgba(7, 15, 16, .92) 28%, rgba(7, 15, 16, .28) 70%, rgba(7, 15, 16, .38) 100%),
+    linear-gradient(0deg, #081112 0%, rgba(8, 17, 18, .96) 16%, transparent 46%),
+    linear-gradient(180deg, rgba(7, 15, 16, .7), transparent 25%);
+}
+.hangar-content { position: relative; z-index: 1; display: flex; flex-direction: column; min-height: 100svh; max-width: 1600px; margin: auto; padding: 24px clamp(22px, 4.3vw, 68px) 24px; }
+.hangar-header { display: flex; align-items: center; justify-content: space-between; gap: 18px; padding-bottom: 20px; border-bottom: 1px solid rgba(220, 235, 221, .15); }
+.brand-lockup { display: flex; align-items: center; gap: 15px; }
+.brand-lockup h1 { font-family: 'Orbitron', sans-serif; font-size: clamp(19px, 1.8vw, 27px); line-height: 1; font-weight: 900; letter-spacing: .08em; }
+.brand-lockup p { margin-top: 6px; font-size: 9px; color: #a1b0a9; letter-spacing: .22em; }
+.brand-mark { width: 36px; height: 34px; display: flex; gap: 4px; align-items: center; transform: skew(-15deg); }
+.brand-mark span { width: 7px; background: var(--chassis-accent); height: 26px; }
+.brand-mark span:nth-child(2) { height: 34px; }
+.brand-mark span:nth-child(3) { height: 19px; }
+.hangar-header-right { color: #c2cec8; font-size: 10px; letter-spacing: .18em; white-space: nowrap; }
+.status-dot { display: inline-block; width: 6px; height: 6px; margin-right: 7px; border-radius: 50%; background: #a5d59c; box-shadow: 0 0 10px #a5d59c; animation: status-glow 2.4s ease-in-out infinite; }
+.header-divider { display: inline-block; width: 1px; height: 13px; margin: 0 16px -3px; background: #71807b; }
+.hangar-main { position: relative; flex: 1; display: flex; align-items: center; justify-content: space-between; min-height: 330px; padding: 24px 0; }
+.chassis-intro { width: min(530px, 52%); animation: rise-in 360ms ease both; }
+.eyebrow, .chassis-role, .chassis-model, .loadout-label, .selection-heading, .control-choice > span { font-size: 10px; letter-spacing: .22em; }
+.eyebrow { display: flex; align-items: center; gap: 11px; color: #d3d9d0; }
+.eyebrow-line { display: inline-block; width: 24px; height: 2px; background: var(--chassis-accent); }
+.eyebrow-number { color: #82938b; }
+.chassis-role { margin-top: 26px; color: var(--chassis-accent); }
+.chassis-intro h2 { margin-top: 7px; font-family: 'Orbitron', sans-serif; font-size: clamp(40px, 5.3vw, 78px); line-height: 1; font-weight: 900; letter-spacing: .04em; }
+.chassis-model { margin-top: 12px; color: #bcc8c1; }
+.chassis-model span { margin: 0 8px; color: var(--chassis-accent); }
+.chassis-description { margin-top: 18px; max-width: 440px; color: #b3c1b8; font-family: sans-serif; font-size: 14px; line-height: 1.6; }
+.chassis-stats { display: grid; grid-template-columns: repeat(4, 1fr); max-width: 460px; margin-top: 22px; padding: 15px 0; border-top: 1px solid rgba(212, 229, 219, .16); border-bottom: 1px solid rgba(212, 229, 219, .16); }
+.chassis-stats div { display: flex; flex-direction: column; gap: 5px; padding-left: 17px; border-left: 1px solid rgba(212, 229, 219, .13); }
+.chassis-stats div:first-child { padding-left: 0; border-left: 0; }
+.chassis-stats span { color: #9aaba2; font-size: 9px; letter-spacing: .14em; }
+.chassis-stats strong { font-family: 'Orbitron', sans-serif; font-size: 17px; }
+.chassis-stats small { font-family: 'Share Tech Mono', monospace; font-size: 9px; color: #aabbb1; }
+.loadout-label { margin-top: 19px; color: #dae1d6; }
+.loadout-label span { margin-left: 9px; font-size: 8px; color: #85ac9a; }
+.loadout-weapons { display: flex; flex-wrap: wrap; gap: 14px 26px; margin-top: 12px; }
+.loadout-weapon { display: flex; align-items: center; gap: 9px; min-width: 190px; color: var(--chassis-accent); }
+.loadout-key { display: grid; place-items: center; width: 25px; height: 25px; border: 1px solid rgba(221, 233, 218, .35); font-size: 12px; color: #fff; }
+.loadout-weapon strong, .loadout-weapon span { display: block; }
+.loadout-weapon strong { font-size: 10px; letter-spacing: .07em; color: #eef1eb; }
+.loadout-weapon span { margin-top: 3px; color: #99a9a1; font-size: 10px; }
+.field-note { margin-top: 17px; color: #9aaba0; font-size: 9px; letter-spacing: .1em; }
+.hangar-index { align-self: flex-end; display: flex; align-items: baseline; gap: 8px; padding-bottom: 10px; color: #dbe5d9; opacity: .65; }
+.hangar-index span { font-size: 10px; letter-spacing: .2em; }
+.hangar-index b { font-family: 'Orbitron', sans-serif; font-size: 36px; }
+.vehicle-selection { padding-top: 6px; }
+.selection-heading { display: flex; justify-content: space-between; margin-bottom: 10px; color: #d8e2d7; }
+.selection-heading span:last-child { color: #85968c; font-size: 9px; }
+.vehicle-list { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 8px; }
+.vehicle-list-3 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.arena-lore { max-width: 900px; margin: 22px auto 0; text-align: center; color: #b3c1b8; font-size: 13px; line-height: 1.65; }
+
+
+.chassis-style { margin-top: 12px; max-width: 440px; color: #d8e2d7; font-size: 12px; line-height: 1.55; }
+.chassis-style span { color: var(--chassis-accent); letter-spacing: 0.18em; font-size: 10px; }
+.style-word { font-size: 13px !important; }
+.loadout-weapons-4 { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px 22px; }
+.loadout-weapons-4 .loadout-weapon { min-width: 0; align-items: flex-start; }
+.slot-tag { color: var(--chassis-accent) !important; font-size: 8px !important; letter-spacing: 0.2em; }
+.vehicle-option { position: relative; min-width: 0; height: 91px; overflow: hidden; text-align: left; border: 1px solid rgba(213, 229, 218, .2); background: rgba(23, 32, 31, .86); cursor: pointer; transition: border-color 180ms ease, transform 180ms ease, background 180ms ease; }
+.vehicle-option:hover, .vehicle-option:focus-visible { border-color: rgba(233, 236, 218, .8); transform: translateY(-3px); outline: none; }
+.vehicle-option.is-selected { border-color: var(--chassis-accent); background: rgba(47, 61, 55, .95); }
+.vehicle-thumbnail { position: absolute; inset: 0; opacity: .58; }
+.vehicle-thumbnail::after { content: ''; position: absolute; inset: 0; background: linear-gradient(90deg, rgba(6, 14, 15, .88), rgba(6, 14, 15, .25) 75%); }
+.vehicle-thumbnail img { width: 100%; height: 100%; object-fit: cover; object-position: center 32%; }
+.vehicle-option-copy { position: absolute; left: 13px; right: 8px; bottom: 13px; display: flex; flex-direction: column; gap: 5px; }
+.vehicle-option-copy span { overflow: hidden; color: #b5c2b9; font-size: 8px; letter-spacing: .12em; white-space: nowrap; text-overflow: ellipsis; }
+.vehicle-option-copy strong { color: white; font-family: 'Orbitron', sans-serif; font-size: 12px; letter-spacing: .08em; }
+.vehicle-option-copy em { color: var(--chassis-accent); font-size: 9px; font-style: normal; letter-spacing: .14em; }
+.selected-indicator { position: absolute; left: 0; bottom: 0; height: 3px; width: 100%; background: var(--chassis-accent); }
+.hangar-footer { display: flex; align-items: center; flex-wrap: wrap; gap: 14px 22px; padding-top: 17px; }
+.control-choice { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.control-choice > span { color: #a8b8ae; white-space: nowrap; }
+.control-choice > div { display: flex; border: 1px solid rgba(213, 229, 218, .24); }
+.control-choice button { min-width: 55px; padding: 8px 9px; color: #a1afa7; font-size: 9px; letter-spacing: .1em; cursor: pointer; }
+.control-choice button.active { color: #111b18; background: var(--chassis-accent); }
+.control-choice p { color: #9cac9f; font-size: 10px; }
+.seed-choice { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.seed-choice > span { font-size: 10px; letter-spacing: .22em; color: #a8b8ae; white-space: nowrap; }
+.seed-choice > div { display: flex; border: 1px solid rgba(213, 229, 218, .24); }
+.seed-choice input { width: 104px; padding: 8px 10px; background: rgba(8, 16, 16, .6); color: #eef1ea; font-family: 'Orbitron', sans-serif; font-size: 11px; letter-spacing: .14em; outline: none; }
+.seed-choice input:focus-visible { background: rgba(30, 48, 46, .8); box-shadow: inset 0 0 0 1px var(--chassis-accent); }
+.seed-choice button { padding: 8px 11px; color: #111b18; background: var(--chassis-accent); font-size: 9px; letter-spacing: .12em; cursor: pointer; }
+.seed-choice button:hover, .seed-choice button:focus-visible { filter: brightness(1.15); outline: none; }
+.seed-choice p { color: #9cac9f; font-size: 10px; }
+.footer-help { margin-left: auto; color: #9eafa5; font-size: 9px; letter-spacing: .1em; white-space: nowrap; }
+.footer-help i { display: inline-block; width: 2px; height: 2px; margin: 0 7px 3px; background: #aabbb1; }
+.deploy-button { display: flex; align-items: center; justify-content: space-between; flex: 0 0 190px; gap: 30px; min-height: 54px; padding: 0 22px; color: #142019; background: var(--chassis-accent); font-family: 'Orbitron', sans-serif; font-weight: 900; font-size: 13px; letter-spacing: .15em; cursor: pointer; transition: filter 180ms ease, transform 180ms ease; }
+.deploy-button:hover, .deploy-button:focus-visible { filter: brightness(1.16); transform: translateY(-2px); outline: 1px solid white; outline-offset: 3px; }
+@keyframes status-glow { 50% { opacity: .45; } }
+@media (max-width: 1500px) { .footer-help { display: none; } .deploy-button { margin-left: auto; } }
+@media (max-width: 1000px) { .chassis-intro { width: min(530px, 70%); } }
+@media (max-width: 700px) {
+  .hangar-content { padding: 18px 20px 22px; }
+  .hangar-art img { object-position: 52% 20%; }
+  .hangar-shade { background: linear-gradient(90deg, rgba(7,15,16,.97), rgba(7,15,16,.62) 70%, rgba(7,15,16,.35)), linear-gradient(0deg, #081112 0%, rgba(8,17,18,.94) 25%, transparent 65%); }
+  .hangar-header-right, .hangar-index { display: none; }
+  .hangar-main { min-height: 390px; }
+  .chassis-intro { width: 100%; }
+  .chassis-intro h2 { font-size: 43px; }
+  .vehicle-list { display: flex; overflow-x: auto; padding-bottom: 5px; }
+  .vehicle-option { flex: 0 0 152px; }
+  .hangar-footer { align-items: stretch; flex-direction: column; }
+  .deploy-button { flex-basis: auto; width: 100%; margin-left: 0; }
+}
+
+canvas {
+  display: block;
+  outline: none;
+}
+
+.upgrade-screen {
+  background: radial-gradient(ellipse at 50% 0%, rgba(48, 77, 71, 0.38), transparent 58%), rgba(5, 11, 12, 0.95);
+  backdrop-filter: blur(12px);
+  animation: fade-in 280ms ease-out both;
+}
+
+.upgrade-inner {
+  animation: rise-in 420ms cubic-bezier(.2,.8,.2,1) both;
+}
+
+.upgrade-choice {
+  padding: 24px;
+  background: rgba(25, 38, 38, 0.68);
+  border: 1px solid rgba(168, 194, 180, 0.18);
+  cursor: pointer;
+  transition: transform 180ms ease, border-color 180ms ease, background 180ms ease;
+}
+
+.upgrade-choice:hover, .upgrade-choice:focus-visible {
+  transform: translateY(-5px);
+  border-color: #d9bf7d;
+  background: rgba(45, 63, 59, 0.9);
+  outline: none;
+}
+
+.upgrade-tag {
+  display: inline-block;
+  padding: 3px 8px;
+  font-size: 9px;
+  letter-spacing: .18em;
+  border: 1px solid currentColor;
+}
+.upgrade-hero {
+  background: linear-gradient(115deg, rgba(88, 72, 32, .32), rgba(28, 42, 40, .82) 55%);
+  border-color: rgba(255, 210, 74, .55);
+  box-shadow: 0 0 34px rgba(255, 210, 74, .12), inset 0 1px 0 rgba(255, 210, 74, .2);
+  animation: hero-glow 3.2s ease-in-out infinite;
+}
+.upgrade-hero:hover, .upgrade-hero:focus-visible {
+  border-color: #ffd24a;
+  background: linear-gradient(115deg, rgba(112, 90, 38, .42), rgba(38, 56, 52, .92) 55%);
+}
+.upgrade-hero-grid {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  gap: 26px;
+  align-items: center;
+}
+.upgrade-hero-top { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }
+.upgrade-hero-action { display: flex; flex-direction: column; gap: 8px; align-items: flex-end; font-size: 11px; letter-spacing: .22em; white-space: nowrap; }
+.upgrade-icon-lg {
+  width: 92px;
+  height: 92px;
+}
+.upgrade-choice { animation: rise-in 380ms ease both; }
+@keyframes hero-glow {
+  0%, 100% { box-shadow: 0 0 26px rgba(255, 210, 74, .1), inset 0 1px 0 rgba(255, 210, 74, .18); }
+  50% { box-shadow: 0 0 44px rgba(255, 210, 74, .22), inset 0 1px 0 rgba(255, 210, 74, .3); }
+}
+@media (max-width: 760px) {
+  .upgrade-hero-grid { grid-template-columns: auto 1fr; }
+  .upgrade-hero-action { grid-column: 1 / -1; flex-direction: row; justify-content: space-between; }
+  .upgrade-icon-lg { width: 64px; height: 64px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .upgrade-hero { animation: none; }
+  .upgrade-choice { animation: none; }
+}
+
+.upgrade-icon {
+  display: grid;
+  width: 52px;
+  height: 52px;
+  place-items: center;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+}
+
+@keyframes loading-slide { from { transform: translateX(-120%); } to { transform: translateX(320%); } }
+.loading-bar { animation: loading-slide 1.2s ease-in-out infinite; }
+@media (prefers-reduced-motion: reduce) { .loading-bar { animation: none; width: 100%; } }
+@keyframes fade-in { from { opacity: 0; } to { opacity: 1; } }
+@keyframes rise-in { from { opacity: 0; transform: translateY(16px); } to { opacity: 1; transform: translateY(0); } }
+
+@media (prefers-reduced-motion: reduce) {
+  .upgrade-screen, .upgrade-inner { animation: none; }
+  .upgrade-choice { transition: none; }
+}
+
+::selection {
+  background: rgba(243, 184, 63, 0.4);
+}
+
+@keyframes spin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+::-webkit-scrollbar {
+  width: 8px;
+}
+::-webkit-scrollbar-track {
+  background: #0a0b0e;
+}
+::-webkit-scrollbar-thumb {
+  background: #2c323a;
+  border-radius: 4px;
+}
+
+/* Each screen is a viewport composition; secondary lore is available by tab. */
+.app-viewport { height: 100dvh; overflow: hidden; }
+.hangar-content { height: 100%; min-height: 0; display: grid; grid-template-rows: auto minmax(0,1fr) auto auto; gap: clamp(10px,2vh,22px); padding-block: clamp(12px,2.5vh,25px); }
+.hangar-header { padding-bottom: 14px; }
+.hangar-header-right { margin-left: auto; }
+.hangar-main { min-height: 0; padding: 0; }
+.chassis-intro { width: min(575px,58%); }
+.chassis-role { margin-top: clamp(10px,2vh,24px); }
+.chassis-intro h2 { font-size: clamp(36px,6vw,78px); }
+.chassis-model { margin-top: 8px; font-size: 9px; }
+.chassis-stats { margin-top: clamp(10px,2vh,22px); padding-block: clamp(8px,1.3vh,14px); }
+.chassis-stats strong { font-size: 15px; }
+.hangar-tabs { display: flex; align-items: center; gap: 22px; margin-top: clamp(12px,2.2vh,22px); border-bottom: 1px solid #c6d7cb26; }
+.hangar-tabs button { padding: 0 0 8px; font-size: 10px; letter-spacing: .16em; color: #82998d; border-bottom: 2px solid transparent; cursor: pointer; }
+.hangar-tabs button[aria-selected=true] { color: var(--chassis-accent); border-color: var(--chassis-accent); }
+.hangar-tabs > span { margin-left: auto; color: #7d9488; font-size: 8px; letter-spacing: .1em; }
+.loadout-weapons-4 { margin-top: 14px; gap: 14px 20px; }
+.loadout-weapon { gap: 9px; }
+.loadout-key { flex-shrink: 0; min-width: 27px; }
+.loadout-weapon > svg { flex-shrink: 0; }
+.loadout-weapon strong { font-size: 10px; line-height: 1.3; }
+.loadout-weapon span { font-size: 10px; line-height: 1.3; }
+.legend-panel { margin-top: 14px; max-width: 540px; color: #b9c8be; font-family: sans-serif; font-size: 12px; line-height: 1.55; }
+.legend-panel .chassis-style { font-family: 'Share Tech Mono',monospace; font-size: 11px; }
+.field-note { font-size: 8px; letter-spacing: .08em; margin-top: 16px; }
+.vehicle-selection { padding-top: 0; }
+.vehicle-list-3 { display: grid; grid-template-columns: repeat(3,minmax(0,1fr)); overflow: visible; }
+.vehicle-option { height: clamp(64px,10.5vh,96px); flex: initial; }
+.vehicle-option-copy { bottom: 10px; gap: 4px; }
+.hangar-footer { padding-top: 0; flex-wrap: nowrap; gap: 16px; }
+.control-choice, .seed-choice { gap: 8px; }
+.control-choice > span, .seed-choice > span { font-size: 9px; }
+.control-choice p, .seed-choice p, .footer-help { display: none; }
+.deploy-button { margin-left: auto; min-height: 46px; flex-basis: 234px; gap: 12px; font-size: 11px; }
+.fullscreen-button { display: inline-flex; align-items: center; justify-content: center; gap: 8px; padding: 8px 10px; border: 1px solid #c6d7cb35; font: 9px 'Share Tech Mono',monospace; letter-spacing: .1em; color: #c3d3c8; cursor: pointer; flex-shrink: 0; }
+.fullscreen-button:hover, .fullscreen-button:focus-visible { border-color: #bce7d8; background: #bedad414; }
+.pause-panel { max-width: min(95vw,650px); }
+.pause-fullscreen { margin-top: 20px; }
+.victory-screen { display: flex; align-items: center; justify-content: center; padding: clamp(16px,3vw,46px); overflow: hidden; color: #e8e9e3; font-family: 'Share Tech Mono',monospace; }
+.victory-layout { width: 100%; max-width: 1160px; height: min(100%,700px); display: grid; grid-template-rows: auto auto minmax(0,1fr) auto; gap: clamp(14px,3.5vh,36px); }
+.victory-top { display: flex; justify-content: space-between; gap: 12px; font-size: 9px; letter-spacing: .2em; padding-bottom: 16px; border-bottom: 1px solid #c6d7cb29; color: #93aaa0; }
+.victory-top span:last-child { color: #a5cdbd; }
+.victory-heading { display: flex; align-items: flex-end; justify-content: space-between; gap: 24px; }
+.victory-eyebrow { color: #b4cbbe; font-size: 10px; letter-spacing: .26em; }
+.victory-heading h2 { margin-top: 10px; font: 700 clamp(24px,3.3vw,46px)/1.15 'Orbitron',sans-serif; letter-spacing: .04em; color: #f0f0e4; }
+.victory-heading h2 span { color: #e8c37c; }
+.victory-copy { margin-top: 12px; color: #93aaa0; font: 13px/1.4 sans-serif; }
+.victory-score { display: flex; flex-direction: column; align-items: flex-end; gap: 7px; flex-shrink: 0; }
+.victory-score > span { font-size: 9px; letter-spacing: .2em; color: #92a79b; }
+.victory-score strong { font: 500 28px 'Orbitron',sans-serif; }
+.victory-score small { font-size: 9px; color: #96ab9e; }
+.victory-choices { display: grid; grid-template-columns: repeat(3,minmax(0,1fr)); gap: 14px; min-height: 0; }
+.victory-choice { display: flex; flex-direction: column; text-align: left; padding: clamp(16px,2vw,26px); min-height: 0; border-color: #c0dbd024; color: var(--reward-color); }
+.victory-choice.is-evolution { background: linear-gradient(160deg,#6455323d,#192626); border-color: #e8c37c70; }
+.victory-choice:hover, .victory-choice:focus-visible { border-color: var(--reward-color); transform: translateY(-3px); }
+.reward-top { display: flex; align-items: center; justify-content: space-between; font-size: 10px; letter-spacing: .24em; }
+.reward-rarity { padding-bottom: 6px; border-bottom: 1px solid currentColor; }
+.reward-number { color: #6d847a; font-size: 12px; }
+.reward-art { position: relative; display: grid; place-items: center; width: 90px; height: 90px; margin-block: clamp(10px,2vh,22px); }
+.reward-orbit { position: absolute; inset: 0; border: 1px solid currentColor; opacity: .2; border-radius: 50%; }
+.reward-orbit:after { content: ''; position: absolute; inset: 8px; border: 1px dashed currentColor; border-radius: 50%; animation: spin 24s linear infinite; }
+.reward-category { font-size: 8px; letter-spacing: .2em; opacity: .85; }
+.victory-choice h3 { margin-top: 9px; font: 700 clamp(12px,1.2vw,16px)/1.4 'Orbitron',sans-serif; letter-spacing: .1em; color: #eaf0e9; }
+.reward-weapon { margin-top: 5px; font-size: 9px; letter-spacing: .1em; }
+.reward-description { margin-top: 12px; margin-bottom: 18px; color: #a2b8ab; font: 13px/1.6 sans-serif; }
+.reward-claim { margin-top: auto; padding-top: 15px; border-top: 1px solid #c0dbd021; display: flex; justify-content: space-between; align-items: center; font-size: 9px; letter-spacing: .14em; gap: 6px; }
+.victory-footer { display: flex; justify-content: space-between; gap: 16px; color: #859d8e; font-size: 9px; letter-spacing: .15em; }
+@media (max-height: 760px) {
+  .hangar-header { padding-bottom: 10px; }
+  .brand-lockup h1 { font-size: 21px; }
+  .chassis-intro h2 { font-size: clamp(34px,5vw,58px); }
+  .chassis-role { margin-top: 10px; }
+  .field-note { margin-top: 10px; }
+  .reward-art { height: 60px; width: 60px; }
+  .reward-art > svg { height: 32px; width: 32px; }
+  .reward-description { font-size: 12px; margin-block: 10px 14px; }
+}
+@media (max-width: 1000px) {
+  .hangar-header-right { display: none; }
+  .hangar-header .fullscreen-button { margin-left: auto; }
+  .chassis-intro { width: min(550px,74%); }
+  .control-choice > span, .seed-choice > span { display: none; }
+  .victory-score { display: none; }
+}
+@media (max-width: 700px) and (orientation: portrait) {
+  .hangar-content { padding: 14px 18px; gap: 12px; }
+  .brand-lockup { gap: 10px; }
+  .brand-lockup h1 { font-size: 18px; }
+  .brand-lockup p { font-size: 7px; letter-spacing: .1em; }
+  .brand-mark { width: 26px; gap: 3px; }
+  .brand-mark span { width: 5px; }
+  .fullscreen-button > span { display: none; }
+  .hangar-main { min-height: 0; }
+  .chassis-intro { width: 100%; }
+  .chassis-intro h2 { font-size: clamp(34px,10vw,49px); }
+  .chassis-model { font-size: 8px; }
+  .chassis-role { font-size: 8px; }
+  .chassis-stats { margin-top: 14px; padding-block: 11px; }
+  .hangar-tabs { gap: 16px; margin-top: 16px; }
+  .hangar-tabs > span { font-size: 7px; }
+  .loadout-weapons-4 { gap: 13px 10px; margin-top: 14px; }
+  .loadout-weapon { gap: 6px; }
+  .loadout-weapon > svg { display: none; }
+  .loadout-weapon strong { font-size: 9px; letter-spacing: 0; }
+  .loadout-weapon span { font-size: 10px; }
+  .loadout-key { font-size: 10px; width: 24px; min-width: 24px; }
+  .field-note { font-size: 7px; margin-top: 12px; }
+  .vehicle-option { height: 74px; }
+  .vehicle-option-copy { left: 9px; bottom: 10px; gap: 4px; }
+  .vehicle-option-copy strong { font-size: 9px; }
+  .vehicle-option-copy span { font-size: 6px; }
+  .vehicle-option-copy em { display: none; }
+  .selection-heading span { font-size: 8px; }
+  .selection-heading span:last-child { font-size: 7px; }
+  .hangar-footer { flex-direction: row; display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  .deploy-button { grid-column: 1/-1; width: 100%; min-height: 42px; }
+  .control-choice button { min-width: 42px; padding: 8px 9px; }
+  .seed-choice { justify-content: flex-end; }
+  .seed-choice input { width: 90px; padding-inline: 7px; font-size: 10px; }
+  .seed-choice button { padding-inline: 8px; font-size: 8px; }
+  .legend-panel { font-size: 12px; }
+  .victory-screen { padding: 16px; }
+  .victory-layout { height: 100%; gap: 13px; }
+  .victory-top { font-size: 7px; padding-bottom: 9px; letter-spacing: .1em; }
+  .victory-heading h2 { font-size: 25px; }
+  .victory-copy { font-size: 12px; margin-top: 8px; }
+  .victory-choices { grid-template-columns: 1fr; grid-template-rows: repeat(3,minmax(0,1fr)); gap: 9px; }
+  .victory-choice { padding: 12px 14px; display: grid; grid-template-columns: 48px minmax(0,1fr); column-gap: 13px; align-content: center; }
+  .reward-art { grid-column: 1; grid-row: 1/6; width: 44px; height: 44px; margin: 0; align-self: center; }
+  .reward-art > svg { width: 25px; height: 25px; }
+  .reward-top, .reward-category, .victory-choice h3, .reward-description, .reward-weapon { grid-column: 2; }
+  .reward-top { font-size: 8px; }
+  .reward-rarity { border: 0; padding: 0; }
+  .reward-category { display: none; }
+  .victory-choice h3 { font-size: 11px; margin-top: 5px; }
+  .reward-description { margin: 6px 0 0; font-size: 11px; line-height: 1.4; }
+  .reward-claim { display: none; }
+  .reward-weapon { font-size: 8px; margin-top: 3px; }
+  .victory-footer { font-size: 8px; }
+  .victory-footer span:last-child { display: none; }
+}
+@media (max-height: 580px) and (min-width: 701px), (max-height: 500px) and (orientation: landscape) {
+  .hangar-content { padding: 10px 24px; gap: 8px; }
+  .hangar-header { padding-bottom: 8px; }
+  .brand-lockup h1 { font-size: 18px; }
+  .brand-mark { height: 26px; transform: scale(.8) skew(-15deg); }
+  .hangar-header-right { font-size: 8px; }
+  .brand-lockup p { font-size: 7px; }
+  .chassis-intro { width: 100%; display: grid; grid-template-columns: .8fr 1.2fr; column-gap: 28px; align-content: center; }
+  .chassis-intro > .eyebrow, .chassis-intro > .chassis-model, .chassis-intro > .field-note { display: none; }
+  .chassis-role { grid-column: 1; font-size: 8px; margin: 0 0 8px; }
+  .chassis-intro h2 { grid-column: 1; font-size: 34px; }
+  .chassis-stats { grid-column: 1; margin-top: 14px; padding-block: 8px; }
+  .chassis-stats strong { font-size: 12px; }
+  .chassis-stats .style-word { font-size: 10px !important; }
+  .chassis-stats div { padding-left: 8px; }
+  .hangar-details { grid-column: 2; grid-row: 1/5; }
+  .hangar-tabs { margin-top: 0; }
+  .hangar-tabs > span { display: none; }
+  .hangar-tabs button { padding-bottom: 5px; font-size: 9px; }
+  .loadout-weapons-4 { margin-top: 10px; gap: 9px 12px; }
+  .loadout-weapon strong { font-size: 8px; }
+  .loadout-weapon > svg { width: 15px; }
+  .loadout-weapon span { font-size: 8px; }
+  .loadout-key { width: 24px; min-width: 24px; height: 22px; font-size: 9px; }
+  .legend-panel { margin-top: 8px; font-size: 10px; line-height: 1.45; }
+  .legend-panel .chassis-style { font-size: 9px; margin-top: 7px; }
+  .hangar-index { display: none; }
+  .vehicle-option { height: 55px; }
+  .selection-heading { font-size: 8px; margin-bottom: 6px; }
+  .vehicle-option-copy { bottom: 9px; gap: 3px; }
+  .vehicle-option-copy strong { font-size: 10px; }
+  .vehicle-option-copy em { display: none; }
+  .vehicle-option-copy span { font-size: 7px; }
+  .hangar-footer { flex-direction: row; align-items: center; }
+  .deploy-button { width: auto; min-height: 36px; flex-basis: 210px; font-size: 10px; }
+  .seed-choice input, .seed-choice button, .control-choice button { padding-block: 6px; }
+  .victory-screen { padding: 12px 26px; }
+  .victory-layout { gap: 12px; height: 100%; }
+  .victory-top { padding-bottom: 8px; font-size: 8px; }
+  .victory-heading h2 { margin-top: 5px; font-size: 24px; }
+  .victory-copy { display: none; }
+  .victory-choice { padding: 12px 16px; }
+  .reward-art { height: 36px; width: 36px; margin-block: 7px; }
+  .reward-art > svg { width: 25px; height: 25px; }
+  .reward-orbit { display: none; }
+  .reward-description { font-size: 11px; line-height: 1.4; margin-top: 6px; margin-bottom: 10px; }
+  .victory-choice h3 { margin-top: 5px; font-size: 11px; }
+  .reward-claim { padding-top: 8px; font-size: 8px; }
+  .reward-top, .reward-number { font-size: 8px; }
+  .reward-category { font-size: 7px; }
+  .victory-footer { font-size: 8px; }
+  .pause-panel { padding: 14px 24px; }
+  .pause-panel .mt-5 { margin-top: 10px; }
+}
+@media (max-width: 700px) and (max-height: 700px) and (orientation: portrait) {
+  .hangar-content { gap: 8px; padding-block: 10px; }
+  .hangar-tabs { margin-top: 10px; }
+  .loadout-weapons-4 { gap: 9px; margin-top: 10px; }
+  .loadout-weapon span:not(.slot-tag) { font-size: 9px; }
+  .field-note, .chassis-model { display: none; }
+  .vehicle-option { height: 56px; }
+  .chassis-stats { margin-top: 10px; padding-block: 8px; }
+  .brand-lockup p { display: none; }
+  .hangar-header { padding-bottom: 8px; }
+  .chassis-intro h2 { font-size: 33px; }
+  .chassis-role { font-size: 8px; }
+  .legend-panel { font-size: 10px; line-height: 1.4; }
+  .legend-panel .chassis-style { font-size: 10px; margin-top: 8px; }
+  .reward-art { display: none; }
+  .victory-choice { display: flex; padding: 10px 14px; }
+}
+@media (prefers-reduced-motion: reduce) { .reward-orbit:after { animation: none; } }
+
+.gameover-content { max-height: 100%; }
+.gameover-perks { max-height: 70px; overflow: hidden; mask-image: linear-gradient(black 65%, transparent); }
+.gameover-screen h2 { font-size: clamp(20px,4vw,34px); white-space: normal; }
+@media (max-height: 650px) {
+  .gameover-content { padding: 22px 28px; }
+  .gameover-content > .mt-8 { margin-top: 18px; }
+  .gameover-content > .mt-6 { margin-top: 12px; }
+  .gameover-perks { display: none; }
+}
+@media (max-height: 460px) {
+  .gameover-screen { padding: 12px; }
+  .gameover-content { padding: 12px 24px; }
+  .gameover-content > .text-5xl { font-size: 32px; margin-top: 6px; }
+  .gameover-content > .mt-6 { margin-top: 8px; }
+  .gameover-content > .mt-8 { margin-top: 12px; }
+  .gameover-content .grid > div { padding-block: 6px; }
+  .gameover-content h2 { font-size: 24px; margin-top: 6px; }
+}
