@@ -36,6 +36,10 @@ export default function GameView({ vehicle, controls, seed, audio, settings, onS
   const [loading, setLoading] = useState(true);
   const [everLocked, setEverLocked] = useState(false);
   const [pauseTab, setPauseTab] = useState<'controls' | 'settings'>('controls');
+  // A failure while building the simulation (no WebGL, corrupt sector, ...)
+  // happens inside a timer callback, so it never reaches the error boundary on
+  // its own. It is captured here and re-thrown during render instead.
+  const [bootError, setBootError] = useState<Error | null>(null);
   const onGameOverRef = useRef(onGameOver);
   const settingsRef = useRef(settings);
   useEffect(() => {
@@ -53,27 +57,31 @@ export default function GameView({ vehicle, controls, seed, audio, settings, onS
     let lockTimer = 0;
     // let the loading screen paint before the (synchronous) map generation starts
     const boot = window.setTimeout(() => {
-      g = new Game({
-        canvas,
-        vehicle,
-        controls,
-        seed,
-        audio,
-        settings: settingsRef.current,
-        onHud: setHud,
-        onGameOver: (st) => onGameOverRef.current(st),
-        onPause: (p) => {
-          setPaused(p);
-          if (!p) setEverLocked(true);
-        },
-      });
-      gameRef.current = g;
-      setGame(g);
-      (window as unknown as { __steelGame?: Game }).__steelGame = g;
-      g.start();
-      setLoading(false);
-      // TouchControls un-pauses touch games on mount; mouse games grab the pointer now
-      if (!touch) lockTimer = window.setTimeout(() => g?.requestPointerLock(), 50);
+      try {
+        g = new Game({
+          canvas,
+          vehicle,
+          controls,
+          seed,
+          audio,
+          settings: settingsRef.current,
+          onHud: setHud,
+          onGameOver: (st) => onGameOverRef.current(st),
+          onPause: (p) => {
+            setPaused(p);
+            if (!p) setEverLocked(true);
+          },
+        });
+        gameRef.current = g;
+        setGame(g);
+        (window as unknown as { __steelGame?: Game }).__steelGame = g;
+        g.start();
+        setLoading(false);
+        // TouchControls un-pauses touch games on mount; mouse games grab the pointer now
+        if (!touch) lockTimer = window.setTimeout(() => g?.requestPointerLock(), 50);
+      } catch (err) {
+        setBootError(err instanceof Error ? err : new Error(String(err)));
+      }
     }, 80);
     return () => {
       window.clearTimeout(boot);
@@ -98,6 +106,9 @@ export default function GameView({ vehicle, controls, seed, audio, settings, onS
   );
 
   const accent = VEHICLES[vehicle].accent;
+
+  // Hand a boot failure to the error boundary by throwing during render.
+  if (bootError) throw bootError;
 
   return (
     <div className="app-viewport relative w-full bg-black overflow-hidden" style={{ touchAction: 'none' }}>

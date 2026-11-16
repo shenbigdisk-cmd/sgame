@@ -703,3 +703,59 @@ canvas {
   text-shadow: 0 1px 3px #000;
   opacity: .75;
 }
+
+/* Crash screen ----------------------------------------------------------- */
+.crash-screen {
+  position: fixed;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: radial-gradient(circle at 50% 30%, #16211d 0%, #080b0a 70%);
+  color: #dbe5d9;
+  font-family: 'Share Tech Mono', monospace;
+  overflow: auto;
+}
+.crash-panel {
+  width: min(620px, 100%);
+  padding: clamp(22px, 4vw, 40px);
+  border: 1px solid rgba(220, 235, 221, .18);
+  background: rgba(10, 14, 13, .82);
+}
+.crash-title {
+  margin: 0 0 14px;
+  font-family: 'Orbitron', sans-serif;
+  font-weight: 900;
+  font-size: clamp(20px, 3.4vw, 30px);
+  letter-spacing: .14em;
+  color: #ff8f7a;
+}
+.crash-lead { margin: 0 0 14px; font-size: 12px; line-height: 1.7; color: #b8c6bd; }
+.crash-detail {
+  margin: 0 0 14px;
+  padding: 12px;
+  max-height: 160px;
+  overflow: auto;
+  font-size: 11px;
+  line-height: 1.6;
+  color: #9de9ff;
+  background: rgba(157, 233, 255, .06);
+  border-left: 2px solid rgba(157, 233, 255, .45);
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+.crash-hint { margin: 0 0 18px; font-size: 11px; line-height: 1.7; color: #93a89d; }
+.crash-actions { display: flex; flex-wrap: wrap; gap: 12px; }
+.crash-button {
+  padding: 12px 22px;
+  font-family: 'Orbitron', sans-serif;
+  font-weight: 900;
+  font-size: 11px;
+  letter-spacing: .14em;
+  color: #142019;
+  background: var(--chassis-accent, #8ef0d0);
+  cursor: pointer;
+}
+.crash-button:hover, .crash-button:focus-visible { filter: brightness(1.15); outline: 1px solid white; outline-offset: 3px; }
+.crash-button-ghost { color: #c3d3c8; background: transparent; border: 1px solid rgba(220, 235, 221, .28); }
+.crash-button-ghost:hover, .crash-button-ghost:focus-visible { border-color: #bce7d8; background: rgba(190, 218, 212, .08); }

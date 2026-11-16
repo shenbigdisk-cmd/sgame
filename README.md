@@ -9,6 +9,8 @@ Built with **React 19 + TypeScript + Vite + three.js**. Everything you see is
 generated at runtime: the terrain, the districts, the roads, the sky, the
 mechanics, and every single sound.
 
+![The hangar: pick your gladiator](docs/screenshot-menu.png)
+
 ---
 
 ## Quick start
@@ -70,6 +72,8 @@ https://raw.githubusercontent.com/shenbigdisk-cmd/sgame/arena/e2b67aef-sgame/pre
 | `Esc` | Release the mouse (pause menu) |
 | `1` `2` `3` | Pick an upgrade after a wave |
 | `Enter` / `N` | Call the next wave early |
+
+![In the arena](docs/screenshot-gameplay.png)
 
 On touch devices an on-screen stick, fire buttons and module buttons appear
 automatically.
