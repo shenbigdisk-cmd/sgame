@@ -160,9 +160,9 @@ export default function Menu({ onStart, settings, onSettings, records, garage, o
         <section className="vehicle-selection" aria-label="Available Mechs">
           <div className="selection-heading">
             <span>MECH HANGAR</span>
-            <span>{allMechs.length} UNITS · CUSTOM BUILDS FIRST, THEN 3 FIXED FACTORY SPECS</span>
+            <span>SELECT CHASSIS</span>
           </div>
-          <div className="vehicle-list overflow-x-auto pb-2 flex gap-3">
+          <div className="vehicle-list">
             {allMechs.map((mech, index) => {
               const item = VEHICLES[mech.frame];
               const isSelected = garage.activeMechId === mech.id || (!garage.activeMechId && index === 0);
@@ -170,43 +170,47 @@ export default function Menu({ onStart, settings, onSettings, records, garage, o
               return (
                 <div
                   key={mech.id}
-                  className={`vehicle-option relative flex-shrink-0 cursor-pointer ${isSelected ? 'is-selected' : ''}`}
+                  className={`vehicle-option ${isSelected ? 'is-selected' : ''}`}
                   onClick={() => onGarage(selectMech(garage, mech.id))}
                   role="button"
                   tabIndex={0}
                   aria-pressed={isSelected}
-                  style={{ minWidth: 210 }}
                 >
-                  <div className="vehicle-thumbnail">
+                  <div className="vehicle-thumbnail" aria-hidden="true">
                     <img src={IMAGES[mech.frame]} alt="" loading="eager" />
                   </div>
-                  <div className="vehicle-option-copy">
-                    <div className="flex items-center justify-between text-[9px]">
-                      <span>0{index + 1} / {item.shortName}</span>
-                      <strong className={`px-1.5 py-0.5 rounded ${isCustom ? 'bg-amber-400/20 text-amber-300' : 'bg-white/10 text-zinc-400'}`}>
-                        {isCustom ? 'CUSTOM' : 'PREBUILT'}
-                      </strong>
+                  <div className="vehicle-card-content">
+                    <div className="vehicle-card-top">
+                      <span className="vehicle-card-tag">0{index + 1} / {item.shortName}</span>
+                      <span className={`vehicle-card-badge ${isCustom ? 'is-custom' : 'is-factory'}`}>
+                        {isCustom ? 'CUSTOM' : 'FACTORY'}
+                      </span>
                     </div>
-                    <strong className="text-sm mt-0.5">{mech.name}</strong>
-                    <em>{isCustom ? `VALUE: ${credits(mech.cost)} CR` : `“${item.epithet}”`}</em>
-                  </div>
 
-                  {isCustom && (
-                    <div className="mt-2 pt-1 border-t border-white/10 flex justify-end">
-                      <button
-                        type="button"
-                        className="px-2 py-1 text-[9px] font-bold rounded bg-red-500/20 hover:bg-red-500/40 text-red-300 border border-red-500/40 cursor-pointer whitespace-nowrap"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          const res = sellCustomMech(garage, mech.id);
-                          if (res.ok) onGarage(res.state);
-                        }}
-                        title={`Sell ${mech.name} for half price (+${credits(Math.floor(mech.cost / 2))} CR)`}
-                      >
-                        SELL (+{credits(Math.floor(mech.cost / 2))} CR)
-                      </button>
+                    <div className="vehicle-card-name" title={mech.name}>
+                      {mech.name}
                     </div>
-                  )}
+
+                    <div className="vehicle-card-bottom">
+                      <span className="vehicle-card-sub" title={isCustom ? `VALUE: ${credits(mech.cost)} CR` : `“${item.epithet}”`}>
+                        {isCustom ? `${credits(mech.cost)} CR` : `“${item.epithet}”`}
+                      </span>
+                      {isCustom && (
+                        <button
+                          type="button"
+                          className="vehicle-card-sell"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            const res = sellCustomMech(garage, mech.id);
+                            if (res.ok) onGarage(res.state);
+                          }}
+                          title={`Sell ${mech.name} for half price (+${credits(Math.floor(mech.cost / 2))} CR)`}
+                        >
+                          SELL (+{credits(Math.floor(mech.cost / 2))})
+                        </button>
+                      )}
+                    </div>
+                  </div>
 
                   {isSelected && <div className="selected-indicator" />}
                 </div>
