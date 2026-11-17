@@ -62,6 +62,8 @@ const ENEMIES: Record<EnemyKind, EnemyConfig> = {
   sniper: { name: 'Longbow', hp: 55, speed: 7.5, turnRate: 1.1, aimRate: 1.4, radius: 3.2, height: 3.0, preferredRange: 150, fireRange: 240, cooldown: 5.5, burstCount: 1, burstInterval: 0, score: 250 },
 };
 const BOSS_NAME = 'WARLORD';
+/** Seconds of celebration between clearing a stage and the reward draft. */
+const STAGE_CLEAR_DELAY = 2.8;
 const DROP_LABEL: Record<DropKind, string> = {
   repair: 'REPAIR KIT', shield: 'SHIELD BATTERY', overcharge: 'OVERCHARGE ROUNDS',
   rapid: 'RAPID RELOAD', emp: 'EMP CHARGE', score: 'SALVAGE CACHE',
@@ -418,6 +420,9 @@ export class Game {
   private wave = 0;
   private waveActive = false;
   private waveTimer = 4;
+  /** a stage was cleared: the reward draft waits out the celebration first */
+  private victoryPending = false;
+  private victoryTimer = 0;
   private lowHpAlarm = 0;
 
   // world
@@ -849,7 +854,7 @@ export class Game {
     if (e.code === 'Digit1' || e.code === 'Numpad1') this.pickUpgrade(0);
     if (e.code === 'Digit2' || e.code === 'Numpad2') this.pickUpgrade(1);
     if (e.code === 'Digit3' || e.code === 'Numpad3') this.pickUpgrade(2);
-    if ((e.code === 'Enter' || e.code === 'KeyN') && !this.waveActive && this.waveTimer > 1.5) {
+    if ((e.code === 'Enter' || e.code === 'KeyN') && !this.waveActive && !this.victoryPending && this.waveTimer > 1.5) {
       this.waveTimer = 1.5;
       this.setMessage('CALLING IN THE NEXT WAVE');
     }
@@ -3688,9 +3693,21 @@ export class Game {
   // -------------------------------------------------------------------------
   private updateWaves(dt: number) {
     if (!this.alive) return;
+    // The reward draft waits for the celebration to land: the arena stays
+    // live for a beat so the clear, the cheer and the wreck can breathe.
+    if (this.victoryPending) {
+      this.victoryTimer -= dt;
+      if (this.victoryTimer <= 0) {
+        this.victoryPending = false;
+        this.victoryTimer = 0;
+        // One paused upgrade pick per wave, or two after a boss.
+        this.grantOffer();
+        if (this.wave % 5 === 0) this.grantOffer();
+      }
+    }
     if (!this.waveActive) {
       this.waveTimer -= dt;
-      if (this.waveTimer <= 0) this.startWave();
+      if (this.waveTimer <= 0 && !this.victoryPending) this.startWave();
     } else if (this.enemies.length === 0) {
       this.waveActive = false;
       this.waveTimer = 6;
@@ -3700,9 +3717,8 @@ export class Game {
       this.audio.playWaveClear();
       this.audio.playCheer();
       this.addFeed('THE CROWD ROARS YOUR NAME');
-      // One paused upgrade pick per wave, or two after a boss.
-      this.grantOffer();
-      if (this.wave % 5 === 0) this.grantOffer();
+      this.victoryPending = true;
+      this.victoryTimer = STAGE_CLEAR_DELAY;
       this.dropTimer = Math.min(this.dropTimer, 10);
       // field repairs between waves
       this.hp = Math.min(this.maxHp, this.hp + this.maxHp * 0.2);
@@ -4233,6 +4249,7 @@ export class Game {
       damageFlash: this.damageFlash,
       damageDirs: this.damageDirs.filter((d) => this.time - d.time < 1.3).map((d) => ({ angle: d.angle, age: this.time - d.time })),
       waveCountdown: this.waveActive ? 0 : this.waveTimer,
+      victoryCountdown: this.victoryPending ? Math.max(0, this.victoryTimer) : 0,
       alive: this.alive,
       time: this.time,
       zoom: this.zoom,

@@ -369,7 +369,15 @@ export default function HUD({ hud, vehicle, onWeapon, settings }: Props) {
           {hud.message}
         </div>
       </div>
-      {hud.waveCountdown > 0 && hud.alive && (
+      {hud.victoryCountdown > 0 && hud.alive && (
+        <div
+          className="absolute left-1/2 top-[27%] -translate-x-1/2 text-center text-xs md:text-sm tracking-[0.35em]"
+          style={{ color: '#ffd24a', textShadow: '0 0 14px rgba(255,210,74,0.45)' }}
+        >
+          REWARD DRAFT IN {Math.ceil(hud.victoryCountdown)}
+        </div>
+      )}
+      {hud.waveCountdown > 0 && hud.alive && hud.victoryCountdown <= 0 && (
         <div className="absolute left-1/2 top-[27%] -translate-x-1/2 text-center text-xs md:text-sm tracking-[0.35em] opacity-80">
           NEXT WAVE IN {Math.ceil(hud.waveCountdown)} · ENTER TO SKIP
         </div>

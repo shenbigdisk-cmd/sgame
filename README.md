@@ -105,6 +105,11 @@ goliath heavy, longbow sniper) plus an elite champion. Every fifth wave a
 **WARLORD** boss enters the arena. Between waves the arena is repaired, the
 shield is refilled and you choose one of three rewards.
 
+Clearing a stage earns a beat of celebration before the reward draft appears:
+the arena stays live for a couple of seconds so the clear, the crowd and the
+wreck can land, and a `REWARD DRAFT IN N` countdown tells you the draft is on
+its way.
+
 ### Rewards
 Upgrades roll as **STANDARD / RARE / UNIQ** and cover hull, weapon, system and
 signature categories. Weapons can be **evolved** into stronger forms

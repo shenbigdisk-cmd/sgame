@@ -138,6 +138,8 @@ export interface HudState {
   damageFlash: number;
   damageDirs: DamageDir[];
   waveCountdown: number;
+  /** seconds until the reward draft appears after a stage is cleared (0 = none) */
+  victoryCountdown: number;
   alive: boolean;
   time: number;
   zoom: boolean;
