@@ -96,7 +96,7 @@ export default function GameOver({ stats, records = [], onRetry, onMenu }: Props
               </span>
               <strong style={{ fontFamily: DISPLAY, color: '#ffd24a' }}>+{stats.credits.toLocaleString('en-US')} CR</strong>
               <span className="text-[10px] tracking-[0.2em] text-zinc-500" style={{ fontFamily: MONO }}>
-                SPEND THEM IN THE FORGE
+                BUILD NEW MECHS WITH YOUR WINNINGS
               </span>
             </div>
           )}

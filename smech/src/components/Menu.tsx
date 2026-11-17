@@ -16,7 +16,7 @@ import pyreImage from '../assets/cinder.jpg';
 import glacierImage from '../assets/phantom.jpg';
 import { Icon } from './Icons';
 import SettingsPanel from './SettingsPanel';
-import Forge from './Forge';
+import MechBuilder from './MechBuilder';
 import FullscreenButton from './FullscreenButton';
 
 interface Props {
@@ -37,7 +37,7 @@ const IMAGES: Record<VehicleType, string> = {
 const SLOT_KEYS: Record<string, string> = { primary: 'LMB', secondary: 'RMB', abilityQ: 'Q', abilityE: 'E' };
 const SLOT_LABELS: Record<string, string> = { primary: 'PRIMARY', secondary: 'SECONDARY', abilityQ: 'SPECIAL · Q', abilityE: 'SPECIAL · E' };
 
-type Tab = 'arsenal' | 'forge' | 'legend' | 'config' | 'records';
+type Tab = 'arsenal' | 'legend' | 'config' | 'records';
 
 const pad = (n: number, w = 2) => String(Math.max(0, Math.floor(n))).padStart(w, '0');
 const credits = (n: number) => n.toLocaleString('en-US');
@@ -46,8 +46,9 @@ export default function Menu({ onStart, settings, onSettings, records, garage, o
   const [controls, setControls] = useState<ControlMode>('arcade');
   const [seed, setSeed] = useState(() => randomSeedCode());
   const [tab, setTab] = useState<Tab>('arsenal');
+  const [isBuilding, setIsBuilding] = useState(false);
 
-  // All mechs: custom mechs at the start, followed by always the 3 prebuilt mechs
+  // All mechs: custom mechs at the start, followed by the factory mechs
   const allMechs = getAllMechs(garage);
   const frame = frameOf(garage.equipped);
   const vehicle = VEHICLES[frame];
@@ -56,6 +57,20 @@ export default function Menu({ onStart, settings, onSettings, records, garage, o
     slot,
     id: build.loadout[slot] as WeaponId | null,
   }));
+
+  if (isBuilding) {
+    return (
+      <MechBuilder
+        garage={garage}
+        onBuild={(newGarage) => {
+          onGarage(newGarage);
+          setIsBuilding(false);
+        }}
+        onCancel={() => setIsBuilding(false)}
+        accent={vehicle.accent}
+      />
+    );
+  }
 
   return (
     <div className="hangar" style={{ '--chassis-accent': vehicle.accent } as React.CSSProperties}>
@@ -74,19 +89,19 @@ export default function Menu({ onStart, settings, onSettings, records, garage, o
           </div>
           <div className="hangar-header-right">
             <span className="status-dot" /> THE PITS ARE OPEN <span className="header-divider" /> SECTOR {seed}
-            <span className="header-credits" title="Credits earned in the pits, spent in the forge">
+            <span className="header-credits" title="Credits earned in the pits to build new mechs">
               {credits(garage.credits)} CR
             </span>
           </div>
           <FullscreenButton />
         </header>
 
-        <main className={`hangar-main${tab === 'forge' ? ' is-forge' : ''}`}>
+        <main className="hangar-main">
           <div className="chassis-intro" key={frame}>
             <div className="eyebrow"><span className="eyebrow-line" /> GLADIATOR <span className="eyebrow-number">/ 0{VEHICLE_ORDER.indexOf(frame) + 1}</span></div>
             <p className="chassis-role">{vehicle.role} / {vehicle.epithet}</p>
             <h2>{garage.mechName}</h2>
-            <div className="chassis-model">{vehicle.name} <span>/</span> BUILT IN THE FORGE</div>
+            <div className="chassis-model">{vehicle.name} <span>/</span> READY FOR BATTLE</div>
 
             <div className="chassis-stats" aria-label="Mech specifications">
               <div><span>HULL</span><strong>{build.maxHp}</strong></div>
@@ -98,7 +113,6 @@ export default function Menu({ onStart, settings, onSettings, records, garage, o
             <div className="hangar-details">
             <div className="hangar-tabs" role="tablist" aria-label="Gladiator details">
               <button role="tab" aria-selected={tab === 'arsenal'} onClick={() => setTab('arsenal')}>ARSENAL</button>
-              <button role="tab" aria-selected={tab === 'forge'} onClick={() => setTab('forge')}>THE FORGE</button>
               <button role="tab" aria-selected={tab === 'legend'} onClick={() => setTab('legend')}>THE LEGEND</button>
               <button role="tab" aria-selected={tab === 'config'} onClick={() => setTab('config')}>CONFIG</button>
               <button role="tab" aria-selected={tab === 'records'} onClick={() => setTab('records')}>HALL OF FAME</button>
@@ -119,13 +133,11 @@ export default function Menu({ onStart, settings, onSettings, records, garage, o
               <div className="loadout-weapon loadout-note" style={{ gridColumn: '1 / -1' }}>
                 <div className="loadout-key" style={{ opacity: 0.4 }}>+</div>
                 <div>
-                  <strong>THE FORGE</strong>
-                  <span className="slot-tag">CUSTOM BUILD</span>
-                  <span>Spend the credits you earn in the sand on new frames, weapons, armour, reactors and drives. Everything you mount is yours to keep.</span>
+                  <strong>BUILD NEW MECH</strong>
+                  <span className="slot-tag">CUSTOM DESIGN</span>
+                  <span>Assemble custom combat frames with weapons, reactors, and thrusters using the BUILD NEW MECH button below.</span>
                 </div>
               </div>
-            </div> : tab === 'forge' ? <div className="hangar-panel" role="tabpanel" aria-label="The forge">
-              <Forge garage={garage} onChange={onGarage} accent={vehicle.accent} />
             </div> : tab === 'legend' ? <div className="hangar-panel legend-panel" role="tabpanel" aria-label="The legend">
               <p>{vehicle.backstory}</p>
               <p className="chassis-style"><span>HOW TO FIGHT:</span> {vehicle.style}</p>
@@ -163,6 +175,21 @@ export default function Menu({ onStart, settings, onSettings, records, garage, o
             <span>SELECT CHASSIS</span>
           </div>
           <div className="vehicle-list">
+            {/* BIG "BUILD NEW MECH" BUTTON NEXT TO MECH CARDS */}
+            <button
+              type="button"
+              className="build-mech-card cursor-pointer"
+              onClick={() => setIsBuilding(true)}
+              aria-label="Build new mech"
+            >
+              <div className="build-mech-card-content">
+                <span className="build-mech-icon">+</span>
+                <strong className="build-mech-title">BUILD NEW MECH</strong>
+                <span className="build-mech-sub">CUSTOM LOADOUT</span>
+              </div>
+            </button>
+
+            {/* Mech selection cards */}
             {allMechs.map((mech, index) => {
               const item = VEHICLES[mech.frame];
               const isSelected = garage.activeMechId === mech.id || (!garage.activeMechId && index === 0);
@@ -182,9 +209,11 @@ export default function Menu({ onStart, settings, onSettings, records, garage, o
                   <div className="vehicle-card-content">
                     <div className="vehicle-card-top">
                       <span className="vehicle-card-tag">0{index + 1} / {item.shortName}</span>
-                      <span className={`vehicle-card-badge ${isCustom ? 'is-custom' : 'is-factory'}`}>
-                        {isCustom ? 'CUSTOM' : 'FACTORY'}
-                      </span>
+                      {isCustom && (
+                        <span className="vehicle-card-badge is-custom">
+                          CUSTOM
+                        </span>
+                      )}
                     </div>
 
                     <div className="vehicle-card-name" title={mech.name}>

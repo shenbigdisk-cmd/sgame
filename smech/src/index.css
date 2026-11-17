@@ -107,6 +107,60 @@ body {
 }
 .vehicle-option:hover, .vehicle-option:focus-visible { border-color: rgba(233, 236, 218, .8); transform: translateY(-2px); outline: none; }
 .vehicle-option.is-selected { border-color: var(--chassis-accent); background: rgba(47, 61, 55, .95); }
+
+/* Big "BUILD NEW MECH" Card next to mechs in hangar */
+.build-mech-card {
+  position: relative;
+  min-width: 210px;
+  width: 220px;
+  min-height: 96px;
+  height: 96px;
+  flex-shrink: 0;
+  overflow: hidden;
+  text-align: left;
+  border: 1px dashed rgba(255, 210, 74, .5);
+  background: rgba(26, 32, 23, .88);
+  cursor: pointer;
+  transition: border-color 180ms ease, transform 180ms ease, background 180ms ease, box-shadow 180ms ease;
+  display: flex;
+  flex-direction: column;
+  padding: 10px 14px;
+  justify-content: center;
+}
+.build-mech-card:hover, .build-mech-card:focus-visible {
+  border-color: #ffd24a;
+  border-style: solid;
+  background: rgba(45, 52, 32, .95);
+  transform: translateY(-2px);
+  box-shadow: 0 0 16px rgba(255, 210, 74, .25);
+  outline: none;
+}
+.build-mech-card-content {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+.build-mech-icon {
+  font-family: 'Orbitron', sans-serif;
+  font-size: 20px;
+  font-weight: 900;
+  color: #ffd24a;
+  line-height: 1;
+}
+.build-mech-title {
+  font-family: 'Orbitron', sans-serif;
+  font-size: 11px;
+  font-weight: 900;
+  letter-spacing: .08em;
+  color: #ffffff;
+  margin-top: 2px;
+}
+.build-mech-sub {
+  font-family: 'Share Tech Mono', monospace;
+  font-size: 8px;
+  letter-spacing: .14em;
+  color: #ffd24a;
+}
 .vehicle-thumbnail { position: absolute; inset: 0; opacity: .45; pointer-events: none; z-index: 0; }
 .vehicle-thumbnail::after { content: ''; position: absolute; inset: 0; background: linear-gradient(90deg, rgba(6, 14, 15, .92) 0%, rgba(6, 14, 15, .55) 100%); }
 .vehicle-thumbnail img { width: 100%; height: 100%; object-fit: cover; object-position: center 32%; }
@@ -230,7 +284,7 @@ body {
   .chassis-intro { width: 100%; }
   .chassis-intro h2 { font-size: clamp(24px, 6vw, 36px); }
   .vehicle-list { display: flex; overflow-x: auto; padding-bottom: 5px; }
-  .vehicle-option { flex: 0 0 200px; width: 200px; min-width: 200px; height: 92px; }
+  .vehicle-option, .build-mech-card { flex: 0 0 200px; width: 200px; min-width: 200px; height: 92px; }
   .hangar-footer { align-items: stretch; flex-direction: column; }
   .deploy-button { flex-basis: auto; width: 100%; margin-left: 0; }
 }
@@ -369,7 +423,7 @@ canvas {
 .field-note { font-size: 8px; letter-spacing: .08em; margin-top: 16px; }
 .vehicle-selection { padding-top: 0; }
 .vehicle-list-3 { display: flex; }
-.vehicle-option { flex-shrink: 0; }
+.vehicle-option, .build-mech-card { flex-shrink: 0; }
 .hangar-footer { padding-top: 0; flex-wrap: nowrap; gap: 16px; }
 .control-choice, .seed-choice { gap: 8px; }
 .control-choice > span, .seed-choice > span { font-size: 9px; }
@@ -449,7 +503,7 @@ canvas {
   .loadout-weapon span { font-size: 10px; }
   .loadout-key { font-size: 10px; width: 24px; min-width: 24px; }
   .field-note { font-size: 7px; margin-top: 12px; }
-  .vehicle-option { min-width: 190px; width: 200px; height: 90px; flex-shrink: 0; }
+  .vehicle-option, .build-mech-card { min-width: 190px; width: 200px; height: 90px; flex-shrink: 0; }
   .vehicle-card-content { padding: 6px 8px 7px; }
   .selection-heading span { font-size: 8px; }
   .selection-heading span:last-child { font-size: 7px; }
@@ -507,7 +561,7 @@ canvas {
   .legend-panel { margin-top: 8px; font-size: 10px; line-height: 1.45; }
   .legend-panel .chassis-style { font-size: 9px; margin-top: 7px; }
   .hangar-index { display: none; }
-  .vehicle-option { min-width: 180px; width: 190px; height: 86px; flex-shrink: 0; }
+  .vehicle-option, .build-mech-card { min-width: 180px; width: 190px; height: 86px; flex-shrink: 0; }
   .vehicle-card-content { padding: 5px 8px 6px; }
   .vehicle-card-name { font-size: 10px; }
   .selection-heading { font-size: 8px; margin-bottom: 6px; }
@@ -538,7 +592,7 @@ canvas {
   .loadout-weapons-4 { gap: 9px; margin-top: 10px; }
   .loadout-weapon span:not(.slot-tag) { font-size: 9px; }
   .field-note, .chassis-model { display: none; }
-  .vehicle-option { min-width: 180px; width: 190px; height: 86px; flex-shrink: 0; }
+  .vehicle-option, .build-mech-card { min-width: 180px; width: 190px; height: 86px; flex-shrink: 0; }
   .chassis-stats { margin-top: 10px; padding-block: 8px; }
   .brand-lockup p { display: none; }
   .hangar-header { padding-bottom: 8px; }
@@ -1300,3 +1354,464 @@ canvas {
 }
 .loadout-weapon.is-empty { opacity: .55; }
 .loadout-weapon.is-empty strong { color: #8ba094; }
+
+/* Mech Builder Screen ----------------------------------------------- */
+.mech-builder-screen {
+  position: relative;
+  width: 100%;
+  height: 100dvh;
+  min-height: 100dvh;
+  display: flex;
+  flex-direction: column;
+  background: #091214;
+  color: #eef1ea;
+  font-family: 'Share Tech Mono', monospace;
+  overflow: hidden;
+  box-sizing: border-box;
+}
+
+.builder-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 16px;
+  padding: 14px 24px;
+  background: rgba(12, 20, 22, 0.95);
+  border-bottom: 1px solid rgba(220, 235, 221, 0.15);
+  flex-shrink: 0;
+}
+
+.builder-header-left {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+}
+.builder-cancel-btn {
+  padding: 8px 14px;
+  font-family: 'Share Tech Mono', monospace;
+  font-size: 10px;
+  letter-spacing: .12em;
+  font-weight: 700;
+  color: #a8b8ae;
+  background: rgba(255, 255, 255, .05);
+  border: 1px solid rgba(213, 229, 218, .2);
+  border-radius: 2px;
+  cursor: pointer;
+  transition: all 140ms ease;
+}
+.builder-cancel-btn:hover {
+  background: rgba(239, 68, 68, .2);
+  color: #fca5a5;
+  border-color: rgba(239, 68, 68, .4);
+}
+
+.builder-title-group h2 {
+  font-family: 'Orbitron', sans-serif;
+  font-size: 18px;
+  font-weight: 900;
+  letter-spacing: .08em;
+  color: #ffffff;
+  line-height: 1.1;
+  margin: 0;
+}
+.builder-subtitle {
+  font-size: 9px;
+  letter-spacing: .2em;
+  color: #7fe0c0;
+}
+
+.builder-name-box {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.builder-label {
+  font-size: 8px;
+  letter-spacing: .2em;
+  color: #82998d;
+}
+.builder-name-input {
+  width: 190px;
+  padding: 6px 10px;
+  font-family: 'Orbitron', sans-serif;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: .08em;
+  color: #ffffff;
+  background: rgba(0, 0, 0, .45);
+  border: 1px solid rgba(213, 229, 218, .25);
+  outline: none;
+}
+.builder-name-input:focus-visible {
+  border-color: #ffd24a;
+  background: rgba(20, 26, 20, .6);
+}
+.builder-reroll-btn {
+  padding: 6px 10px;
+  font-size: 9px;
+  font-family: 'Share Tech Mono', monospace;
+  letter-spacing: .1em;
+  font-weight: 700;
+  color: #d1ded6;
+  background: rgba(255, 255, 255, .08);
+  border: 1px solid rgba(213, 229, 218, .2);
+  border-radius: 2px;
+  cursor: pointer;
+  transition: background 140ms ease;
+  white-space: nowrap;
+}
+.builder-reroll-btn:hover {
+  background: rgba(255, 255, 255, .16);
+  color: #ffffff;
+}
+
+.builder-header-right {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+}
+.builder-wallet-info, .builder-cost-info {
+  display: flex;
+  flex-direction: column;
+  text-align: right;
+  gap: 2px;
+}
+.builder-credits {
+  font-family: 'Orbitron', sans-serif;
+  font-size: 14px;
+  font-weight: 700;
+  color: #7fe0c0;
+}
+.builder-cost {
+  font-family: 'Orbitron', sans-serif;
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.builder-build-btn {
+  padding: 10px 22px;
+  font-family: 'Orbitron', sans-serif;
+  font-size: 11px;
+  font-weight: 900;
+  letter-spacing: .12em;
+  border-radius: 2px;
+  cursor: pointer;
+  transition: all 160ms ease;
+  white-space: nowrap;
+}
+.builder-build-btn.is-ready {
+  background: #ffd24a;
+  color: #111b18;
+  border: 1px solid #ffe17d;
+  box-shadow: 0 0 16px rgba(255, 210, 74, .35);
+}
+.builder-build-btn.is-ready:hover {
+  background: #ffe17d;
+  transform: translateY(-2px);
+  box-shadow: 0 0 24px rgba(255, 210, 74, .5);
+}
+.builder-build-btn.is-disabled {
+  background: rgba(255, 255, 255, .05);
+  color: #55665f;
+  border: 1px solid rgba(255, 255, 255, .1);
+  cursor: not-allowed;
+}
+
+.builder-error-banner {
+  padding: 8px 16px;
+  background: rgba(239, 68, 68, .2);
+  border-bottom: 1px solid rgba(239, 68, 68, .4);
+  color: #fca5a5;
+  font-size: 11px;
+  letter-spacing: .12em;
+  text-align: center;
+}
+
+.builder-body {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  gap: 16px;
+  padding: 16px 24px 20px;
+  overflow: hidden;
+  box-sizing: border-box;
+}
+
+.builder-panel-title {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 9px;
+  letter-spacing: .2em;
+  color: #82998d;
+  padding-bottom: 8px;
+  border-bottom: 1px solid rgba(213, 229, 218, .12);
+  flex-shrink: 0;
+}
+.builder-panel-title span:last-child {
+  color: #a8b8ae;
+}
+
+/* Left Slots Sidebar */
+.builder-slots-sidebar {
+  width: 320px;
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-height: 0;
+}
+.builder-slots-list {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  scrollbar-width: thin;
+  padding-right: 2px;
+}
+.builder-slot-item {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 9px 12px;
+  background: rgba(18, 28, 29, .75);
+  border: 1px solid rgba(213, 229, 218, .16);
+  text-align: left;
+  cursor: pointer;
+  transition: all 140ms ease;
+  box-sizing: border-box;
+}
+.builder-slot-item:hover {
+  background: rgba(30, 44, 42, .85);
+  border-color: rgba(213, 229, 218, .35);
+}
+.builder-slot-item.is-selected {
+  border-color: #ffd24a;
+  background: rgba(38, 52, 45, .95);
+  box-shadow: inset 3px 0 0 #ffd24a;
+}
+.builder-slot-meta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.builder-slot-label {
+  font-size: 8px;
+  letter-spacing: .18em;
+  color: #8da295;
+  font-weight: 700;
+}
+.builder-slot-key {
+  font-size: 8px;
+  padding: 1px 4px;
+  background: rgba(255, 255, 255, .08);
+  border-radius: 2px;
+  color: #a0b3a8;
+}
+.builder-slot-equipped {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 6px;
+}
+.builder-slot-equipped strong {
+  font-family: 'Orbitron', sans-serif;
+  font-size: 11px;
+  letter-spacing: .06em;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.builder-slot-weight {
+  font-size: 8px;
+  color: #7fe0c0;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+/* Specs card at bottom of sidebar */
+.builder-specs-card {
+  flex-shrink: 0;
+  padding: 12px;
+  background: rgba(14, 22, 23, .9);
+  border: 1px solid rgba(213, 229, 218, .15);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.builder-specs-header {
+  font-size: 8px;
+  letter-spacing: .2em;
+  color: #82998d;
+}
+.builder-specs-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 6px;
+}
+.builder-specs-grid div {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.builder-specs-grid span {
+  font-size: 7px;
+  color: #8da295;
+  letter-spacing: .1em;
+}
+.builder-specs-grid strong {
+  font-family: 'Orbitron', sans-serif;
+  font-size: 13px;
+  color: #ffffff;
+}
+.builder-specs-grid small {
+  font-size: 8px;
+  color: #8da295;
+}
+.builder-specs-sub {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding-top: 6px;
+  border-top: 1px solid rgba(255, 255, 255, .08);
+  font-size: 8px;
+  letter-spacing: .12em;
+}
+
+/* Right Components Panel */
+.builder-components-panel {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-height: 0;
+}
+.builder-components-grid {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 12px;
+  padding-right: 4px;
+  scrollbar-width: thin;
+}
+
+.builder-comp-card {
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  padding: 14px 16px;
+  background: rgba(18, 28, 29, .75);
+  border: 1px solid rgba(213, 229, 218, .18);
+  cursor: pointer;
+  transition: all 140ms ease;
+  min-height: 145px;
+  box-sizing: border-box;
+}
+.builder-comp-card:hover {
+  background: rgba(28, 42, 40, .9);
+  border-color: rgba(255, 255, 255, .4);
+  transform: translateY(-2px);
+}
+.builder-comp-card.is-mounted {
+  border-color: #7fe0c0;
+  background: rgba(24, 46, 40, .92);
+  box-shadow: 0 0 16px rgba(127, 224, 192, .18);
+}
+
+.builder-comp-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+}
+.builder-comp-name {
+  font-family: 'Orbitron', sans-serif;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: .06em;
+  color: #ffffff;
+  display: block;
+}
+.builder-comp-type {
+  font-size: 8px;
+  letter-spacing: .1em;
+  color: #8da295;
+  display: block;
+  margin-top: 2px;
+}
+.builder-comp-cost {
+  font-family: 'Orbitron', sans-serif;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: .08em;
+  color: #ffd24a;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.builder-comp-desc {
+  font-family: sans-serif;
+  font-size: 11px;
+  line-height: 1.45;
+  color: #9eb1a6;
+  margin: 8px 0;
+}
+
+.builder-comp-specs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 10px;
+}
+.builder-comp-specs span {
+  font-size: 8px;
+  letter-spacing: .1em;
+  padding: 2px 6px;
+  background: rgba(255, 255, 255, .06);
+  border: 1px solid rgba(255, 255, 255, .1);
+  border-radius: 2px;
+  color: #c4d4ca;
+}
+
+.builder-comp-footer {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  padding-top: 8px;
+  border-top: 1px solid rgba(255, 255, 255, .08);
+}
+.builder-badge-mounted {
+  font-size: 9px;
+  letter-spacing: .14em;
+  font-weight: 700;
+  color: #7fe0c0;
+}
+.builder-equip-btn {
+  padding: 5px 12px;
+  font-family: 'Share Tech Mono', monospace;
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: .1em;
+  color: #111b18;
+  background: rgba(255, 255, 255, .75);
+  border: none;
+  border-radius: 2px;
+  cursor: pointer;
+  transition: background 140ms ease;
+}
+.builder-comp-card:hover .builder-equip-btn {
+  background: #ffd24a;
+}
+
+@media (max-width: 800px) {
+  .builder-header { flex-direction: column; align-items: stretch; gap: 10px; }
+  .builder-header-left, .builder-header-right { justify-content: space-between; }
+  .builder-body { flex-direction: column; }
+  .builder-slots-sidebar { width: 100%; height: 210px; }
+}
