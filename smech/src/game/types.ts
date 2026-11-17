@@ -82,6 +82,10 @@ export interface RadarBlip {
   tall?: boolean;
   /** enemy has spotted the player */
   alert?: boolean;
+  /** clamped to the outer edge of the radar */
+  edge?: boolean;
+  /** actual distance in meters to target */
+  dist?: number;
 }
 
 export interface HudTarget {

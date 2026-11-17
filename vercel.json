@@ -1,0 +1,11 @@
+{
+  "buildCommand": "cd smech && pnpm run build",
+  "outputDirectory": "smech/dist",
+  "framework": "vite",
+  "rewrites": [
+    {
+      "source": "/(.*)",
+      "destination": "/index.html"
+    }
+  ]
+}

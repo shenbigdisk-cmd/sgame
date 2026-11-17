@@ -31,6 +31,63 @@ export interface SavedBuild {
   equipped: Partial<Record<ComponentSlot, string>>;
 }
 
+/** A custom mech built by the player with credits. */
+export interface CustomMech {
+  id: string;
+  name: string;
+  frame: VehicleType;
+  equipped: Partial<Record<ComponentSlot, string>>;
+  cost: number;
+  createdAt: number;
+}
+
+/** One of the fixed prebuilt factory mechs that cannot be sold or altered. */
+export interface PrebuiltMech {
+  id: string;
+  frame: VehicleType;
+  name: string;
+  role: string;
+  epithet: string;
+  equipped: Partial<Record<ComponentSlot, string>>;
+  cost: 0;
+  isPrebuilt: true;
+}
+
+export const PREBUILT_MECHS: PrebuiltMech[] = [
+  {
+    id: 'prebuilt:warden',
+    frame: 'warden',
+    name: 'WARDEN-9 "OATHKEEPER"',
+    role: 'BALANCED VETERAN',
+    epithet: 'THE OATHKEEPER',
+    equipped: { ...PRESETS[0].equipped },
+    cost: 0,
+    isPrebuilt: true,
+  },
+  {
+    id: 'prebuilt:pyre',
+    frame: 'pyre',
+    name: 'PYRE-12 "CROWD-EATER"',
+    role: 'FIRE BRAWLER',
+    epithet: 'THE CROWD-EATER',
+    equipped: { ...PRESETS[1].equipped },
+    cost: 0,
+    isPrebuilt: true,
+  },
+  {
+    id: 'prebuilt:glacier',
+    frame: 'glacier',
+    name: 'GLACIER-7 "THE EXILE"',
+    role: 'CRYO DUELIST',
+    epithet: 'THE EXILE',
+    equipped: { ...PRESETS[2].equipped },
+    cost: 0,
+    isPrebuilt: true,
+  },
+];
+
+export type AnyMech = (CustomMech & { isPrebuilt?: false }) | PrebuiltMech;
+
 /** Everything the player owns between runs. */
 export interface GarageState {
   /** currency earned in the pits and spent in the forge */
@@ -43,6 +100,10 @@ export interface GarageState {
   equipped: Partial<Record<ComponentSlot, string>>;
   /** named custom builds the player has saved */
   blueprints: SavedBuild[];
+  /** custom mechs built by the user */
+  customMechs: CustomMech[];
+  /** active mech identifier */
+  activeMechId: string;
 }
 
 export const DEFAULT_GARAGE: GarageState = {
@@ -51,6 +112,8 @@ export const DEFAULT_GARAGE: GarageState = {
   owned: [...STARTER_COMPONENTS],
   equipped: { ...STARTER_EQUIPPED },
   blueprints: [],
+  customMechs: [],
+  activeMechId: 'prebuilt:warden',
 };
 
 const SLOTS: ComponentSlot[] = [
@@ -121,16 +184,51 @@ export function loadGarage(): GarageState {
       if (equipped.specialQ === equipped.specialE) equipped.specialQ = STARTER_EQUIPPED.specialQ;
     }
 
+    const customMechs = sanitizeCustomMechs(parsed.customMechs);
+    const activeMechId = typeof parsed.activeMechId === 'string' && parsed.activeMechId
+      ? parsed.activeMechId
+      : PREBUILT_MECHS[0].id;
+
     return {
       credits: Math.max(0, Math.floor(Number(parsed.credits) || 0)),
       mechName: sanitizeName(parsed.mechName),
       owned,
       equipped,
       blueprints: sanitizeBlueprints(parsed.blueprints, owned),
+      customMechs,
+      activeMechId,
     };
   } catch {
     return fresh();
   }
+}
+
+/** Keep only the custom mechs that have valid components. */
+function sanitizeCustomMechs(raw: unknown): CustomMech[] {
+  if (!Array.isArray(raw)) return [];
+  const out: CustomMech[] = [];
+  for (const entry of raw) {
+    if (!entry || typeof entry !== 'object') continue;
+    const m = entry as Partial<CustomMech>;
+    if (typeof m.id !== 'string' || !m.id) continue;
+    const equipped: Partial<Record<ComponentSlot, string>> = {};
+    for (const slot of SLOTS) {
+      const id = m.equipped?.[slot];
+      const comp = id ? getComponent(id) : undefined;
+      if (id && comp && fitsSlot(comp, slot)) equipped[slot] = id;
+    }
+    if (!Object.keys(equipped).length) continue;
+    const frame = frameOf(equipped);
+    out.push({
+      id: m.id,
+      name: sanitizeName(m.name),
+      frame,
+      equipped,
+      cost: Math.max(0, Math.floor(Number(m.cost) || 0)),
+      createdAt: Number(m.createdAt) || Date.now(),
+    });
+  }
+  return out;
 }
 
 /** Keep only the saved builds that still make sense. */
@@ -381,4 +479,171 @@ export function deleteBlueprint(state: GarageState, id: string): GarageState {
   const next: GarageState = { ...state, blueprints: state.blueprints.filter((b) => b.id !== id) };
   saveGarage(next);
   return next;
+}
+
+/* ------------------------------------------------------------------ *
+ * Mech Building, Selling and Selection
+ * ------------------------------------------------------------------ */
+
+const COOL_PREFIXES = [
+  'APEX', 'VOID', 'IRON', 'WAR', 'SHADOW', 'CHRONO', 'TEMPEST', 'NEXUS', 'CYBER',
+  'TITAN', 'SOLAR', 'GHOST', 'FROST', 'BLAZE', 'OMEGA', 'SPECTRE', 'VIPER', 'HAVOC',
+  'VALKYRIE', 'STRIKE', 'ZERO', 'ECLIPSE', 'ASTRAL', 'PHANTOM', 'CRIMSON', 'ONYX'
+];
+
+const COOL_SUFFIXES = [
+  'REAPER', 'STRIDER', 'COMMANDER', 'COLOSSUS', 'STRIKER', 'VANGUARD', 'FURY',
+  'KNIGHT', 'BEHEMOTH', 'WARLORD', 'ASSASSIN', 'SENTINEL', 'GLADIATOR', 'ENFORCER',
+  'BREAKER', 'HUNTER', 'VALIANT', 'BASTION', 'DREADNOUGHT', 'PALADIN', 'DOMINATOR'
+];
+
+/** Generate a cool sci-fi mech designation automatically. */
+export function generateCoolMechName(): string {
+  const p = COOL_PREFIXES[Math.floor(Math.random() * COOL_PREFIXES.length)];
+  const s = COOL_SUFFIXES[Math.floor(Math.random() * COOL_SUFFIXES.length)];
+  const num = Math.floor(Math.random() * 9) + 1;
+  return `${p} ${s}-${num}`;
+}
+
+/** Compute the total credit cost required to construct this mech from components. */
+export function calculateBuildCost(equipped: Partial<Record<ComponentSlot, string>>): number {
+  let cost = 0;
+  const frame = frameOf(equipped);
+  if (frame === 'warden') cost += 200;
+  else if (frame === 'pyre') cost += 450;
+  else if (frame === 'glacier') cost += 600;
+
+  for (const slot of SLOTS) {
+    if (slot === 'frame') continue;
+    const id = equipped[slot];
+    if (id) {
+      const comp = getComponent(id);
+      if (comp) cost += comp.cost;
+    }
+  }
+  return Math.max(300, cost);
+}
+
+/**
+ * Returns all available mechs:
+ * Lists the user's custom-built mechs at the start, followed by always the 3 fixed factory mechs.
+ */
+export function getAllMechs(garage: GarageState): AnyMech[] {
+  const custom = garage.customMechs || [];
+  return [...custom, ...PREBUILT_MECHS];
+}
+
+/** Get the currently selected active mech. */
+export function getActiveMech(garage: GarageState): AnyMech {
+  const all = getAllMechs(garage);
+  const found = all.find((m) => m.id === garage.activeMechId);
+  return found ?? all[0] ?? PREBUILT_MECHS[0];
+}
+
+/** Select a mech from the collection as the active battle vehicle. */
+export function selectMech(garage: GarageState, mechId: string): GarageState {
+  const all = getAllMechs(garage);
+  const found = all.find((m) => m.id === mechId);
+  if (!found) return garage;
+  const next: GarageState = {
+    ...garage,
+    activeMechId: found.id,
+    equipped: { ...found.equipped },
+    mechName: found.name,
+  };
+  saveGarage(next);
+  return next;
+}
+
+/**
+ * Build a new mech consuming total credits.
+ * Once built, it is stored in the player's collection and selected as active.
+ */
+export function buildNewMech(
+  garage: GarageState,
+  name: string,
+  equipped: Partial<Record<ComponentSlot, string>>
+): { ok: boolean; state: GarageState; mech?: CustomMech; reason?: 'poor' } {
+  const cost = calculateBuildCost(equipped);
+  if (garage.credits < cost) {
+    return { ok: false, state: garage, reason: 'poor' };
+  }
+  const cleanName = sanitizeName(name) || generateCoolMechName();
+  const frame = frameOf(equipped);
+  const id = `mech_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
+  const newMech: CustomMech = {
+    id,
+    name: cleanName,
+    frame,
+    equipped: { ...equipped },
+    cost,
+    createdAt: Date.now(),
+  };
+
+  // Ensure all parts in the build are registered in owned
+  const owned = [...garage.owned];
+  for (const slot of SLOTS) {
+    const compId = equipped[slot];
+    if (compId && !owned.includes(compId)) owned.push(compId);
+  }
+
+  const customMechs = [newMech, ...(garage.customMechs || [])];
+  const next: GarageState = {
+    ...garage,
+    credits: garage.credits - cost,
+    owned,
+    customMechs,
+    activeMechId: id,
+    mechName: cleanName,
+    equipped: { ...equipped },
+  };
+  saveGarage(next);
+  return { ok: true, state: next, mech: newMech };
+}
+
+/**
+ * Sell a custom mech for 50% (half price) of its build cost.
+ * The 3 prebuilt factory mechs cannot be sold.
+ */
+export function sellCustomMech(
+  garage: GarageState,
+  mechId: string
+): { ok: boolean; state: GarageState; refund: number; reason?: 'cannot_sell_prebuilt' | 'not_found' } {
+  if (mechId.startsWith('prebuilt:')) {
+    return { ok: false, state: garage, refund: 0, reason: 'cannot_sell_prebuilt' };
+  }
+  const currentCustom = garage.customMechs || [];
+  const mech = currentCustom.find((m) => m.id === mechId);
+  if (!mech) {
+    return { ok: false, state: garage, refund: 0, reason: 'not_found' };
+  }
+  const refund = Math.floor(mech.cost / 2);
+  const nextCustom = currentCustom.filter((m) => m.id !== mechId);
+
+  let activeMechId = garage.activeMechId;
+  let equipped = garage.equipped;
+  let mechName = garage.mechName;
+
+  if (activeMechId === mechId) {
+    if (nextCustom.length > 0) {
+      activeMechId = nextCustom[0].id;
+      equipped = { ...nextCustom[0].equipped };
+      mechName = nextCustom[0].name;
+    } else {
+      activeMechId = PREBUILT_MECHS[0].id;
+      equipped = { ...PREBUILT_MECHS[0].equipped };
+      mechName = PREBUILT_MECHS[0].name;
+    }
+  }
+
+  const next: GarageState = {
+    ...garage,
+    credits: garage.credits + refund,
+    customMechs: nextCustom,
+    activeMechId,
+    equipped,
+    mechName,
+  };
+  saveGarage(next);
+  return { ok: true, state: next, refund };
 }

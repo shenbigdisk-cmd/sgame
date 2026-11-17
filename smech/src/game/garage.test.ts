@@ -218,3 +218,77 @@ describe('factory blueprints and custom builds', () => {
     expect(loaded.mechName).toBe(last.name);
   });
 });
+
+describe('custom mech construction and sales', () => {
+  it('generates a cool mech name', async () => {
+    const { generateCoolMechName } = await import('./garage');
+    const name = generateCoolMechName();
+    expect(name.length).toBeGreaterThan(4);
+    expect(name).toMatch(/[A-Z]+ [A-Z]+-\d/);
+  });
+
+  it('lists custom mechs at the start, followed by the 3 fixed prebuilt mechs', async () => {
+    const { getAllMechs, buildNewMech } = await import('./garage');
+    let garage = loadGarage();
+    garage = grantCredits(garage, 5000);
+
+    const initialMechs = getAllMechs(garage);
+    expect(initialMechs).toHaveLength(3);
+    expect(initialMechs[0].id).toBe('prebuilt:warden');
+    expect(initialMechs[1].id).toBe('prebuilt:pyre');
+    expect(initialMechs[2].id).toBe('prebuilt:glacier');
+
+    const buildRes = buildNewMech(garage, 'TITAN X', garage.equipped);
+    expect(buildRes.ok).toBe(true);
+
+    const updatedMechs = getAllMechs(buildRes.state);
+    expect(updatedMechs).toHaveLength(4);
+    // Custom mech must be at the start
+    expect(updatedMechs[0].name).toBe('TITAN X');
+    expect(updatedMechs[0].isPrebuilt).toBeFalsy();
+    // Prebuilt mechs follow
+    expect(updatedMechs[1].id).toBe('prebuilt:warden');
+    expect(updatedMechs[2].id).toBe('prebuilt:pyre');
+    expect(updatedMechs[3].id).toBe('prebuilt:glacier');
+  });
+
+  it('consumes credits when building a mech and adds it to collection', async () => {
+    const { buildNewMech, calculateBuildCost } = await import('./garage');
+    let garage = loadGarage();
+    garage = grantCredits(garage, 2000);
+    const startCredits = garage.credits;
+    const cost = calculateBuildCost(garage.equipped);
+
+    const res = buildNewMech(garage, 'CYBER REAPER-9', garage.equipped);
+    expect(res.ok).toBe(true);
+    expect(res.state.credits).toBe(startCredits - cost);
+    expect(res.state.customMechs).toHaveLength(1);
+    expect(res.state.customMechs[0].name).toBe('CYBER REAPER-9');
+    expect(res.state.activeMechId).toBe(res.mech?.id);
+  });
+
+  it('allows selling a custom mech at half price', async () => {
+    const { buildNewMech, sellCustomMech } = await import('./garage');
+    let garage = loadGarage();
+    garage = grantCredits(garage, 3000);
+
+    const buildRes = buildNewMech(garage, 'OMEGA STRIKER', garage.equipped);
+    expect(buildRes.ok).toBe(true);
+    const mech = buildRes.mech!;
+    const creditsAfterBuild = buildRes.state.credits;
+
+    const sellRes = sellCustomMech(buildRes.state, mech.id);
+    expect(sellRes.ok).toBe(true);
+    expect(sellRes.refund).toBe(Math.floor(mech.cost / 2));
+    expect(sellRes.state.credits).toBe(creditsAfterBuild + Math.floor(mech.cost / 2));
+    expect(sellRes.state.customMechs).toHaveLength(0);
+  });
+
+  it('forbids selling the 3 prebuilt factory mechs', async () => {
+    const { sellCustomMech } = await import('./garage');
+    const garage = loadGarage();
+    const sellRes = sellCustomMech(garage, 'prebuilt:warden');
+    expect(sellRes.ok).toBe(false);
+    expect(sellRes.reason).toBe('cannot_sell_prebuilt');
+  });
+});

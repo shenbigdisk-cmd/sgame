@@ -1,6 +1,5 @@
 import { useCallback, useMemo, useState } from 'react';
 import {
-  HULL_DRAW,
   PRESETS,
   SLOT_KEYS,
   SLOT_LABELS,
@@ -14,17 +13,19 @@ import {
 import {
   applyPreset,
   buyComponent,
-  deleteBlueprint,
   equipComponent,
   fitOutCost,
   fitOutPreset,
-  loadBlueprint,
   missingParts,
-  renameMech,
-  saveBlueprint,
   unequipSlot,
+  buildNewMech,
+  sellCustomMech,
+  selectMech,
+  generateCoolMechName,
+  calculateBuildCost,
   type GarageState,
 } from '../game/garage';
+import { VEHICLES } from '../game/vehicles';
 import { Icon } from './Icons';
 import FactoryView from './FactoryView';
 
@@ -47,17 +48,14 @@ const SLOT_ORDER: ComponentSlot[] = [
 
 const formatCredits = (n: number) => n.toLocaleString('en-US');
 
-/**
- * THE FORGE — the factory floor.
- *
- * Buy components with the credits earned in the pits, mount them on a mech
- * and watch it assemble on the floor. Mass decides how fast it runs; the
- * reactor decides how hard it can hit without going dark.
- */
 export default function Forge({ garage, onChange, accent }: Props) {
   const config = buildConfig(garage.equipped);
   const stats = useMemo(() => buildStats(garage.equipped), [garage.equipped]);
-  const [draftName, setDraftName] = useState(garage.mechName);
+  const [draftName, setDraftName] = useState(() => generateCoolMechName());
+  const [buildFeedback, setBuildFeedback] = useState<string | null>(null);
+
+  const totalBuildCost = useMemo(() => calculateBuildCost(garage.equipped), [garage.equipped]);
+  const canAffordBuild = garage.credits >= totalBuildCost;
 
   const onPick = useCallback(
     (slot: ComponentSlot, id: string) => {
@@ -73,20 +71,26 @@ export default function Forge({ garage, onChange, accent }: Props) {
     [garage, onChange],
   );
 
-  const onSaveBuild = useCallback(() => {
-    onChange(saveBlueprint(garage, draftName.trim() || garage.mechName));
-  }, [garage, onChange, draftName]);
+  const onBuildNewMech = useCallback(() => {
+    const res = buildNewMech(garage, draftName, garage.equipped);
+    if (!res.ok) {
+      setBuildFeedback('INSUFFICIENT CREDITS TO BUILD MECH');
+      return;
+    }
+    onChange(res.state);
+    setBuildFeedback(`SUCCESS: ${res.mech?.name} CONSTRUCTED & READY!`);
+    setDraftName(generateCoolMechName());
+    setTimeout(() => setBuildFeedback(null), 4000);
+  }, [garage, draftName, onChange]);
 
-  const onLoadBuild = useCallback(
+  const onSellMech = useCallback(
     (id: string) => {
-      onChange(loadBlueprint(garage, id));
-    },
-    [garage, onChange],
-  );
-
-  const onDeleteBuild = useCallback(
-    (id: string) => {
-      onChange(deleteBlueprint(garage, id));
+      const res = sellCustomMech(garage, id);
+      if (res.ok) {
+        onChange(res.state);
+        setBuildFeedback(`SOLD MECH FOR +${formatCredits(res.refund)} CREDITS`);
+        setTimeout(() => setBuildFeedback(null), 4000);
+      }
     },
     [garage, onChange],
   );
@@ -94,13 +98,6 @@ export default function Forge({ garage, onChange, accent }: Props) {
   const onClear = useCallback(
     (slot: ComponentSlot) => {
       onChange(unequipSlot(garage, slot));
-    },
-    [garage, onChange],
-  );
-
-  const onRename = useCallback(
-    (name: string) => {
-      onChange(renameMech(garage, name));
     },
     [garage, onChange],
   );
@@ -127,32 +124,110 @@ export default function Forge({ garage, onChange, accent }: Props) {
     <div className="forge" style={{ '--forge-accent': accent } as React.CSSProperties}>
       <div className="forge-top">
         <div className="forge-identity">
-          <span className="forge-label">MECH DESIGNATION</span>
+          <div className="flex items-center gap-2">
+            <span className="forge-label">NEW MECH DESIGNATION</span>
+            <button
+              type="button"
+              className="px-2 py-0.5 text-[9px] font-bold tracking-wider rounded bg-white/10 hover:bg-white/20 text-zinc-300 cursor-pointer"
+              onClick={() => setDraftName(generateCoolMechName())}
+              title="Generate another cool sci-fi name"
+            >
+              🎲 REROLL NAME
+            </button>
+          </div>
           <input
             className="forge-name"
-            value={garage.mechName}
+            value={draftName}
             maxLength={18}
             spellCheck={false}
             aria-label="Mech name"
-            onChange={(e) => onRename(e.target.value)}
+            onChange={(e) => setDraftName(e.target.value)}
           />
           <span className="forge-frame">
             {getComponent(garage.equipped.frame ?? '')?.name ?? 'WARDEN FRAME'} ·{' '}
             {(config.loadout.primary ?? 'no weapon').toUpperCase()} / {(config.loadout.secondary ?? 'no weapon').toUpperCase()}
           </span>
         </div>
-        <div className="forge-wallet">
-          <span className="forge-label">CREDITS</span>
-          <strong>{formatCredits(garage.credits)}</strong>
-          <span className="forge-wallet-hint">EARNED IN THE PITS</span>
+
+        <div className="flex flex-col sm:flex-row items-end sm:items-center gap-3">
+          <div className="forge-wallet">
+            <span className="forge-label">WALLET</span>
+            <strong>{formatCredits(garage.credits)} CR</strong>
+            <span className="forge-wallet-hint">EARNED IN THE PITS</span>
+          </div>
+
+          <div className="flex flex-col items-end gap-1">
+            <button
+              type="button"
+              disabled={!canAffordBuild}
+              onClick={onBuildNewMech}
+              className={`px-5 py-2.5 rounded font-black tracking-widest text-xs uppercase transition-transform cursor-pointer ${
+                canAffordBuild
+                  ? 'bg-amber-400 hover:bg-amber-300 text-black hover:scale-[1.02] shadow-[0_0_20px_rgba(255,210,74,0.4)]'
+                  : 'bg-zinc-800 text-zinc-500 cursor-not-allowed opacity-60'
+              }`}
+            >
+              {canAffordBuild ? `BUILD MECH (${formatCredits(totalBuildCost)} CR)` : `NEED ${formatCredits(totalBuildCost)} CR`}
+            </button>
+            <span className="text-[9px] tracking-wider text-zinc-400 font-mono">
+              TOTAL PARTS COST: {formatCredits(totalBuildCost)} CR
+            </span>
+          </div>
         </div>
       </div>
 
+      {buildFeedback && (
+        <div className="px-4 py-2 my-2 text-xs font-mono font-bold tracking-wider text-amber-300 bg-amber-500/10 border border-amber-500/30 rounded text-center">
+          {buildFeedback}
+        </div>
+      )}
+
       <div className="forge-stage">
-        <FactoryView equipped={garage.equipped} accent={accent} label={garage.mechName} />
+        <FactoryView equipped={garage.equipped} accent={accent} label={draftName || garage.mechName} />
 
         <div className="forge-console">
+          {/* Custom Mechs Collection Section */}
+          <div className="forge-yard">
+            <div className="forge-yard-head">
+              <span>MY BUILT MECHS ({garage.customMechs?.length ?? 0})</span>
+              <span className="text-[9px] text-zinc-400">SELL FOR 50% REFUND</span>
+            </div>
+            {(!garage.customMechs || garage.customMechs.length === 0) ? (
+              <p className="forge-yard-empty">
+                No custom mechs built yet. Choose parts below, name your mech, and click BUILD MECH!
+              </p>
+            ) : (
+              <ul className="forge-yard-list">
+                {garage.customMechs.map((m) => (
+                  <li key={m.id} className="forge-yard-build flex items-center justify-between gap-2 p-1.5 bg-white/5 rounded">
+                    <button
+                      type="button"
+                      className="forge-yard-load text-left flex-1"
+                      onClick={() => onChange(selectMech(garage, m.id))}
+                    >
+                      <strong className="text-zinc-100">{m.name}</strong>
+                      <span className="text-[9px] text-zinc-400 block">
+                        {VEHICLES[m.frame]?.shortName ?? 'MECH'} · VALUE {formatCredits(m.cost)} CR
+                      </span>
+                    </button>
+                    <button
+                      type="button"
+                      className="px-2 py-1 text-[9px] font-bold tracking-wider rounded bg-red-500/20 hover:bg-red-500/40 text-red-300 border border-red-500/40 cursor-pointer whitespace-nowrap"
+                      onClick={() => onSellMech(m.id)}
+                      title={`Sell ${m.name} for half price (+${formatCredits(Math.floor(m.cost / 2))} CR)`}
+                    >
+                      SELL (+{formatCredits(Math.floor(m.cost / 2))} CR)
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+
           <div className="forge-presets" role="group" aria-label="Factory blueprints">
+            <div className="text-[10px] tracking-widest text-zinc-400 font-mono mb-1 font-bold">
+              FACTORY BASELINES (FIXED)
+            </div>
             {PRESETS.map((preset) => {
               const missing = missingParts(garage, preset);
               const cost = fitOutCost(garage, preset);
@@ -174,61 +249,11 @@ export default function Forge({ garage, onChange, accent }: Props) {
                       {missing.length} PARTS · {formatCredits(cost)} CR
                     </button>
                   ) : (
-                    <span className="forge-preset-ready">READY TO DEPLOY</span>
+                    <span className="forge-preset-ready">FACTORY SPEC</span>
                   )}
                 </div>
               );
             })}
-          </div>
-
-          <div className="forge-yard">
-            <div className="forge-yard-head">
-              <span>SAVED BUILDS</span>
-              <div className="forge-yard-save">
-                <input
-                  className="forge-yard-input"
-                  value={draftName}
-                  maxLength={18}
-                  spellCheck={false}
-                  aria-label="Name for this build"
-                  onChange={(e) => setDraftName(e.target.value)}
-                  placeholder="NAME THIS BUILD"
-                />
-                <button type="button" className="forge-yard-button" onClick={onSaveBuild}>
-                  SAVE
-                </button>
-              </div>
-            </div>
-            {garage.blueprints.length === 0 ? (
-              <p className="forge-yard-empty">
-                No builds on file yet. Assemble a mech, name it, and save it to the yard.
-              </p>
-            ) : (
-              <ul className="forge-yard-list">
-                {garage.blueprints.map((b) => (
-                  <li key={b.id} className="forge-yard-build">
-                    <button type="button" className="forge-yard-load" onClick={() => onLoadBuild(b.id)}>
-                      <strong>{b.name}</strong>
-                      <span>
-                        {Object.values(b.equipped)
-                          .map((id) => getComponent(id)?.name)
-                          .filter(Boolean)
-                          .slice(0, 3)
-                          .join(' · ')}
-                      </span>
-                    </button>
-                    <button
-                      type="button"
-                      className="forge-yard-delete"
-                      aria-label={`Delete ${b.name}`}
-                      onClick={() => onDeleteBuild(b.id)}
-                    >
-                      ✕
-                    </button>
-                  </li>
-                ))}
-              </ul>
-            )}
           </div>
 
           <div className="forge-readouts">
@@ -293,8 +318,7 @@ export default function Forge({ garage, onChange, accent }: Props) {
             </div>
 
             <p className="forge-summary-note">
-              Every part you mount is bought with credits from past runs. Frames are always free.
-              Hull systems draw {HULL_DRAW} KJ/S on their own.
+              Build a custom mech by choosing components and clicking BUILD MECH. You can sell any custom mech at 50% price anytime.
             </p>
           </div>
         </div>

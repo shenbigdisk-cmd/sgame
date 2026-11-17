@@ -1,0 +1,11 @@
+{
+  "name": "steel-horizon-monorepo",
+  "private": true,
+  "description": "Steel Horizon — Mech combat simulator",
+  "scripts": {
+    "build": "cd smech && pnpm run build",
+    "dev": "cd smech && pnpm run dev",
+    "test": "cd smech && pnpm test",
+    "lint": "cd smech && pnpm lint"
+  }
+}

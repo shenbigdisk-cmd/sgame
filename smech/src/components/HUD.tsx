@@ -76,13 +76,14 @@ function CockpitFrame({ vehicle: _vehicle, accent }: { vehicle: VehicleType; acc
 }
 
 const BLIP_COLOR: Record<string, string> = {
-  tank: '#ff4d4d',
-  mech: '#ff9f3d',
-  heavy: '#ff3df0',
-  sniper: '#3dff7a',
-  boss: '#ff2d55',
-  pickup: '#4dff88',
-  drop: '#ffd24a',
+  scout: '#ff4d4d',
+  tank: '#ff5c33',
+  mech: '#ff7733',
+  heavy: '#ff1f5a',
+  sniper: '#ff0077',
+  boss: '#ff003c',
+  pickup: '#00e5ff',
+  drop: '#ffd700',
   obstacle: 'rgba(255,255,255,0.22)',
 };
 
@@ -107,7 +108,9 @@ function Radar({ blips, hullRel, accent, size }: { blips: RadarBlip[]; hullRel: 
       {blips.map((b, i) => {
         let x = half + b.x * scale;
         let y = half - b.y * scale;
-        const c = BLIP_COLOR[b.kind];
+        const c = BLIP_COLOR[b.kind] ?? '#ff4d4d';
+
+        // 1. Obstacles
         if (b.kind === 'obstacle') {
           const fill = b.tall ? 'rgba(255,255,255,0.3)' : 'rgba(255,255,255,0.16)';
           if (b.poly) {
@@ -117,18 +120,101 @@ function Radar({ blips, hullRel, accent, size }: { blips: RadarBlip[]; hullRel: 
           }
           return <circle key={i} cx={x} cy={y} r={Math.max(1.2, (b.size ?? 3) * scale)} fill={fill} />;
         }
+
+        // 2. Supply Drops (Crates / Nano repair / ammo): distinct glowing crate box with +
+        if (b.kind === 'drop') {
+          return (
+            <g key={i}>
+              <rect
+                x={x - 3.5}
+                y={y - 3.5}
+                width={7}
+                height={7}
+                rx={1.5}
+                fill="rgba(255, 215, 0, 0.35)"
+                stroke="#ffd700"
+                strokeWidth="1.2"
+                style={{ filter: 'drop-shadow(0 0 4px #ffd700)' }}
+              />
+              <line x1={x} y1={y - 2} x2={x} y2={y + 2} stroke="#ffd700" strokeWidth="1" />
+              <line x1={x - 2} y1={y} x2={x + 2} y2={y} stroke="#ffd700" strokeWidth="1" />
+            </g>
+          );
+        }
+
+        // 3. Pickups (Credits, scrap, exp): bright neon cyan diamond
+        if (b.kind === 'pickup') {
+          return (
+            <polygon
+              key={i}
+              points={`${x},${y - 3.2} ${x + 3.2},${y} ${x},${y + 3.2} ${x - 3.2},${y}`}
+              fill="#00e5ff"
+              style={{ filter: 'drop-shadow(0 0 3px #00e5ff)' }}
+            />
+          );
+        }
+
+        // 4. Edge indicator for distant or unseen enemy tanks (clamped to perimeter)
+        if (b.edge) {
+          const angle = Math.atan2(y - half, x - half);
+          const edgeRadius = half - 5;
+          const ex = half + Math.cos(angle) * edgeRadius;
+          const ey = half + Math.sin(angle) * edgeRadius;
+          const rotDeg = (angle * 180) / Math.PI + 90;
+          return (
+            <g key={i} transform={`translate(${ex},${ey}) rotate(${rotDeg})`}>
+              <polygon
+                points="0,-5 4,3 -4,3"
+                fill={c}
+                stroke="#ffffff"
+                strokeWidth="0.8"
+                style={{ filter: `drop-shadow(0 0 4px ${c})` }}
+              />
+            </g>
+          );
+        }
+
+        // 5. Boss: prominent crowned diamond
         if (b.kind === 'boss') {
-          // clamp to the radar edge so the boss is always visible
           const d = Math.hypot(x - half, y - half);
           if (d > half - 6) {
             x = half + ((x - half) / d) * (half - 6);
             y = half + ((y - half) / d) * (half - 6);
           }
-          return <polygon key={i} points={`${x},${y - 6} ${x + 6},${y} ${x},${y + 6} ${x - 6},${y}`} fill={c} style={{ filter: `drop-shadow(0 0 4px ${c})` }} />;
+          return (
+            <polygon
+              key={i}
+              points={`${x},${y - 6} ${x + 6},${y} ${x},${y + 6} ${x - 6},${y}`}
+              fill={c}
+              stroke="#ffffff"
+              strokeWidth="0.8"
+              style={{ filter: `drop-shadow(0 0 5px ${c})` }}
+            />
+          );
         }
-        const r = b.kind === 'heavy' ? 4 : 3;
-        if (b.kind !== 'pickup' && !b.alert) return <circle key={i} cx={x} cy={y} r={r} fill="none" stroke={c} strokeWidth="1.3" opacity="0.85" />;
-        return <circle key={i} cx={x} cy={y} r={r} fill={c} style={{ filter: `drop-shadow(0 0 3px ${c})` }} />;
+
+        // 6. Enemies: hostile directional triangles / chevrons
+        if (b.kind === 'heavy') {
+          return (
+            <polygon
+              key={i}
+              points={`${x},${y - 4} ${x + 4},${y} ${x},${y + 4} ${x - 4},${y}`}
+              fill={c}
+              stroke="#ffffff"
+              strokeWidth="0.8"
+              style={{ filter: `drop-shadow(0 0 3px ${c})` }}
+            />
+          );
+        }
+        // Scout, tank, mech, sniper: sharp hostile arrow
+        return (
+          <polygon
+            key={i}
+            points={`${x},${y - 3.5} ${x + 3},${y + 2.5} ${x - 3},${y + 2.5}`}
+            fill={c}
+            style={{ filter: `drop-shadow(0 0 3px ${c})` }}
+          />
+        );
       })}
       </g>
       <g transform={`rotate(${(-hullRel * 180) / Math.PI} ${half} ${half})`}>

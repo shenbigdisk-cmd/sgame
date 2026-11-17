@@ -1,8 +1,13 @@
 import { useState } from 'react';
 import type { ControlMode, VehicleType, WeaponId } from '../game/types';
 import { VEHICLE_ORDER, VEHICLES, WEAPON_INFO } from '../game/vehicles';
-import { PRESETS, buildConfig, frameOf } from '../game/forge';
-import { applyPreset, fitOutCost, fitOutPreset, missingParts, type GarageState } from '../game/garage';
+import { buildConfig, frameOf } from '../game/forge';
+import {
+  getAllMechs,
+  selectMech,
+  sellCustomMech,
+  type GarageState,
+} from '../game/garage';
 import { randomSeedCode } from '../game/world';
 import type { Settings } from '../game/settings';
 import type { RunRecord } from '../game/records';
@@ -42,7 +47,8 @@ export default function Menu({ onStart, settings, onSettings, records, garage, o
   const [seed, setSeed] = useState(() => randomSeedCode());
   const [tab, setTab] = useState<Tab>('arsenal');
 
-  // The frame the player has bolted their build onto.
+  // All mechs: custom mechs at the start, followed by always the 3 prebuilt mechs
+  const allMechs = getAllMechs(garage);
   const frame = frameOf(garage.equipped);
   const vehicle = VEHICLES[frame];
   const build = buildConfig(garage.equipped);
@@ -151,46 +157,59 @@ export default function Menu({ onStart, settings, onSettings, records, garage, o
           <div className="hangar-index" aria-hidden="true"><span>GLADIATOR</span><b>0{VEHICLE_ORDER.indexOf(frame) + 1}</b><span>/ 03</span></div>
         </main>
 
-        <section className="vehicle-selection" aria-label="Factory blueprints">
-          <div className="selection-heading"><span>FACTORY BLUEPRINTS</span><span>03 PRESETS · BUILD YOUR OWN IN THE FORGE</span></div>
-          <div className="vehicle-list vehicle-list-3">
-            {PRESETS.map((preset, index) => {
-              const item = VEHICLES[preset.frame];
-              const active = frame === preset.frame;
-              const missing = missingParts(garage, preset);
-              const cost = fitOutCost(garage, preset);
-              const affordable = garage.credits >= cost;
+        <section className="vehicle-selection" aria-label="Available Mechs">
+          <div className="selection-heading">
+            <span>MECH HANGAR</span>
+            <span>{allMechs.length} UNITS · CUSTOM BUILDS FIRST, THEN 3 FIXED FACTORY SPECS</span>
+          </div>
+          <div className="vehicle-list overflow-x-auto pb-2 flex gap-3">
+            {allMechs.map((mech, index) => {
+              const item = VEHICLES[mech.frame];
+              const isSelected = garage.activeMechId === mech.id || (!garage.activeMechId && index === 0);
+              const isCustom = !mech.isPrebuilt;
               return (
-                <button
-                  className={`vehicle-option ${active ? 'is-selected' : ''}`}
-                  type="button"
-                  key={preset.id}
-                  onClick={() => {
-                    if (missing.length > 0) {
-                      const result = fitOutPreset(garage, preset);
-                      if (result.ok) {
-                        onGarage(result.state);
-                        return;
-                      }
-                    }
-                    onGarage(applyPreset(garage, preset));
-                  }}
-                  aria-pressed={active}
-                  title={missing.length > 0 ? `${missing.length} part(s) missing — ${cost} CR` : 'Load this blueprint'}
+                <div
+                  key={mech.id}
+                  className={`vehicle-option relative flex-shrink-0 cursor-pointer ${isSelected ? 'is-selected' : ''}`}
+                  onClick={() => onGarage(selectMech(garage, mech.id))}
+                  role="button"
+                  tabIndex={0}
+                  aria-pressed={isSelected}
+                  style={{ minWidth: 210 }}
                 >
-                  <div className="vehicle-thumbnail"><img src={IMAGES[preset.frame]} alt="" loading="eager" /></div>
-                  <div className="vehicle-option-copy">
-                    <span>0{index + 1} / {item.role}</span>
-                    <strong>{preset.name}</strong>
-                    <em>“{item.epithet}”</em>
+                  <div className="vehicle-thumbnail">
+                    <img src={IMAGES[mech.frame]} alt="" loading="eager" />
                   </div>
-                  {missing.length > 0 ? (
-                    <div className="vehicle-parts">
-                      {missing.length} PART{missing.length > 1 ? 'S' : ''} · {credits(cost)} CR{affordable ? '' : ' — SHORT'}
+                  <div className="vehicle-option-copy">
+                    <div className="flex items-center justify-between text-[9px]">
+                      <span>0{index + 1} / {item.shortName}</span>
+                      <strong className={`px-1.5 py-0.5 rounded ${isCustom ? 'bg-amber-400/20 text-amber-300' : 'bg-white/10 text-zinc-400'}`}>
+                        {isCustom ? 'CUSTOM' : 'PREBUILT'}
+                      </strong>
                     </div>
-                  ) : null}
-                  {active && <div className="selected-indicator" />}
-                </button>
+                    <strong className="text-sm mt-0.5">{mech.name}</strong>
+                    <em>{isCustom ? `VALUE: ${credits(mech.cost)} CR` : `“${item.epithet}”`}</em>
+                  </div>
+
+                  {isCustom && (
+                    <div className="mt-2 pt-1 border-t border-white/10 flex justify-end">
+                      <button
+                        type="button"
+                        className="px-2 py-1 text-[9px] font-bold rounded bg-red-500/20 hover:bg-red-500/40 text-red-300 border border-red-500/40 cursor-pointer whitespace-nowrap"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          const res = sellCustomMech(garage, mech.id);
+                          if (res.ok) onGarage(res.state);
+                        }}
+                        title={`Sell ${mech.name} for half price (+${credits(Math.floor(mech.cost / 2))} CR)`}
+                      >
+                        SELL (+{credits(Math.floor(mech.cost / 2))} CR)
+                      </button>
+                    </div>
+                  )}
+
+                  {isSelected && <div className="selected-indicator" />}
+                </div>
               );
             })}
           </div>

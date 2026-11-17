@@ -391,6 +391,12 @@ export class Game {
   private mgTimer = 0;
   private mgHeat = 0;
   private mgOverheat = false;
+  /** Number of shots remaining in current 3-round burst */
+  private mgBurstRemaining = 0;
+  /** Pause timer between bursts */
+  private mgBurstPauseTimer = 0;
+  /** Timestamp of the last time player was in combat or saw an enemy */
+  private lastEnemyCombatTime = 0;
   private secHeat = 0;
   private secOverheat = false;
   /** cooldown of the cryo grenade (seconds) */
@@ -802,6 +808,9 @@ export class Game {
     this.primaryCd = 0;
     this.cannonCd = 0;
     this.mgTimer = 0;
+    this.mgBurstRemaining = 0;
+    this.mgBurstPauseTimer = 0;
+    this.lastEnemyCombatTime = 0;
     this.mgHeat = 0;
     this.mgOverheat = false;
     this.secCd = 0;
@@ -1319,6 +1328,7 @@ export class Game {
     this.cannonCd = Math.max(0, this.cannonCd - dt * rate);
     this.primaryCd = Math.max(0, this.primaryCd - dt * rate);
     this.mgTimer -= dt * rate;
+    this.mgBurstPauseTimer = Math.max(0, this.mgBurstPauseTimer - dt * rate);
     this.secCd = Math.max(0, this.secCd - dt);
     this.beamCd = Math.max(0, this.beamCd - dt);
     if (this.reloading && this.cannonCd <= 0) { this.reloading = false; this.audio.playReady(); }
@@ -1329,11 +1339,32 @@ export class Game {
         if (this.primaryCd <= 0 && this.spendPower(c.loadout.primary)) {
           this.fireScatter();
         }
-      } else if (this.mgTimer <= 0 && this.spendPower(c.loadout.primary)) {
-        this.firePrimaryBullets();
-        this.mgTimer = c.mgInterval * this.stats.reloadMul;
-        if (!noHeat) this.mgHeat = Math.min(1, this.mgHeat + c.mgHeatPerShot * this.stats.mgHeatMul);
-        if (this.mgHeat >= 1) this.mgOverheat = true;
+      } else {
+        // Primary automatic burst: 3 continuous shots, delay, another 3 continuous shots
+        if (this.mgBurstPauseTimer <= 0) {
+          if (this.mgBurstRemaining <= 0) {
+            this.mgBurstRemaining = 3;
+          }
+          if (this.mgTimer <= 0) {
+            if (this.spendPower(c.loadout.primary)) {
+              this.firePrimaryBullets();
+              this.mgBurstRemaining--;
+              this.mgTimer = Math.min(c.mgInterval, 0.08) * this.stats.reloadMul;
+              if (this.mgBurstRemaining <= 0) {
+                // Inter-burst pause / delay between 3-round bursts
+                this.mgBurstPauseTimer = 0.26 * this.stats.reloadMul;
+              }
+              if (!noHeat) this.mgHeat = Math.min(1, this.mgHeat + c.mgHeatPerShot * this.stats.mgHeatMul);
+              if (this.mgHeat >= 1) this.mgOverheat = true;
+            } else {
+              this.mgBurstRemaining = 0;
+            }
+          }
+        }
+      }
+    } else {
+      if (this.mgBurstRemaining <= 0) {
+        this.mgBurstPauseTimer = 0;
       }
     }
     // Cooling happens only after releasing the trigger, or during a full overheat.
@@ -1341,6 +1372,7 @@ export class Game {
       this.mgHeat = Math.max(0, this.mgHeat - dt * (this.mgOverheat ? 0.3 : 0.5));
       if (this.mgOverheat && this.mgHeat <= 0.15) this.mgOverheat = false;
     }
+    // Secondary weapon auto-fires continuously with proper gap as long as held & powered
     if (c.loadout.secondary === 'cannon') {
       if (secHeld && this.cannonCd <= 0 && this.spendPower(c.loadout.secondary)) this.fireCannon();
     } else if (c.loadout.secondary === 'cryoball') {
@@ -1377,7 +1409,13 @@ export class Game {
    */
   private spendPower(weapon: WeaponId): boolean {
     const socket = socketForWeapon(weapon, this.cfg.loadout);
-    const cost = socket ? this.cfg.powerCost[socket] : 0;
+    let cost = socket ? this.cfg.powerCost[socket] : 0;
+    // Primary and secondary weapons consume more energy so sustained firing is limited by the energy bar
+    if (socket === 'primary') {
+      cost = Math.max(cost * 3.6, 3.2);
+    } else if (socket === 'secondary') {
+      cost = Math.max(cost * 2.4, 25);
+    }
     if (cost <= 0) return true;
     if (this.power < cost) {
       if (this.powerWarnCd <= 0) {
@@ -1505,7 +1543,7 @@ export class Game {
     this.shotCounter++;
     const over = this.stats.overcharge > 0 && this.shotCounter % 5 === 0;
     const dmgBuff = this.buffT.overcharge > 0 ? 1.35 : 1;
-    this.cannonCd = c.cannonReload * this.stats.reloadMul;
+    this.cannonCd = Math.min(c.cannonReload, 0.68) * this.stats.reloadMul;
     this.reloading = true;
     this.camera.updateMatrixWorld();
     const muzzle = this.camera.localToWorld(this.muzzleLocal('cannon').clone());
@@ -2935,6 +2973,7 @@ export class Game {
 
   private damagePlayer(dmgIn: number, from: THREE.Vector3) {
     if (!this.alive) return;
+    this.lastEnemyCombatTime = this.time;
     let dmg = dmgIn * (1 - this.stats.armor);
     if (this.stats.reactive > 0 && this.time - this.reactiveCd > 4) {
       this.reactiveCd = this.time;
@@ -3751,6 +3790,7 @@ export class Game {
 
   private damageEnemy(e: Enemy, dmgIn: number) {
     if (!e.alive) return;
+    this.lastEnemyCombatTime = this.time;
     let dmg = dmgIn;
     if (!e.aware) {
       // ambush: hitting an unaware unit deals +60%
@@ -4313,11 +4353,25 @@ export class Game {
       const r = rel(d.pos.x, d.pos.z);
       if (r.d < 260) blips.push({ x: r.x, y: r.y, kind: 'drop', size: d.falling ? 4.5 : 3.5 });
     }
+    const showEdgeEnemies = (this.time - this.lastEnemyCombatTime > 3.0) || this.enemies.length <= 4;
     let boss: HudState['boss'];
     for (const e of this.enemies) {
+      if (!e.alive) continue;
       const r = rel(e.pos.x, e.pos.z);
-      if (r.d < 180 || e.boss) blips.push({ x: r.x, y: r.y, kind: e.boss ? 'boss' : e.kind, alert: e.aware });
       if (e.boss) boss = { name: e.cfg.name, hp: e.hp / e.maxHp };
+      if (r.d < 180) {
+        blips.push({ x: r.x, y: r.y, kind: e.boss ? 'boss' : e.kind, alert: e.aware, dist: r.d });
+      } else if (showEdgeEnemies || e.boss) {
+        const inv = 1 / Math.max(1, r.d);
+        blips.push({
+          x: r.x * inv * 174,
+          y: r.y * inv * 174,
+          kind: e.boss ? 'boss' : e.kind,
+          alert: true,
+          edge: true,
+          dist: r.d,
+        });
+      }
     }
     // target under the crosshair
     let target: HudTarget | undefined;
@@ -4334,6 +4388,7 @@ export class Game {
         target = { name: e.cfg.name.toUpperCase(), hp: e.hp / e.maxHp, dist: d, status: e.stunTime > 0 ? 'FROZEN' : e.brittleTime > 0 ? 'BRITTLE' : e.slowTime > 0 ? 'CHILLED' : e.burnTime > 0 ? 'BURNING' : undefined };
       }
     }
+    if (target) this.lastEnemyCombatTime = this.time;
     const s = this.stats;
     const pri = this.cfg.loadout.primary;
     const sec = this.cfg.loadout.secondary;
