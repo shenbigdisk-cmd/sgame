@@ -3348,17 +3348,17 @@ export class Game {
     const { bar, fg } = createBar();
     if (kind === 'heavy') bar.scale.setScalar(boss ? 2.4 : 1.6);
     const yaw = Math.atan2(this.pos.x - x, this.pos.z - z);
-    const scale = (1 + (this.wave - 1) * 0.09) * (boss ? 3.1 : 1) * (elite ? 2.1 : 1);
+    const scale = (1 + (this.wave - 1) * 0.065) * (boss ? 1.85 : 1) * (elite ? 1.7 : 1);
     const e: Enemy = {
       kind,
-      cfg: boss ? { ...cfg, name: BOSS_NAME, score: cfg.score * 4, cooldown: cfg.cooldown * 0.7, burstCount: cfg.burstCount + 2, speed: cfg.speed * 1.15 } : elite ? { ...cfg, name: `ELITE ${cfg.name}`, score: Math.round(cfg.score * 2.5), cooldown: cfg.cooldown * 0.85 } : cfg,
+      cfg: boss ? { ...cfg, name: BOSS_NAME, score: cfg.score * 4, cooldown: cfg.cooldown * 0.85, burstCount: cfg.burstCount + 1, speed: cfg.speed * 1.05 } : elite ? { ...cfg, name: `ELITE ${cfg.name}`, score: Math.round(cfg.score * 2.5), cooldown: cfg.cooldown * 0.85 } : cfg,
       group: built.group,
       pos: new THREE.Vector3(x, heightAt(x, z), z),
       yaw,
       aimYaw: yaw,
       hp: cfg.hp * scale,
       maxHp: cfg.hp * scale,
-      dmgMul: (1 + (this.wave - 1) * 0.055) * (boss ? 1.25 : 1),
+      dmgMul: (1 + (this.wave - 1) * 0.04) * (boss ? 1.10 : 1),
       boss,
       elite,
       lockTimer: 0,
@@ -3492,7 +3492,7 @@ export class Game {
       m.material = this.mats.sniperShell;
       m.scale.set(0.7, 0.7, 2.5);
     } else if (e.kind === 'mech') this.spawnProjectile('enemy', 'bullet', muzzle, dir, 3.5 * dm, 0, 0, 1.6, 0);
-    else this.spawnProjectile('enemy', 'rocket', muzzle, dir, 30 * dm, 9, 0, 7, 1.1);
+    else this.spawnProjectile('enemy', 'rocket', muzzle, dir, 22 * dm, 9, 0, 5.5, 0.85);
     this.muzzleFlash(muzzle, this.tmpA.copy(dir).normalize(), e.kind === 'mech' ? 0.3 : 0.8);
     this.audio.playEnemyShot(e.kind, muzzle.distanceTo(this.pos), this.panFor(muzzle.x, muzzle.z));
   }
@@ -3965,8 +3965,8 @@ export class Game {
       this.victoryPending = true;
       this.victoryTimer = STAGE_CLEAR_DELAY;
       this.dropTimer = Math.min(this.dropTimer, 10);
-      // field repairs between waves
-      this.hp = Math.min(this.maxHp, this.hp + this.maxHp * 0.2);
+      // field repairs between waves: guarantee at least 50% max HP, or +35% max HP
+      this.hp = Math.min(this.maxHp, Math.max(this.hp + this.maxHp * 0.35, this.maxHp * 0.5));
       this.shieldHp = this.stats.shieldMax;
       this.power = this.cfg.powerCapacity;
       this.shieldBroken = false;
@@ -4028,7 +4028,7 @@ export class Game {
     }
     this.waveTag = LABEL[tag];
     const base = Math.min(20, 2 + Math.floor(this.wave * 1.45));
-    let count = base - (bossWave ? 2 : 0);
+    let count = bossWave ? Math.max(2, Math.floor(base * 0.35)) : base;
     if (tag === 'swarm') count = Math.min(24, Math.round(base * 1.4));
     if (tag === 'armor') count = Math.max(3, Math.round(base * 0.75));
     const pickKind = (): EnemyKind => {
@@ -4071,6 +4071,12 @@ export class Game {
     if (bossWave) {
       this.spawnEnemy('heavy', undefined, undefined, true);
       this.setMessage(`STAGE ${this.wave}  —  ${BOSS_NAME} ENTERS THE ARENA`);
+      this.addFeed('PRIORITY TARGET: HEAVY TITAN CHASSIS');
+      // Emergency tactical supply drop for the pilot entering a boss duel
+      const a = rand(0, TWO_PI);
+      const px = clamp(this.pos.x + Math.sin(a) * 22, -this.arenaR + 24, this.arenaR - 24);
+      const pz = clamp(this.pos.z + Math.cos(a) * 22, -this.arenaR + 24, this.arenaR - 24);
+      this.spawnDrop(px, pz);
     } else if (this.waveTag) {
       this.setMessage(`STAGE ${this.wave}  —  ${this.waveTag}`);
     } else {
