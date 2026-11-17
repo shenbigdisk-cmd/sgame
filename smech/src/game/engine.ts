@@ -1414,7 +1414,12 @@ export class Game {
     if (socket === 'primary') {
       cost = Math.max(cost * 3.6, 3.2);
     } else if (socket === 'secondary') {
-      cost = Math.max(cost * 2.4, 25);
+      if (weapon === 'flame') {
+        // Fire / flamethrower ticks rapidly every 0.12s; use less energy per tick for smooth burn
+        cost = Math.max(this.cfg.powerCost.secondary * 0.7, 1.4);
+      } else {
+        cost = Math.max(cost * 2.4, 25);
+      }
     }
     if (cost <= 0) return true;
     if (this.power < cost) {

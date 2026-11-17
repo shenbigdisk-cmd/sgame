@@ -158,7 +158,7 @@ export default function MechBuilder({ garage, onBuild, onCancel, accent }: Props
                     </strong>
                     {comp && (
                       <span className="builder-slot-weight">
-                        {comp.weight.toFixed(1)}T {comp.cost > 0 ? `· ${formatCredits(comp.cost)} CR` : '· BASE'}
+                        {comp.weight.toFixed(1)}T · {formatCredits(comp.cost)} CR
                       </span>
                     )}
                   </div>
@@ -247,7 +247,7 @@ export default function MechBuilder({ garage, onBuild, onCancel, accent }: Props
                       </span>
                     </div>
                     <span className="builder-comp-cost">
-                      {comp.cost > 0 ? `${formatCredits(comp.cost)} CR` : 'INCLUDED'}
+                      {formatCredits(comp.cost)} CR
                     </span>
                   </div>
 

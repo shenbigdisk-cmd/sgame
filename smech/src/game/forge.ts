@@ -158,8 +158,14 @@ export interface ComponentDef {
 }
 
 /* ------------------------------------------------------------------ *
- * Frames — free, always available
+ * Frames — base chassis for mech construction
  * ------------------------------------------------------------------ */
+
+const FRAME_COSTS: Record<VehicleType, number> = {
+  warden: 250,
+  pyre: 450,
+  glacier: 600,
+};
 
 const FRAMES: ComponentDef[] = (['warden', 'pyre', 'glacier'] as VehicleType[]).map((id) => {
   const v = VEHICLES[id];
@@ -168,7 +174,7 @@ const FRAMES: ComponentDef[] = (['warden', 'pyre', 'glacier'] as VehicleType[]).
     slot: 'frame',
     name: `${v.shortName} FRAME`,
     desc: `${v.role}. ${v.description}`,
-    cost: 0,
+    cost: FRAME_COSTS[id],
     icon: 'armor',
     weight: v.mass,
     frame: id,
@@ -187,7 +193,7 @@ const WEAPON_COMPONENTS: ComponentDef[] = [
     slot: 'primary',
     name: 'ROTARY AUTOCANNONS',
     desc: 'Twin rapid-fire guns. Reliable at mid range.',
-    cost: 0,
+    cost: 200,
     icon: 'autocannon',
     weight: 1.6,
     power: 0.9,
@@ -298,7 +304,7 @@ const WEAPON_COMPONENTS: ComponentDef[] = [
     slot: 'secondary',
     name: 'TWIN 60MM CANNONS',
     desc: 'Honest high-explosive shells.',
-    cost: 0,
+    cost: 250,
     icon: 'cannon',
     weight: 2.8,
     power: 11,
@@ -421,21 +427,21 @@ const WEAPON_COMPONENTS: ComponentDef[] = [
 
 const SYSTEMS: ComponentDef[] = [
   // ---- armour ----
-  { id: 'h_service', slot: 'armour', name: 'SERVICE PLATING', desc: 'Standard hull plating. Nothing more.', cost: 0, icon: 'armor', model: 'h_service', weight: 1.2, mods: {} },
+  { id: 'h_service', slot: 'armour', name: 'SERVICE PLATING', desc: 'Standard hull plating. Nothing more.', cost: 150, icon: 'armor', model: 'h_service', weight: 1.2, mods: {} },
   { id: 'h_lattice', slot: 'armour', name: 'LATTICE ARMOUR', desc: 'Welded lattice. +40 hull for 1.4 t.', cost: 520, icon: 'armor', model: 'h_lattice', weight: 2.6, mods: { maxHp: 40 } },
   { id: 'h_ablation', slot: 'armour', name: 'ABLATIVE CARAPACE', desc: 'Sacrificial layers. +85 hull for 3.2 t.', cost: 880, icon: 'armor', model: 'h_ablation', weight: 4.4, mods: { maxHp: 85 } },
   { id: 'h_ballistic', slot: 'armour', name: 'BALLISTIC SHELL', desc: 'Sacrificial ablative block hung outside the frame. Soaks one huge hit.', cost: 640, icon: 'armor', model: 'h_ballistic', weight: 3.0, mods: { maxHp: 55 } },
   { id: 'h_reactive', slot: 'armour', name: 'REACTIVE SKIN', desc: 'A reactive blanket that swells when struck. +90 hull and +30 shield.', cost: 1080, icon: 'armor', model: 'h_reactive', weight: 4.0, mods: { maxHp: 90, shield: 30 } },
 
   // ---- reactor ----
-  { id: 'c_standard', slot: 'reactor', name: 'STANDARD CORE', desc: 'The frame reactor as it left the yard.', cost: 0, icon: 'battery', model: 'c_standard', weight: 3.0, powerCapacity: 90, powerOutput: 26, mods: {} },
+  { id: 'c_standard', slot: 'reactor', name: 'STANDARD CORE', desc: 'The frame reactor as it left the yard.', cost: 200, icon: 'battery', model: 'c_standard', weight: 3.0, powerCapacity: 90, powerOutput: 26, mods: {} },
   { id: 'c_fused', slot: 'reactor', name: 'FUSED CAPACITOR', desc: 'A salvaged fusion cell. +35 shield, a deeper buffer.', cost: 460, icon: 'battery', model: 'c_fused', weight: 3.8, powerCapacity: 140, powerOutput: 38, mods: { shield: 35 } },
   { id: 'c_titan', slot: 'reactor', name: 'TITAN REACTOR', desc: 'Foundry-grade core. +70 shield and a grid that can feed anything.', cost: 840, icon: 'battery', model: 'c_titan', weight: 5.4, powerCapacity: 210, powerOutput: 58, mods: { shield: 70 } },
   { id: 'c_solar', slot: 'reactor', name: 'SOLAR WEAVE', desc: 'A skin of photocells. No burst power, but it never stops trickling.', cost: 380, icon: 'battery', model: 'c_solar', weight: 1.8, powerCapacity: 170, powerOutput: 44, mods: {} },
   { id: 'c_volatile', slot: 'reactor', name: 'VOLATILE CELL', desc: 'A cracked fusion cell that dumps its whole buffer in one glorious second.', cost: 720, icon: 'battery', model: 'c_volatile', weight: 2.6, powerCapacity: 300, powerOutput: 62, mods: { shield: 45 } },
 
   // ---- drive ----
-  { id: 'd_standard', slot: 'drive', name: 'STANDARD STRUTS', desc: 'Factory legs. Honest and unremarkable.', cost: 0, icon: 'gear', model: 'd_standard', weight: 2.4, mods: {} },
+  { id: 'd_standard', slot: 'drive', name: 'STANDARD STRUTS', desc: 'Factory legs. Honest and unremarkable.', cost: 180, icon: 'gear', model: 'd_standard', weight: 2.4, mods: {} },
   { id: 'd_sprint', slot: 'drive', name: 'SPRINT SERVOS', desc: 'Light servos. Half a tonne lighter and far quicker to answer.', cost: 420, icon: 'gear', model: 'd_sprint', weight: 1.6, mods: { maxSpeed: 2.4, accel: 3 } },
   { id: 'd_atlas', slot: 'drive', name: 'ATLAS LEGS', desc: 'Heavy stabilisers. Slower to turn, +30 hull, steadier on the move.', cost: 800, icon: 'gear', model: 'd_atlas', weight: 3.8, mods: { maxSpeed: 1.2, accel: 4, turnRate: 0.2, maxHp: 30 } },
   { id: 'd_skimmer', slot: 'drive', name: 'SKIMMER LEGS', desc: 'Ground-effect skids. Fast in a straight line, vague in a turn.', cost: 560, icon: 'gear', model: 'd_skimmer', weight: 2.0, mods: { maxSpeed: 3.6, accel: 5, turnRate: -0.15 } },
@@ -541,11 +547,11 @@ export const PRESETS: Preset[] = [
     id: 'glacier',
     name: 'GLACIER-7',
     frame: 'glacier',
-    blurb: 'Coil repeater, cryo lance and a railgun. Light, quick and cold.',
+    blurb: 'Coil repeater, cryo grenade and a railgun. Light, quick and cold.',
     equipped: {
       frame: 'f_glacier',
       primary: 'p_coil',
-      secondary: 's_cryo',
+      secondary: 's_cryoball',
       specialQ: 'x_rail',
       specialE: 'x_smoke',
       armour: 'h_service',

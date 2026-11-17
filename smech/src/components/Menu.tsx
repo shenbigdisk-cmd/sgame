@@ -130,14 +130,6 @@ export default function Menu({ onStart, settings, onSettings, records, garage, o
                   </div>
                 </div>
               ))}
-              <div className="loadout-weapon loadout-note" style={{ gridColumn: '1 / -1' }}>
-                <div className="loadout-key" style={{ opacity: 0.4 }}>+</div>
-                <div>
-                  <strong>BUILD NEW MECH</strong>
-                  <span className="slot-tag">CUSTOM DESIGN</span>
-                  <span>Assemble custom combat frames with weapons, reactors, and thrusters using the BUILD NEW MECH button below.</span>
-                </div>
-              </div>
             </div> : tab === 'legend' ? <div className="hangar-panel legend-panel" role="tabpanel" aria-label="The legend">
               <p>{vehicle.backstory}</p>
               <p className="chassis-style"><span>HOW TO FIGHT:</span> {vehicle.style}</p>

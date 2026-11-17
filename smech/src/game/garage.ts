@@ -508,13 +508,7 @@ export function generateCoolMechName(): string {
 /** Compute the total credit cost required to construct this mech from components. */
 export function calculateBuildCost(equipped: Partial<Record<ComponentSlot, string>>): number {
   let cost = 0;
-  const frame = frameOf(equipped);
-  if (frame === 'warden') cost += 200;
-  else if (frame === 'pyre') cost += 450;
-  else if (frame === 'glacier') cost += 600;
-
   for (const slot of SLOTS) {
-    if (slot === 'frame') continue;
     const id = equipped[slot];
     if (id) {
       const comp = getComponent(id);
