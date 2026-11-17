@@ -235,14 +235,14 @@ class Pool {
   n = 0;
   private cap: number;
   private o = new THREE.Object3D();
-  constructor(scene: THREE.Scene, geo: THREE.BufferGeometry, mat: THREE.Material, cap: number, shadows = true) {
+  constructor(parent: THREE.Object3D, geo: THREE.BufferGeometry, mat: THREE.Material, cap: number, shadows = true) {
     this.cap = cap;
     this.mesh = new THREE.InstancedMesh(geo, mat, cap);
     this.mesh.count = 0;
     this.mesh.frustumCulled = false;
     this.mesh.castShadow = shadows;
     this.mesh.receiveShadow = true;
-    scene.add(this.mesh);
+    parent.add(this.mesh);
   }
   add(x: number, y: number, z: number, sx: number, sy: number, sz: number, ry = 0, rx = 0, rz = 0, color?: THREE.Color) {
     if (this.n >= this.cap) return false;
@@ -290,7 +290,7 @@ export interface MapResult {
   animate: (dt: number, t: number) => void;
 }
 
-export function buildMap(scene: THREE.Scene, obstacles: Obstacle[], makeWreck: () => THREE.Group, layout: Layout): MapResult {
+export function buildMap(parent: THREE.Object3D, obstacles: Obstacle[], makeWreck: () => THREE.Group, layout: Layout): MapResult {
   const theme = layout.theme;
   const fires: THREE.Vector3[] = [];
   const barrels: ExplosiveBarrel[] = [];
@@ -332,7 +332,7 @@ export function buildMap(scene: THREE.Scene, obstacles: Obstacle[], makeWreck: (
   tgeo.computeVertexNormals();
   const ground = new THREE.Mesh(tgeo, new THREE.MeshStandardMaterial({ map: makeGroundTexture(theme.ground), vertexColors: true, roughness: 1, metalness: 0 }));
   ground.receiveShadow = true;
-  scene.add(ground);
+  parent.add(ground);
 
   // ---- water -------------------------------------------------------------
   const waterCanvas = document.createElement('canvas');
@@ -368,7 +368,7 @@ export function buildMap(scene: THREE.Scene, obstacles: Obstacle[], makeWreck: (
     shore.rotation.x = -Math.PI / 2;
     shore.scale.set(w.rx, w.rz, 1);
     shore.position.set(w.x, w.level + 0.02, w.z);
-    scene.add(water, shore);
+    parent.add(water, shore);
   }
 
   // ---- roads -------------------------------------------------------------
@@ -409,7 +409,7 @@ export function buildMap(scene: THREE.Scene, obstacles: Obstacle[], makeWreck: (
     rgeo.computeVertexNormals();
     const road = new THREE.Mesh(rgeo, new THREE.MeshStandardMaterial({ map: makeRoadTexture(), roughness: 0.95, side: THREE.DoubleSide, polygonOffset: true, polygonOffsetFactor: -3, polygonOffsetUnits: -3 }));
     road.receiveShadow = true;
-    scene.add(road);
+    parent.add(road);
   }
 
   // ---- distant mountains -------------------------------------------------
@@ -423,7 +423,7 @@ export function buildMap(scene: THREE.Scene, obstacles: Obstacle[], makeWreck: (
     m.scale.set(rand(100, 190), h, rand(100, 190));
     m.position.set(Math.sin(a) * r, h / 2 - 4, Math.cos(a) * r);
     m.rotation.y = rand(0, TWO_PI);
-    scene.add(m);
+    parent.add(m);
   }
 
   // ---- perimeter fence (moves outwards as the map expands) --------------
@@ -453,12 +453,12 @@ export function buildMap(scene: THREE.Scene, obstacles: Obstacle[], makeWreck: (
     new THREE.MeshBasicMaterial({ map: fenceTex, color: 0x7ee8ff, transparent: true, opacity: 0.42, side: THREE.DoubleSide, depthWrite: false, blending: THREE.AdditiveBlending, fog: false }),
   );
   fence.frustumCulled = false;
-  scene.add(fence);
+  parent.add(fence);
   const PYLONS = 56;
   const pylons = new THREE.InstancedMesh(new THREE.BoxGeometry(1.1, 1, 1.1), new THREE.MeshStandardMaterial({ color: 0x3b4650, roughness: 0.5, metalness: 0.7, emissive: 0x2ad0ff, emissiveIntensity: 0.4 }), PYLONS);
   pylons.frustumCulled = false;
   pylons.castShadow = true;
-  scene.add(pylons);
+  parent.add(pylons);
   const po = new THREE.Object3D();
   const setRadius = (r: number) => {
     for (let i = 0; i <= FENCE_SEG; i++) {
@@ -497,17 +497,17 @@ export function buildMap(scene: THREE.Scene, obstacles: Obstacle[], makeWreck: (
   const beaconMat = new THREE.MeshStandardMaterial({ color: 0xff2020, emissive: 0xff2020, emissiveIntensity: 4 });
   const facades = ['#8b857a', '#7a756c', '#9a9184', '#6f6a63', '#857868', '#7c8088'].map(makeFacadeTextures);
 
-  const rocks = new Pool(scene, new THREE.DodecahedronGeometry(1, 1), new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 1, flatShading: true }), 640);
+  const rocks = new Pool(parent, new THREE.DodecahedronGeometry(1, 1), new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 1, flatShading: true }), 640);
   const rockColors = [0x75685a, 0x6b6256, 0x84766a, 0x7a6a58, 0x66605a].map((c) => new THREE.Color(c));
   const barkMat = new THREE.MeshStandardMaterial({ color: 0x3a2e24, roughness: 1 });
-  const trunks = new Pool(scene, new THREE.CylinderGeometry(0.18, 0.35, 1, 5), barkMat, 180);
-  const branches = new Pool(scene, new THREE.CylinderGeometry(0.18, 0.35, 1, 5), barkMat, 720, false);
-  const reeds = new Pool(scene, new THREE.ConeGeometry(0.1, 1, 4), new THREE.MeshStandardMaterial({ color: 0x7d7a45, roughness: 1 }), 900, false);
-  const berms = new Pool(scene, new THREE.BoxGeometry(1, 1, 1), new THREE.MeshStandardMaterial({ color: 0x9c8a62, roughness: 1 }), 160);
-  const blocks = new Pool(scene, new THREE.BoxGeometry(1, 1, 1), concrete, 60);
-  const containers = new Pool(scene, new THREE.BoxGeometry(12, 2.6, 2.5), new THREE.MeshStandardMaterial({ map: makeContainerTexture(), color: 0xffffff, roughness: 0.7, metalness: 0.35 }), 300);
-  const lampPoles = new Pool(scene, new THREE.CylinderGeometry(0.12, 0.16, 1, 6), metal, 160, false);
-  const lampHeads = new Pool(scene, new THREE.SphereGeometry(0.4, 8, 6), new THREE.MeshStandardMaterial({ color: 0xffe2a8, emissive: 0xffcf80, emissiveIntensity: 1.3 + theme.windowGlow * 2 }), 160, false);
+  const trunks = new Pool(parent, new THREE.CylinderGeometry(0.18, 0.35, 1, 5), barkMat, 180);
+  const branches = new Pool(parent, new THREE.CylinderGeometry(0.18, 0.35, 1, 5), barkMat, 720, false);
+  const reeds = new Pool(parent, new THREE.ConeGeometry(0.1, 1, 4), new THREE.MeshStandardMaterial({ color: 0x7d7a45, roughness: 1 }), 900, false);
+  const berms = new Pool(parent, new THREE.BoxGeometry(1, 1, 1), new THREE.MeshStandardMaterial({ color: 0x9c8a62, roughness: 1 }), 160);
+  const blocks = new Pool(parent, new THREE.BoxGeometry(1, 1, 1), concrete, 60);
+  const containers = new Pool(parent, new THREE.BoxGeometry(12, 2.6, 2.5), new THREE.MeshStandardMaterial({ map: makeContainerTexture(), color: 0xffffff, roughness: 0.7, metalness: 0.35 }), 300);
+  const lampPoles = new Pool(parent, new THREE.CylinderGeometry(0.12, 0.16, 1, 6), metal, 160, false);
+  const lampHeads = new Pool(parent, new THREE.SphereGeometry(0.4, 8, 6), new THREE.MeshStandardMaterial({ color: 0xffe2a8, emissive: 0xffcf80, emissiveIntensity: 1.3 + theme.windowGlow * 2 }), 160, false);
   const containerColors = [0x8a3324, 0x2f5f8a, 0x3f6e3a, 0xb8642a, 0x6b6b6b, 0x7a2f4f, 0x2a7070].map((c) => new THREE.Color(c));
   const sandbagColor = new THREE.Color(0xffffff);
 
@@ -569,7 +569,7 @@ export function buildMap(scene: THREE.Scene, obstacles: Obstacle[], makeWreck: (
     const y = heightAt(x, z);
     group.position.set(x, y, z);
     setShadows(group);
-    scene.add(group);
+    parent.add(group);
     barrels.push({ group, pos: new THREE.Vector3(x, y + 1.05, z), hp: 20, destroyed: false });
   };
   const barrelGeo = new THREE.CylinderGeometry(0.68, 0.72, 2.1, 12);
@@ -588,7 +588,7 @@ export function buildMap(scene: THREE.Scene, obstacles: Obstacle[], makeWreck: (
     const y = heightAt(x, z);
     g.position.set(x, y - rand(0.2, 0.4), z);
     g.rotation.set(rand(-0.12, 0.12), rand(0, TWO_PI), rand(-0.15, 0.15));
-    scene.add(g);
+    parent.add(g);
     addCircle(x, z, 3.7, 2.8, y);
     if (burning) fires.push(new THREE.Vector3(x, y + 2.2, z));
   };
@@ -642,7 +642,7 @@ export function buildMap(scene: THREE.Scene, obstacles: Obstacle[], makeWreck: (
     }
     g.position.set(x, y0, z);
     setShadows(g);
-    scene.add(g);
+    parent.add(g);
     addBox(x, z, w / 2 + 0.3, d / 2 + 0.3, h + 1, 0, y0);
     return true;
   };
@@ -661,7 +661,7 @@ export function buildMap(scene: THREE.Scene, obstacles: Obstacle[], makeWreck: (
     wall.position.set(x + rand(-3, 3), y + 2.5, z + 6);
     wall.rotation.y = rand(-0.4, 0.4);
     wall.castShadow = wall.receiveShadow = true;
-    scene.add(wall);
+    parent.add(wall);
     addCircle(x, z, 6, 3, y);
     if (chance(0.5)) fires.push(new THREE.Vector3(x + rand(-4, 4), y + 0.5, z + rand(-4, 4)));
   };
@@ -746,7 +746,7 @@ export function buildMap(scene: THREE.Scene, obstacles: Obstacle[], makeWreck: (
       const y = baseY(wx, wz, 20) - 0.3;
       g.position.set(wx, y, wz);
       setShadows(g);
-      scene.add(g);
+      parent.add(g);
       addBox(wx, wz, 23, 13, 17, 0, y);
       break;
     }
@@ -770,7 +770,7 @@ export function buildMap(scene: THREE.Scene, obstacles: Obstacle[], makeWreck: (
       const y = heightAt(tx, tz) - 0.2;
       g.position.set(tx, y, tz);
       setShadows(g);
-      scene.add(g);
+      parent.add(g);
       addCircle(tx, tz, tr, 11, y);
       if (made === 0) fires.push(new THREE.Vector3(tx + tr + 3, y + 0.5, tz));
       made++;
@@ -797,7 +797,7 @@ export function buildMap(scene: THREE.Scene, obstacles: Obstacle[], makeWreck: (
       crane.add(trolley, lamp);
       crane.position.set(d.x - d.r * 0.2, heightAt(d.x, d.z), d.z);
       setShadows(crane);
-      scene.add(crane);
+      parent.add(crane);
     }
     barrelCluster(d.x + rand(-d.r * 0.4, d.r * 0.4), d.z + rand(-d.r * 0.4, d.r * 0.4), 3);
   };
@@ -826,7 +826,7 @@ export function buildMap(scene: THREE.Scene, obstacles: Obstacle[], makeWreck: (
       top.rotation.set(rand(-0.2, 0.2), rot, rand(-0.25, 0.25));
       setShadows(wall);
       setShadows(top);
-      scene.add(wall, top);
+      parent.add(wall, top);
       addBox(x, z, w / 2, 0.8, hgt, rot, y);
       made++;
     }
@@ -880,7 +880,7 @@ export function buildMap(scene: THREE.Scene, obstacles: Obstacle[], makeWreck: (
         g.position.set(bx, by - 0.4, bz);
         g.rotation.y = rot;
         setShadows(g);
-        scene.add(g);
+        parent.add(g);
         addBox(bx, bz, 6, 4, 3.4, rot, by - 0.4);
       }
     }
@@ -972,7 +972,7 @@ export function buildMap(scene: THREE.Scene, obstacles: Obstacle[], makeWreck: (
       const y = heightAt(tx, tz);
       g.position.set(tx, y, tz);
       setShadows(g);
-      scene.add(g);
+      parent.add(g);
       addCircle(tx, tz, 3.2, 14, y);
     }
     // tents
@@ -987,7 +987,7 @@ export function buildMap(scene: THREE.Scene, obstacles: Obstacle[], makeWreck: (
       tent.position.set(x, y + 1.9, z);
       tent.rotation.y = rand(0, TWO_PI) + Math.PI / 4;
       setShadows(tent);
-      scene.add(tent);
+      parent.add(tent);
       addCircle(x, z, 3.4, 3.6, y);
       made++;
     }
@@ -1007,7 +1007,7 @@ export function buildMap(scene: THREE.Scene, obstacles: Obstacle[], makeWreck: (
       const y = heightAt(rx, rz);
       g.position.set(rx, y, rz);
       setShadows(g);
-      scene.add(g);
+      parent.add(g);
       addCircle(rx, rz, 1.3, 7, y);
       radarDishes.push(dishPivot);
     }
@@ -1048,7 +1048,7 @@ export function buildMap(scene: THREE.Scene, obstacles: Obstacle[], makeWreck: (
       m.position.set(x, y + h / 2 - 1, z);
       m.rotation.y = rand(0, TWO_PI);
       setShadows(m);
-      scene.add(m);
+      parent.add(m);
       addCircle(x, z, r * 0.95, h, y);
       made++;
     }
@@ -1079,7 +1079,7 @@ export function buildMap(scene: THREE.Scene, obstacles: Obstacle[], makeWreck: (
       shards.add(shard);
     }
     shards.position.set(d.x, cy, d.z);
-    scene.add(shards);
+    parent.add(shards);
     addCircle(d.x, d.z, 4.5, 8, cy);
     fires.push(new THREE.Vector3(d.x + 5, cy + 1.2, d.z));
     for (let i = 0, made = 0; i < 40 && made < 5; i++) {
@@ -1134,7 +1134,7 @@ export function buildMap(scene: THREE.Scene, obstacles: Obstacle[], makeWreck: (
     const my = heightAt(0, 26);
     g.position.set(0, my, 26);
     setShadows(g);
-    scene.add(g);
+    parent.add(g);
     addCircle(0, 26, 4.6, 8, my);
     for (let k = 0; k < 4; k++) {
       const ac = (k * Math.PI) / 2 + 0.35;
@@ -1205,7 +1205,7 @@ export function buildMap(scene: THREE.Scene, obstacles: Obstacle[], makeWreck: (
     g.position.set(x, y, z);
     g.rotation.y = rand(0, TWO_PI);
     setShadows(g);
-    scene.add(g);
+    parent.add(g);
     addCircle(x, z, 2, 32, y);
     const speed = rand(0.5, 1.1);
     animators.push((dt) => {
@@ -1238,7 +1238,7 @@ export function buildMap(scene: THREE.Scene, obstacles: Obstacle[], makeWreck: (
       g.position.set(x, y, z);
       g.rotation.y = Math.atan2(bx - ax, bz - az) + Math.PI / 2;
       setShadows(g);
-      scene.add(g);
+      parent.add(g);
       const cur = [-4, 0, 4].map((off) => {
         const lx = Math.cos(g.rotation.y) * off;
         const lz = -Math.sin(g.rotation.y) * off;
@@ -1264,7 +1264,7 @@ export function buildMap(scene: THREE.Scene, obstacles: Obstacle[], makeWreck: (
     if (far.length >= 2) pylonLine(far[0].x + 20, far[0].z + 14, far[1].x - 20, far[1].z - 14);
     if (far.length >= 4) pylonLine(far[2].x + 18, far[2].z - 12, far[3].x - 16, far[3].z + 12);
   }
-  if (cablePts.length) scene.add(new THREE.LineSegments(new THREE.BufferGeometry().setFromPoints(cablePts), cableMat));
+  if (cablePts.length) parent.add(new THREE.LineSegments(new THREE.BufferGeometry().setFromPoints(cablePts), cableMat));
 
   // dead trees (instanced) and scattered fuel drums
   for (let i = 0, made = 0; i < 300 && made < 150; i++) {

@@ -1,8 +1,8 @@
 import { useState } from 'react';
 import type { ControlMode, VehicleType, WeaponId } from '../game/types';
-import { VEHICLE_ORDER, VEHICLES, WEAPON_COUNT, WEAPON_INFO } from '../game/vehicles';
-import { buildConfig, frameOf } from '../game/forge';
-import type { GarageState } from '../game/garage';
+import { VEHICLE_ORDER, VEHICLES, WEAPON_INFO } from '../game/vehicles';
+import { PRESETS, buildConfig, frameOf } from '../game/forge';
+import { applyPreset, fitOutCost, fitOutPreset, missingParts, type GarageState } from '../game/garage';
 import { randomSeedCode } from '../game/world';
 import type { Settings } from '../game/settings';
 import type { RunRecord } from '../game/records';
@@ -48,7 +48,7 @@ export default function Menu({ onStart, settings, onSettings, records, garage, o
   const build = buildConfig(garage.equipped);
   const loadout = (Object.keys(build.loadout) as (keyof typeof build.loadout)[]).map((slot) => ({
     slot,
-    id: build.loadout[slot] as WeaponId,
+    id: build.loadout[slot] as WeaponId | null,
   }));
 
   return (
@@ -100,13 +100,13 @@ export default function Menu({ onStart, settings, onSettings, records, garage, o
             </div>
             {tab === 'arsenal' ? <div className="hangar-panel loadout-weapons loadout-weapons-4" role="tabpanel" aria-label="Arsenal">
               {loadout.map(({ slot, id }) => (
-                <div className="loadout-weapon" key={slot}>
+                <div className={`loadout-weapon ${id ? '' : 'is-empty'}`} key={slot}>
                   <div className="loadout-key">{SLOT_KEYS[slot]}</div>
-                  <Icon name={WEAPON_INFO[id].icon} size={19} />
+                  <Icon name={id ? WEAPON_INFO[id].icon : 'lock'} size={19} />
                   <div>
-                    <strong>{WEAPON_INFO[id].name}</strong>
+                    <strong>{id ? WEAPON_INFO[id].name : 'EMPTY SOCKET'}</strong>
                     <span className="slot-tag">{SLOT_LABELS[slot]}</span>
-                    <span>{WEAPON_INFO[id].description}</span>
+                    <span>{id ? WEAPON_INFO[id].description : 'Nothing mounted. A stripped mech runs lighter and faster.'}</span>
                   </div>
                 </div>
               ))}
@@ -151,22 +151,44 @@ export default function Menu({ onStart, settings, onSettings, records, garage, o
           <div className="hangar-index" aria-hidden="true"><span>GLADIATOR</span><b>0{VEHICLE_ORDER.indexOf(frame) + 1}</b><span>/ 03</span></div>
         </main>
 
-        <section className="vehicle-selection" aria-label="Choose your frame">
-          <div className="selection-heading"><span>CHOOSE YOUR FRAME</span><span>03 FRAMES · {WEAPON_COUNT} UNIQUE WEAPONS</span></div>
+        <section className="vehicle-selection" aria-label="Factory blueprints">
+          <div className="selection-heading"><span>FACTORY BLUEPRINTS</span><span>03 PRESETS · BUILD YOUR OWN IN THE FORGE</span></div>
           <div className="vehicle-list vehicle-list-3">
-            {VEHICLE_ORDER.map((id, index) => {
-              const item = VEHICLES[id];
-              const active = frame === id;
+            {PRESETS.map((preset, index) => {
+              const item = VEHICLES[preset.frame];
+              const active = frame === preset.frame;
+              const missing = missingParts(garage, preset);
+              const cost = fitOutCost(garage, preset);
+              const affordable = garage.credits >= cost;
               return (
                 <button
                   className={`vehicle-option ${active ? 'is-selected' : ''}`}
                   type="button"
-                  key={id}
-                  onClick={() => onGarage({ ...garage, equipped: { ...garage.equipped, frame: `f_${id}` } })}
+                  key={preset.id}
+                  onClick={() => {
+                    if (missing.length > 0) {
+                      const result = fitOutPreset(garage, preset);
+                      if (result.ok) {
+                        onGarage(result.state);
+                        return;
+                      }
+                    }
+                    onGarage(applyPreset(garage, preset));
+                  }}
                   aria-pressed={active}
+                  title={missing.length > 0 ? `${missing.length} part(s) missing — ${cost} CR` : 'Load this blueprint'}
                 >
-                  <div className="vehicle-thumbnail"><img src={IMAGES[id]} alt="" loading="eager" /></div>
-                  <div className="vehicle-option-copy"><span>0{index + 1} / {item.role}</span><strong>{item.shortName}</strong><em>“{item.epithet}”</em></div>
+                  <div className="vehicle-thumbnail"><img src={IMAGES[preset.frame]} alt="" loading="eager" /></div>
+                  <div className="vehicle-option-copy">
+                    <span>0{index + 1} / {item.role}</span>
+                    <strong>{preset.name}</strong>
+                    <em>“{item.epithet}”</em>
+                  </div>
+                  {missing.length > 0 ? (
+                    <div className="vehicle-parts">
+                      {missing.length} PART{missing.length > 1 ? 'S' : ''} · {credits(cost)} CR{affordable ? '' : ' — SHORT'}
+                    </div>
+                  ) : null}
                   {active && <div className="selected-indicator" />}
                 </button>
               );

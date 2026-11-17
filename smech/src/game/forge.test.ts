@@ -2,10 +2,14 @@ import { describe, expect, it } from 'vitest';
 import {
   COMPONENTS,
   COMPONENT_SLOTS,
+  HULL_DRAW,
+  PRESETS,
   SLOT_WEAPONS,
   STARTER_COMPONENTS,
   STARTER_EQUIPPED,
   buildConfig,
+  buildMass,
+  buildStats,
   componentsForSlot,
   frameOf,
   getComponent,
@@ -60,10 +64,114 @@ describe('component catalogue', () => {
   });
 });
 
+describe('mass and power', () => {
+  it('counts every component weight', () => {
+    const mass = buildMass(STARTER_EQUIPPED);
+    const expected = COMPONENT_SLOTS.reduce((sum, slot) => sum + (getComponent(STARTER_EQUIPPED[slot])!.weight), 0);
+    expect(mass).toBeCloseTo(expected, 5);
+  });
+
+  it('runs a stripped mech faster than a stock one', () => {
+    const stock = buildStats(STARTER_EQUIPPED);
+    const stripped = buildStats({
+      ...STARTER_EQUIPPED,
+      secondary: undefined,
+      specialQ: undefined,
+      specialE: undefined,
+    });
+    expect(stripped.mass).toBeLessThan(stock.mass);
+    expect(stripped.maxSpeed).toBeGreaterThan(stock.maxSpeed);
+    expect(stripped.massFactor).toBeGreaterThan(1);
+  });
+
+  it('runs a loaded mech slower than a stock one', () => {
+    const stock = buildStats(STARTER_EQUIPPED);
+    const loaded = buildStats({
+      ...STARTER_EQUIPPED,
+      armour: 'h_ablation',
+      reactor: 'c_titan',
+      secondary: 's_cannon_90',
+      specialQ: 'x_rail',
+      specialE: 'x_mortar',
+    });
+    expect(loaded.mass).toBeGreaterThan(stock.mass);
+    expect(loaded.maxSpeed).toBeLessThan(stock.maxSpeed);
+    expect(loaded.massFactor).toBeLessThan(1);
+  });
+
+  it('takes capacity and output from the reactor', () => {
+    const standard = buildStats({ ...STARTER_EQUIPPED, reactor: 'c_standard' });
+    const titan = buildStats({ ...STARTER_EQUIPPED, reactor: 'c_titan' });
+    expect(standard.powerCapacity).toBe(90);
+    expect(standard.powerOutput).toBe(26);
+    expect(titan.powerCapacity).toBeGreaterThan(standard.powerCapacity);
+    expect(titan.powerOutput).toBeGreaterThan(standard.powerOutput);
+  });
+
+  it('charges activation costs to the cockpit socket, not the weapon id', () => {
+    const stats = buildStats(STARTER_EQUIPPED);
+    // hull draw + autocannon + cannon + missiles + sentry
+    expect(stats.powerDraw).toBeGreaterThan(HULL_DRAW);
+    expect(stats.powerCost).toEqual({
+      primary: 0.9,
+      secondary: 11,
+      specialQ: 16,
+      specialE: 12,
+    });
+  });
+
+  it('keeps the Q and E sockets independently powered', () => {
+    const stats = buildStats({
+      ...STARTER_EQUIPPED,
+      specialQ: 'x_rail',
+      specialE: 'x_nova',
+    });
+    expect(stats.powerCost.specialQ).toBe(55);
+    expect(stats.powerCost.specialE).toBe(50);
+    expect(stats.powerCost.specialQ).not.toBe(stats.powerCost.specialE);
+  });
+
+  it('leaves stripped sockets free of activation cost and draw', () => {
+    const full = buildStats(STARTER_EQUIPPED);
+    const stripped = buildStats({
+      ...STARTER_EQUIPPED,
+      primary: undefined,
+      secondary: undefined,
+      specialQ: undefined,
+      specialE: undefined,
+    });
+    expect(stripped.powerDraw).toBe(HULL_DRAW);
+    expect(stripped.powerCost).toEqual({ primary: 0, secondary: 0, specialQ: 0, specialE: 0 });
+    expect(stripped.powerDraw).toBeLessThan(full.powerDraw);
+  });
+
+  it('balances every factory blueprint on its reactor', () => {
+    for (const preset of PRESETS) {
+      const stats = buildStats(preset.equipped);
+      expect(stats.powerOutput, preset.name).toBeGreaterThanOrEqual(stats.powerDraw);
+      expect(stats.powerCost.specialQ, preset.name).toBeGreaterThan(0);
+      expect(stats.powerCost.specialE, preset.name).toBeGreaterThan(0);
+      expect(stats.powerCost.specialQ, preset.name).not.toBe(stats.powerCost.specialE);
+    }
+  });
+
+  it('flags a loadout the reactor cannot sustain', () => {
+    const greedy = buildStats({
+      ...STARTER_EQUIPPED,
+      specialQ: 'x_rail',
+      specialE: 'x_nova',
+      secondary: 's_cryo',
+      reactor: 'c_standard',
+    });
+    expect(greedy.powerDraw).toBeGreaterThan(greedy.powerOutput);
+  });
+});
+
 describe('buildConfig', () => {
-  it('produces the stock chassis when nothing is fitted', () => {
+  it('produces a bare chassis when nothing is fitted', () => {
     const cfg = buildConfig({});
-    expect(cfg.loadout.primary).toBe(VEHICLES.warden.loadout.primary);
+    // An empty socket stays empty: the frame alone carries no weapons.
+    expect(cfg.loadout.primary).toBeNull();
     expect(cfg.maxHp).toBe(VEHICLES.warden.maxHp);
   });
 
@@ -71,7 +179,7 @@ describe('buildConfig', () => {
     const cfg = buildConfig({ ...STARTER_EQUIPPED, frame: 'f_glacier' });
     expect(cfg.maxHp).toBe(VEHICLES.glacier.maxHp);
     expect(cfg.shield).toBe(VEHICLES.glacier.shield);
-    expect(cfg.maxSpeed).toBe(VEHICLES.glacier.maxSpeed);
+    expect(cfg.maxSpeed).toBeCloseTo(VEHICLES.glacier.maxSpeed, 4);
   });
 
   it('adds the armour, reactor and drive deltas', () => {
@@ -84,7 +192,8 @@ describe('buildConfig', () => {
     });
     expect(beefed.maxHp).toBe(base.maxHp + 85);
     expect(beefed.shield).toBe(base.shield + 70);
-    expect(beefed.maxSpeed).toBeGreaterThan(base.maxSpeed);
+    // The heavy armour and the titan core outweigh the light servos.
+    expect(beefed.maxSpeed).toBeLessThan(base.maxSpeed);
   });
 
   it('mounts the chosen weapons', () => {
@@ -137,6 +246,53 @@ describe('buildConfig', () => {
     expect(cfg.maxHp).toBeGreaterThan(0);
     expect(cfg.maxSpeed).toBeGreaterThan(0);
     expect(cfg.shield).toBeGreaterThanOrEqual(0);
+  });
+
+  it('keeps primary scatter tuning from overwriting secondary cannons', () => {
+    const cfg = buildConfig({
+      ...STARTER_EQUIPPED,
+      primary: 'p_bore',
+      secondary: 's_cannon_atlas',
+    });
+    expect(cfg.scatterDamage).toBe(17);
+    expect(cfg.scatterReload).toBe(1.4);
+    expect(cfg.scatterSpeed).toBe(185);
+    expect(cfg.scatterSplash).toBe(2.2);
+    expect(cfg.cannonDamage).toBe(74);
+    expect(cfg.cannonReload).toBe(1.7);
+    expect(cfg.shellSpeed).toBe(190);
+    expect(cfg.splash).toBe(6.2);
+  });
+
+  it('uses the secondary-specific beam and grenade tuning', () => {
+    const flame = buildConfig({ ...STARTER_EQUIPPED, secondary: 's_flame_vent' });
+    expect(flame.flameDamage).toBe(8.4);
+    expect(flame.beamInterval).toBe(0.1);
+    expect(flame.cannonDamage).toBe(VEHICLES.warden.cannonDamage);
+
+    const lance = buildConfig({ ...STARTER_EQUIPPED, secondary: 's_cryo_heavy' });
+    expect(lance.cryoDamage).toBe(6.2);
+    expect(lance.beamInterval).toBe(0.16);
+    expect(lance.cannonDamage).toBe(VEHICLES.warden.cannonDamage);
+
+    const grenade = buildConfig({ ...STARTER_EQUIPPED, secondary: 's_cryoball' });
+    expect(grenade.cryoGrenadeDamage).toBe(26);
+    expect(grenade.cryoGrenadeReload).toBe(2.8);
+    expect(grenade.cannonDamage).toBe(VEHICLES.warden.cannonDamage);
+  });
+
+  it('hands the socket-based power costs to the simulation', () => {
+    const cfg = buildConfig({
+      ...STARTER_EQUIPPED,
+      specialQ: 'x_mortar',
+      specialE: 'x_rail',
+    });
+    expect(cfg.powerCost).toEqual({
+      primary: 0.9,
+      secondary: 11,
+      specialQ: 24,
+      specialE: 55,
+    });
   });
 });
 

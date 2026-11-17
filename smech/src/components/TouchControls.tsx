@@ -137,7 +137,7 @@ export default function TouchControls({ game, accent, weapons }: Props) {
             className="min-w-[74px] rounded px-2 py-3 text-[10px] tracking-wider disabled:opacity-40"
             style={{ fontFamily: DISPLAY, border: `1px solid ${accent}`, background: 'rgba(0,0,0,0.68)', color: accent, opacity: weapon.ready >= 1 ? 1 : 0.5 }}
             disabled={weapon.ready < 1}
-            onPointerDown={(e) => { e.preventDefault(); game?.useWeapon(weapon.id); }}
+            onPointerDown={(e) => { e.preventDefault(); if (weapon.id) game?.useWeapon(weapon.id); }}
           >
             {weapon.key}<br />{weapon.short}
           </button>

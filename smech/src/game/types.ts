@@ -58,7 +58,8 @@ export interface HudDrop {
 }
 
 export interface HudWeapon {
-  id: WeaponId;
+  /** null when the socket is empty — the player removed the weapon */
+  id: WeaponId | null;
   name: string;
   /** Compact weapon name for the cockpit slots. */
   short: string;
@@ -138,6 +139,14 @@ export interface HudState {
   damageFlash: number;
   damageDirs: DamageDir[];
   waveCountdown: number;
+  /** stored reactor energy, in kilojoules */
+  power: number;
+  /** reactor capacity, in kilojoules */
+  powerMax: number;
+  /** reactor recharge rate, in kilojoules per second */
+  powerOutput: number;
+  /** sustained draw of the current loadout, in kilojoules per second */
+  powerDraw: number;
   /** seconds until the reward draft appears after a stage is cleared (0 = none) */
   victoryCountdown: number;
   alive: boolean;

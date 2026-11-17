@@ -9,6 +9,7 @@ import {
   inWater,
   randomSeedCode,
   seedFromString,
+  stageSeedCode,
   zoneRadius,
 } from './world';
 
@@ -22,6 +23,14 @@ describe('sector seeds', () => {
   it('hashes the same code to the same value', () => {
     expect(seedFromString('ABC-123')).toBe(seedFromString('ABC-123'));
     expect(seedFromString('ABC-123')).not.toBe(seedFromString('ABC-124'));
+  });
+
+  it('derives a stable, distinct sector code for every cleared stage', () => {
+    const codes = Array.from({ length: 6 }, (_, stage) => stageSeedCode('ABC-123', stage));
+    expect(codes.every((code) => /^[A-Z0-9]{3}-[A-Z0-9]{3}$/.test(code))).toBe(true);
+    expect(new Set(codes).size).toBe(codes.length);
+    expect(stageSeedCode('ABC-123', 2)).toBe(codes[2]);
+    expect(stageSeedCode('ABC-124', 2)).not.toBe(codes[2]);
   });
 });
 

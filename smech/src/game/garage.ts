@@ -1,19 +1,35 @@
 import {
+  COMPONENT_SLOTS,
+  PRESETS,
   STARTER_COMPONENTS,
   STARTER_EQUIPPED,
   buildConfig,
   frameOf,
   getComponent,
   stepWeightOf,
+  type ComponentDef,
   type ComponentSlot,
+  type Preset,
 } from './forge';
 import type { GameStats, VehicleType } from './types';
 import type { VehicleConfig } from './vehicles';
 
-export const GARAGE_STORAGE_KEY = 'steel-horizon:garage:v1';
+export const GARAGE_STORAGE_KEY = 'steel-horizon:garage:v2';
+/** the previous schema, read once so old pilots keep their parts */
+export const LEGACY_GARAGE_STORAGE_KEY = 'steel-horizon:garage:v1';
 export const MAX_MECH_NAME = 18;
+/** how many named custom builds the yard keeps on file */
+export const MAX_BLUEPRINTS = 8;
 /** A small purse so a new pilot can buy a first component straight away. */
 export const STARTING_CREDITS = 600;
+
+/** A named custom build the player saved in the yard. */
+export interface SavedBuild {
+  id: string;
+  name: string;
+  /** the component mounted in each slot when the build was saved */
+  equipped: Partial<Record<ComponentSlot, string>>;
+}
 
 /** Everything the player owns between runs. */
 export interface GarageState {
@@ -25,6 +41,8 @@ export interface GarageState {
   owned: string[];
   /** the component mounted in each slot */
   equipped: Partial<Record<ComponentSlot, string>>;
+  /** named custom builds the player has saved */
+  blueprints: SavedBuild[];
 }
 
 export const DEFAULT_GARAGE: GarageState = {
@@ -32,6 +50,7 @@ export const DEFAULT_GARAGE: GarageState = {
   mechName: 'WARDEN-9',
   owned: [...STARTER_COMPONENTS],
   equipped: { ...STARTER_EQUIPPED },
+  blueprints: [],
 };
 
 const SLOTS: ComponentSlot[] = [
@@ -45,6 +64,12 @@ const SLOTS: ComponentSlot[] = [
   'drive',
 ];
 
+/** A special can be mounted in either special socket; other slots are strict. */
+function fitsSlot(comp: ComponentDef, slot: ComponentSlot): boolean {
+  if (slot === 'specialQ' || slot === 'specialE') return comp.id.startsWith('x_');
+  return comp.slot === slot;
+}
+
 function sanitizeName(name: unknown): string {
   if (typeof name !== 'string') return DEFAULT_GARAGE.mechName;
   const trimmed = name.replace(/\s+/g, ' ').trim().slice(0, MAX_MECH_NAME);
@@ -52,24 +77,46 @@ function sanitizeName(name: unknown): string {
 }
 
 export function loadGarage(): GarageState {
-  if (typeof localStorage === 'undefined') return { ...DEFAULT_GARAGE, owned: [...STARTER_COMPONENTS], equipped: { ...STARTER_EQUIPPED } };
+  const fresh = (): GarageState => ({
+    ...DEFAULT_GARAGE,
+    owned: [...STARTER_COMPONENTS],
+    equipped: { ...STARTER_EQUIPPED },
+    blueprints: [],
+  });
+  if (typeof localStorage === 'undefined') return fresh();
   try {
-    const raw = localStorage.getItem(GARAGE_STORAGE_KEY);
-    if (!raw) return { ...DEFAULT_GARAGE, owned: [...STARTER_COMPONENTS], equipped: { ...STARTER_EQUIPPED } };
+    let raw = localStorage.getItem(GARAGE_STORAGE_KEY);
+    // Pilots who played before the yard kept blueprints still have their
+    // parts on file: carry the old save over instead of starting over.
+    if (!raw) {
+      const legacy = localStorage.getItem(LEGACY_GARAGE_STORAGE_KEY);
+      if (legacy) {
+        raw = legacy;
+        localStorage.setItem(GARAGE_STORAGE_KEY, legacy);
+      }
+    }
+    if (!raw) return fresh();
     const parsed = JSON.parse(raw) as Partial<GarageState>;
     const owned = Array.isArray(parsed.owned) ? parsed.owned.filter((id) => typeof id === 'string' && getComponent(id)) : [];
     // Starter parts are always available, even if an old save forgot them.
     for (const id of STARTER_COMPONENTS) if (!owned.includes(id)) owned.push(id);
 
+    const equippedData = parsed.equipped && typeof parsed.equipped === 'object'
+      ? parsed.equipped as Partial<Record<ComponentSlot, string | null>>
+      : {};
     const equipped: Partial<Record<ComponentSlot, string>> = {};
     for (const slot of SLOTS) {
-      const id = parsed.equipped?.[slot];
-      const comp = id ? getComponent(id) : undefined;
-      if (comp && id && owned.includes(id)) equipped[slot] = id;
-      else if (STARTER_EQUIPPED[slot]) equipped[slot] = STARTER_EQUIPPED[slot];
+      // A missing or null key is a deliberately stripped mount, not a corrupt
+      // save. Only an invalid component id falls back to the starter part.
+      if (!Object.prototype.hasOwnProperty.call(equippedData, slot)) continue;
+      const id = equippedData[slot];
+      if (id === null || id === undefined || id === '') continue;
+      const comp = typeof id === 'string' ? getComponent(id) : undefined;
+      if (comp && typeof id === 'string' && owned.includes(id) && fitsSlot(comp, slot)) equipped[slot] = id;
+      else equipped[slot] = STARTER_EQUIPPED[slot];
     }
-    // A special may sit in either special slot.
-    if (equipped.specialQ === equipped.specialE) {
+    // A special may sit in either special slot, but duplicate mounts are not legal.
+    if (equipped.specialQ && equipped.specialQ === equipped.specialE) {
       equipped.specialE = STARTER_EQUIPPED.specialE;
       if (equipped.specialQ === equipped.specialE) equipped.specialQ = STARTER_EQUIPPED.specialQ;
     }
@@ -79,10 +126,32 @@ export function loadGarage(): GarageState {
       mechName: sanitizeName(parsed.mechName),
       owned,
       equipped,
+      blueprints: sanitizeBlueprints(parsed.blueprints, owned),
     };
   } catch {
-    return { ...DEFAULT_GARAGE, owned: [...STARTER_COMPONENTS], equipped: { ...STARTER_EQUIPPED } };
+    return fresh();
   }
+}
+
+/** Keep only the saved builds that still make sense. */
+function sanitizeBlueprints(raw: unknown, owned: string[]): SavedBuild[] {
+  if (!Array.isArray(raw)) return [];
+  const out: SavedBuild[] = [];
+  for (const entry of raw) {
+    if (!entry || typeof entry !== 'object') continue;
+    const b = entry as Partial<SavedBuild>;
+    if (typeof b.id !== 'string' || !b.id) continue;
+    const equipped: Partial<Record<ComponentSlot, string>> = {};
+    for (const slot of SLOTS) {
+      const id = b.equipped?.[slot];
+      const comp = id ? getComponent(id) : undefined;
+      if (id && comp && owned.includes(id) && fitsSlot(comp, slot)) equipped[slot] = id;
+    }
+    if (!Object.keys(equipped).length) continue;
+    out.push({ id: b.id, name: sanitizeName(b.name), equipped });
+    if (out.length >= MAX_BLUEPRINTS) break;
+  }
+  return out;
 }
 
 export function saveGarage(state: GarageState): void {
@@ -143,6 +212,7 @@ export function equipComponent(state: GarageState, id: string, slot?: ComponentS
   const comp = getComponent(id);
   if (!comp || !state.owned.includes(id)) return state;
   const target = slot ?? comp.slot;
+  if (!fitsSlot(comp, target)) return state;
   const equipped: Partial<Record<ComponentSlot, string>> = { ...state.equipped };
   const previous = equipped[target];
   const other: ComponentSlot | null =
@@ -176,4 +246,139 @@ export function garageFrame(state: GarageState): VehicleType {
 /** Enemy difficulty weight of the equipped frame. */
 export function garageStepWeight(state: GarageState): number {
   return stepWeightOf(state.equipped);
+}
+
+/* ------------------------------------------------------------------ *
+ * Factory presets
+ * ------------------------------------------------------------------ */
+
+/** The components a preset needs that the player does not own yet. */
+export function missingParts(garage: GarageState, preset: Preset): string[] {
+  const ids: string[] = [];
+  for (const slot of COMPONENT_SLOTS) {
+    const id = preset.equipped[slot];
+    if (id && !garage.owned.includes(id) && !ids.includes(id)) ids.push(id);
+  }
+  return ids;
+}
+
+/** Credits the yard charges to fit out a preset the player cannot afford yet. */
+export function fitOutCost(garage: GarageState, preset: Preset): number {
+  return missingParts(garage, preset).reduce((sum, id) => sum + (getComponent(id)?.cost ?? 0), 0);
+}
+
+/**
+ * Load a factory blueprint.
+ *
+ * Only the parts the player already owns are mounted; the rest of the
+ * blueprint waits in the yard until they are bought.
+ */
+export function applyPreset(garage: GarageState, preset: Preset): GarageState {
+  const equipped = { ...garage.equipped };
+  for (const slot of COMPONENT_SLOTS) {
+    const id = preset.equipped[slot];
+    if (!id) continue;
+    if (slot === 'frame' || garage.owned.includes(id)) equipped[slot] = id;
+  }
+  const next = { ...garage, equipped };
+  saveGarage(next);
+  return next;
+}
+
+/**
+ * Buy every missing part of a blueprint and fit it in one go.
+ *
+ * Fails when the player cannot cover the whole order, so the yard never
+ * sells a half mech.
+ */
+export function fitOutPreset(
+  garage: GarageState,
+  preset: Preset,
+): { ok: boolean; state: GarageState; reason?: 'poor'; spent: number } {
+  const missing = missingParts(garage, preset);
+  if (missing.length === 0) {
+    return { ok: true, state: applyPreset(garage, preset), spent: 0 };
+  }
+  const cost = missing.reduce((sum, id) => sum + (getComponent(id)?.cost ?? 0), 0);
+  if (garage.credits < cost) return { ok: false, state: garage, reason: 'poor', spent: 0 };
+  // buyComponent() persists as a side effect. Build the whole order in memory
+  // instead, so a failed fit-out never leaves a half-purchased garage behind.
+  let state: GarageState = { ...garage, credits: garage.credits, owned: [...garage.owned] };
+  for (const id of missing) {
+    const comp = getComponent(id);
+    if (!comp || state.credits < comp.cost) return { ok: false, state: garage, reason: 'poor', spent: 0 };
+    state = { ...state, credits: state.credits - comp.cost, owned: [...state.owned, id] };
+  }
+  state = applyPreset(state, preset);
+  saveGarage(state);
+  return { ok: true, state, spent: cost };
+}
+
+export { PRESETS };
+
+/**
+ * Strip a slot bare.
+ *
+ * An empty socket is a legal build: the mech carries less mass and runs
+ * faster, but it also has one less gun.
+ */
+export function unequipSlot(garage: GarageState, slot: ComponentSlot): GarageState {
+  if (slot === 'frame') return garage;
+  const equipped = { ...garage.equipped };
+  delete equipped[slot];
+  const next = { ...garage, equipped };
+  saveGarage(next);
+  return next;
+}
+
+/* ------------------------------------------------------------------ *
+ * Named custom builds
+ * ------------------------------------------------------------------ */
+
+/** Save the current build under a name so it can be brought back later. */
+export function saveBlueprint(state: GarageState, name: string): GarageState {
+  const clean = sanitizeName(name);
+  const equipped: Partial<Record<ComponentSlot, string>> = {};
+  for (const slot of SLOTS) {
+    const id = state.equipped[slot];
+    if (id) equipped[slot] = id;
+  }
+  // Several saves can land in the same millisecond; never issue a duplicate id.
+  const stamp = Date.now().toString(36);
+  let id = `bp_${stamp}`;
+  for (let suffix = 1; state.blueprints.some((b) => b.id === id); suffix += 1) {
+    id = `bp_${stamp}_${suffix.toString(36)}`;
+  }
+  const blueprint: SavedBuild = { id, name: clean, equipped };
+  const existing = state.blueprints.findIndex((b) => b.name.toUpperCase() === clean.toUpperCase());
+  const blueprints = [...state.blueprints];
+  if (existing >= 0) blueprints[existing] = blueprint;
+  else blueprints.push(blueprint);
+  // the yard only keeps so many builds on file
+  const trimmed = blueprints.slice(Math.max(0, blueprints.length - MAX_BLUEPRINTS));
+  const next: GarageState = { ...state, blueprints: trimmed };
+  saveGarage(next);
+  return next;
+}
+
+/** Load a saved build back onto the mech. */
+export function loadBlueprint(state: GarageState, id: string): GarageState {
+  const blueprint = state.blueprints.find((b) => b.id === id);
+  if (!blueprint) return state;
+  const equipped: Partial<Record<ComponentSlot, string>> = { ...state.equipped };
+  for (const slot of SLOTS) {
+    const id2 = blueprint.equipped[slot];
+    if (id2) equipped[slot] = id2;
+    else delete equipped[slot];
+  }
+  const next: GarageState = { ...state, equipped, mechName: sanitizeName(blueprint.name) };
+  saveGarage(next);
+  return next;
+}
+
+/** Strike a saved build off the yard's list. */
+export function deleteBlueprint(state: GarageState, id: string): GarageState {
+  const next: GarageState = { ...state, blueprints: state.blueprints.filter((b) => b.id !== id) };
+  saveGarage(next);
+  return next;
 }

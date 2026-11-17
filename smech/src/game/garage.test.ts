@@ -2,17 +2,24 @@ import { beforeEach, describe, expect, it } from 'vitest';
 import {
   DEFAULT_GARAGE,
   GARAGE_STORAGE_KEY,
-  buyComponent,
+  LEGACY_GARAGE_STORAGE_KEY,
+  MAX_BLUEPRINTS,
   STARTING_CREDITS,
+  buyComponent,
   creditsForRun,
   equipComponent,
+  fitOutCost,
+  fitOutPreset,
   grantCredits,
+  loadBlueprint,
   loadGarage,
   renameMech,
+  saveBlueprint,
   saveGarage,
+  unequipSlot,
   type GarageState,
 } from './garage';
-import { getComponent, STARTER_COMPONENTS } from './forge';
+import { getComponent, PRESETS, STARTER_COMPONENTS, STARTER_EQUIPPED } from './forge';
 import type { GameStats } from './types';
 
 const stats = (over: Partial<GameStats> = {}): GameStats => ({
@@ -70,6 +77,19 @@ describe('garage persistence', () => {
   it('never lets a save go negative', () => {
     localStorage.setItem(GARAGE_STORAGE_KEY, JSON.stringify({ credits: -500, owned: [], equipped: {} }));
     expect(loadGarage().credits).toBe(0);
+  });
+
+  it('keeps deliberately stripped sockets empty across a reload', () => {
+    let garage = loadGarage();
+    garage = unequipSlot(garage, 'primary');
+    garage = unequipSlot(garage, 'specialQ');
+    garage = unequipSlot(garage, 'specialE');
+    saveGarage(garage);
+    const loaded = loadGarage();
+    expect(loaded.equipped.primary).toBeUndefined();
+    expect(loaded.equipped.specialQ).toBeUndefined();
+    expect(loaded.equipped.specialE).toBeUndefined();
+    expect(loaded.equipped.reactor).toBe('c_standard');
   });
 });
 
@@ -157,5 +177,44 @@ describe('buying and equipping', () => {
 
   it('falls back to a default name for an empty one', () => {
     expect(renameMech(loadGarage(), '   ').mechName).toBe(DEFAULT_GARAGE.mechName);
+  });
+});
+
+describe('factory blueprints and custom builds', () => {
+  const rich = (): GarageState => ({ ...DEFAULT_GARAGE, credits: 10000, owned: [...STARTER_COMPONENTS], equipped: { ...STARTER_EQUIPPED } });
+
+  it('charges once for a whole preset fit-out', () => {
+    const preset = PRESETS[1];
+    const before = rich();
+    const cost = fitOutCost(before, preset);
+    const result = fitOutPreset(before, preset);
+    expect(result.ok).toBe(true);
+    expect(result.spent).toBe(cost);
+    expect(result.state.credits).toBe(before.credits - cost);
+    for (const id of Object.values(preset.equipped)) expect(result.state.owned).toContain(id);
+    expect(result.state.equipped.frame).toBe(preset.equipped.frame);
+    expect(result.state.equipped.reactor).toBe(preset.equipped.reactor);
+  });
+
+  it('migrates a v1 garage into the v2 key', () => {
+    localStorage.setItem(
+      LEGACY_GARAGE_STORAGE_KEY,
+      JSON.stringify({ ...DEFAULT_GARAGE, credits: 1234, mechName: 'OLD IRON' }),
+    );
+    const garage = loadGarage();
+    expect(garage.credits).toBe(1234);
+    expect(garage.mechName).toBe('OLD IRON');
+    expect(localStorage.getItem(GARAGE_STORAGE_KEY)).toBeTruthy();
+  });
+
+  it('restores stripped sockets from a named build and caps the rack', () => {
+    let garage = unequipSlot(rich(), 'primary');
+    for (let i = 0; i < MAX_BLUEPRINTS + 3; i += 1) garage = saveBlueprint(garage, `BUILD ${i}`);
+    expect(garage.blueprints).toHaveLength(MAX_BLUEPRINTS);
+    garage = { ...garage, equipped: { ...garage.equipped, primary: 'p_autocannon' } };
+    const last = garage.blueprints[garage.blueprints.length - 1];
+    const loaded = loadBlueprint(garage, last.id);
+    expect(loaded.equipped.primary).toBeUndefined();
+    expect(loaded.mechName).toBe(last.name);
   });
 });

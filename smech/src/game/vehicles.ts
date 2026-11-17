@@ -1,5 +1,14 @@
 import type { VehicleType, WeaponId } from './types';
 
+/** The four cockpit sockets a weapon can be fired from. */
+export type WeaponSocket = 'primary' | 'secondary' | 'specialQ' | 'specialE';
+
+/** Kilojoules consumed by one activation of each socket. */
+export type PowerCosts = Record<WeaponSocket, number>;
+
+/** The four cockpit weapon sockets; a stripped socket is null. */
+export type VehicleLoadout = Record<'primary' | 'secondary' | 'abilityQ' | 'abilityE', WeaponId | null>;
+
 export interface VehicleConfig {
   name: string;
   shortName: string;
@@ -10,21 +19,59 @@ export interface VehicleConfig {
   style: string;
   accent: string;
   armorColor: number;
-  loadout: { primary: WeaponId; secondary: WeaponId; abilityQ: WeaponId; abilityE: WeaponId };
+  loadout: VehicleLoadout;
   maxHp: number;
   shield: number;
   maxSpeed: number;
   accel: number;
   turnRate: number;
+  /** dry mass of the chassis in tonnes */
+  mass: number;
+  /** stored energy in kilojoules */
+  powerCapacity: number;
+  /** recharge rate in kilojoules per second */
+  powerOutput: number;
+  /** sustained draw of the factory loadout in kilojoules per second */
+  powerDraw: number;
+  /**
+   * Kilojoules drawn per activation, per socket.
+   *
+   * Each socket has its own cost, so mounting two guns that happen to fire
+   * the same round still costs what each gun actually burns.
+   */
+  powerCost: PowerCosts;
   camHeight: number;
   radius: number;
+  /** secondary cannon: shell damage, cycle time, muzzle speed, blast radius */
   cannonDamage: number;
   cannonReload: number;
   shellSpeed: number;
   splash: number;
+  /** primary bullet gun: hit points, cycle time, heat per shot */
   mgDamage: number;
   mgInterval: number;
   mgHeatPerShot: number;
+  /** primary scattergun: its own shell profile, separate from the cannons */
+  scatterDamage: number;
+  scatterReload: number;
+  scatterSpeed: number;
+  scatterSplash: number;
+  /** secondary beam weapons: damage and cycle time per tick */
+  flameDamage: number;
+  cryoDamage: number;
+  beamInterval: number;
+  /** cryo grenade: blast damage and canister cycle */
+  cryoGrenadeDamage: number;
+  cryoGrenadeReload: number;
+}
+
+/** Resolve a weapon id to the socket that actually fires it. */
+export function socketForWeapon(weapon: WeaponId, loadout: VehicleLoadout): WeaponSocket | null {
+  if (weapon === loadout.primary) return 'primary';
+  if (weapon === loadout.secondary) return 'secondary';
+  if (weapon === loadout.abilityQ) return 'specialQ';
+  if (weapon === loadout.abilityE) return 'specialE';
+  return null;
 }
 
 export const VEHICLE_ORDER: VehicleType[] = ['warden', 'pyre', 'glacier'];
@@ -47,6 +94,11 @@ export const VEHICLES: Record<VehicleType, VehicleConfig> = {
     maxSpeed: 19,
     accel: 16,
     turnRate: 1.8,
+    mass: 9.4,
+    powerCapacity: 90,
+    powerOutput: 26,
+    powerDraw: 24.7,
+    powerCost: { primary: 0.9, secondary: 11, specialQ: 16, specialE: 12 },
     camHeight: 4,
     radius: 2.4,
     cannonDamage: 40,
@@ -56,6 +108,15 @@ export const VEHICLES: Record<VehicleType, VehicleConfig> = {
     mgDamage: 5,
     mgInterval: 0.09,
     mgHeatPerShot: 0.024,
+    scatterDamage: 11,
+    scatterReload: 1.05,
+    scatterSpeed: 175,
+    scatterSplash: 1.4,
+    flameDamage: 5.4,
+    cryoDamage: 3.8,
+    beamInterval: 0.12,
+    cryoGrenadeDamage: 26,
+    cryoGrenadeReload: 2.8,
   },
   pyre: {
     name: 'PYRE-12 "CROWD-EATER"',
@@ -74,42 +135,70 @@ export const VEHICLES: Record<VehicleType, VehicleConfig> = {
     maxSpeed: 16.5,
     accel: 14,
     turnRate: 1.6,
+    mass: 10.8,
+    powerCapacity: 140,
+    powerOutput: 38,
+    powerDraw: 33.6,
+    powerCost: { primary: 6, secondary: 2.4, specialQ: 30, specialE: 8 },
     camHeight: 4.4,
     radius: 2.6,
-    cannonDamage: 11,
-    cannonReload: 1.05,
-    shellSpeed: 175,
-    splash: 1.4,
+    cannonDamage: 40,
+    cannonReload: 1.35,
+    shellSpeed: 150,
+    splash: 4.5,
     mgDamage: 5,
     mgInterval: 0.09,
     mgHeatPerShot: 0.03,
+    scatterDamage: 11,
+    scatterReload: 1.05,
+    scatterSpeed: 175,
+    scatterSplash: 1.4,
+    flameDamage: 5.4,
+    cryoDamage: 3.8,
+    beamInterval: 0.12,
+    cryoGrenadeDamage: 26,
+    cryoGrenadeReload: 2.8,
   },
   glacier: {
     name: 'GLACIER-7 "THE EXILE"',
     shortName: 'GLACIER',
     role: 'CRYO DUELIST',
     epithet: 'THE EXILE',
-    description: 'A sniper duelist: precision coil repeater, thrown ice grenades, a lightning railgun, and escape smoke.',
+    description: 'A sniper duelist: precision coil repeater, cryo lance, a lightning railgun, and escape smoke.',
     backstory:
-      'Lady Vey of House Meridian was exiled after a duel that ended one second too late. She brought her house dueling rig to the pits and never looked back. GLACIER does not brawl. She picks a lane, freezes the first thing that rushes her with an ice grenade, and vanishes in smoke. The crowd is quiet when she fights. That is how you know she is winning.',
-    style: 'Hold long sightlines. Ice-grenade anyone closing in, railgun priority targets, and smoke out when they get too close.',
+      'Lady Vey of House Meridian was exiled after a duel that ended one second too late. She brought her house dueling rig to the pits and never looked back. GLACIER does not brawl. She picks a lane, freezes the first thing that rushes her with a cryo lance, and vanishes in smoke. The crowd is quiet when she fights. That is how you know she is winning.',
+    style: 'Hold long sightlines. Ice-lance anyone closing in, railgun priority targets, and smoke out when they get too close.',
     accent: '#a8d8f0',
     armorColor: 0x4a5e6e,
-    loadout: { primary: 'coil', secondary: 'cryoball', abilityQ: 'rail', abilityE: 'smoke' },
+    loadout: { primary: 'coil', secondary: 'cryo', abilityQ: 'rail', abilityE: 'smoke' },
     maxHp: 120,
     shield: 95,
     maxSpeed: 21,
     accel: 18,
     turnRate: 2.0,
+    mass: 8.6,
+    powerCapacity: 210,
+    powerOutput: 58,
+    powerDraw: 56.4,
+    powerCost: { primary: 1.2, secondary: 4, specialQ: 55, specialE: 10 },
     camHeight: 4.2,
     radius: 2.3,
-    cannonDamage: 30,
-    cannonReload: 0.8,
-    shellSpeed: 160,
-    splash: 4,
+    cannonDamage: 40,
+    cannonReload: 1.35,
+    shellSpeed: 150,
+    splash: 4.5,
     mgDamage: 4.5,
     mgInterval: 0.105,
     mgHeatPerShot: 0.024,
+    scatterDamage: 11,
+    scatterReload: 1.05,
+    scatterSpeed: 175,
+    scatterSplash: 1.4,
+    flameDamage: 5.4,
+    cryoDamage: 3.8,
+    beamInterval: 0.12,
+    cryoGrenadeDamage: 26,
+    cryoGrenadeReload: 2.8,
   },
 };
 

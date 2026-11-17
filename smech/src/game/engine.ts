@@ -6,13 +6,13 @@ import { OutputPass } from 'three/examples/jsm/postprocessing/OutputPass.js';
 import type { AudioManager } from './audio';
 import type { ControlMode, DropKind, EnemyKind, GameStats, HudState, HudTarget, HudWeapon, RadarBlip, UpgradeDef, VehicleType, WeaponId } from './types';
 import { defaultStats, rollOffer, type PlayerStats } from './upgrades';
-import { VEHICLES, WEAPON_INFO, type VehicleConfig } from './vehicles';
+import { VEHICLES, WEAPON_INFO, socketForWeapon, type VehicleConfig } from './vehicles';
 import { DEFAULT_SETTINGS, type Settings } from './settings';
 import { createBar, createMechMesh, createTankMesh, setShadows, type Palette } from './enemyMeshes';
 import { aimAssist, cooldownReadiness, secondaryReadiness, triggerReadiness } from './readiness';
 import { ParticleSystem } from './particles';
 import { WeaponEffects } from './weaponEffects';
-import { MAX_ZONE, START_RADIUS, WORLD_RADIUS, buildMap, districtAt, generateLayout, heightAt, inWater, nearObstacles, obsCorners, obsDist, obsResolve, randomSeedCode, zoneRadius, type ExplosiveBarrel, type Layout, type MapResult, type Obstacle } from './world';
+import { MAX_ZONE, START_RADIUS, WORLD_RADIUS, buildMap, districtAt, generateLayout, heightAt, inWater, nearObstacles, obsCorners, obsDist, obsResolve, randomSeedCode, stageSeedCode, zoneRadius, type ExplosiveBarrel, type Layout, type MapResult, type Obstacle } from './world';
 
 // ---------------------------------------------------------------------------
 // Constants & math helpers
@@ -339,6 +339,10 @@ export class Game {
   private weaponCd: Record<WeaponId, number> = { autocannon: 0, cannon: 0, scatter: 0, coil: 0, flame: 0, cryo: 0, cryoball: 0, jump: 0, mines: 0, smoke: 0, missiles: 0, turret: 0, mortar: 0, overdrive: 0, rail: 0, nova: 0 };
   private shieldHp = 0;
   private shieldDelay = 0;
+  /** stored reactor energy in kilojoules */
+  private power = 0;
+  /** throttle for the "power depleted" warning */
+  private powerWarnCd = 0;
   private shieldBroken = false;
   private shieldFlash = 0;
   private upgrading = false;
@@ -382,6 +386,8 @@ export class Game {
   private deathTimer = 0;
   private cannonCd = 0;
   private reloading = false;
+  /** reload of a scattergun mounted in the primary socket */
+  private primaryCd = 0;
   private mgTimer = 0;
   private mgHeat = 0;
   private mgOverheat = false;
@@ -427,6 +433,19 @@ export class Game {
 
   // world
   private obstacles: Obstacle[] = [];
+  /** the seed the run started from; each stage derives its own sector from it */
+  private baseSeed = '';
+  /** the theme lights of the current sector */
+  private worldLights: THREE.Object3D[] = [];
+  /** the stage whose arena still has to be generated */
+  private pendingArena = 0;
+  /**
+   * Every mesh the world generator produced for the current arena.
+   *
+   * The arena is disposable: when a stage is won the whole root is thrown
+   * away and a fresh sector is built in its place.
+   */
+  private worldRoot: THREE.Group;
   private layout!: Layout;
   private mapApi!: MapResult;
   private seedCode = '';
@@ -492,7 +511,8 @@ export class Game {
   constructor(opts: GameOptions) {
     const buildStart = performance.now();
     this.opts = opts;
-    this.seedCode = opts.seed && opts.seed.trim() ? opts.seed.trim().toUpperCase() : randomSeedCode();
+    this.baseSeed = opts.seed && opts.seed.trim() ? opts.seed.trim().toUpperCase() : randomSeedCode();
+    this.seedCode = this.baseSeed;
     this.layout = generateLayout(this.seedCode);
     this.stepWeight = opts.stepWeight ?? { warden: 1, pyre: 1.5, glacier: 0.75 }[opts.vehicle];
     this.canvas = opts.canvas;
@@ -503,13 +523,22 @@ export class Game {
     this.hp = this.cfg.maxHp;
     this.stats.shieldMax = this.cfg.shield;
     this.shieldHp = this.cfg.shield;
-    this.owned = new Set([this.cfg.loadout.primary, this.cfg.loadout.secondary, this.cfg.loadout.abilityQ, this.cfg.loadout.abilityE]);
+    this.owned = new Set(
+      [this.cfg.loadout.primary, this.cfg.loadout.secondary, this.cfg.loadout.abilityQ, this.cfg.loadout.abilityE].filter(
+        (w): w is WeaponId => Boolean(w),
+      ),
+    );
     this.controls = opts.controls ?? 'arcade';
     // friendlier handling for the easy mode: flatter shots, softer incoming fire
     this.shellDrop = this.controls === 'arcade' ? SHELL_GRAVITY * 0.35 : SHELL_GRAVITY;
     this.enemyDmgMul = this.controls === 'arcade' ? 0.7 : 1;
     if (this.controls === 'arcade') {
-      this.cfg = { ...this.cfg, splash: this.cfg.splash * 1.35, mgDamage: this.cfg.mgDamage * 1.25 };
+      this.cfg = {
+        ...this.cfg,
+        splash: this.cfg.splash * 1.35,
+        scatterSplash: this.cfg.scatterSplash * 1.35,
+        mgDamage: this.cfg.mgDamage * 1.25,
+      };
     }
     this.geo.rocket.rotateX(Math.PI / 2);
 
@@ -568,6 +597,8 @@ export class Game {
     this.shieldMesh.visible = false;
     this.scene.add(this.shieldMesh);
 
+    this.worldRoot = new THREE.Group();
+    this.scene.add(this.worldRoot);
     this.buildWorld();
     this.buildMs = performance.now() - buildStart;
     this.buildWeapon();
@@ -587,10 +618,41 @@ export class Game {
   // World construction
   // -------------------------------------------------------------------------
   private buildWorld() {
+    this.buildEnvironment();
+    // procedural terrain, districts, roads, cover and set dressing
+    const map = buildMap(this.worldRoot, this.obstacles, () => createTankMesh(PALETTES.wreck).group, this.layout);
+    this.mapApi = map;
+    this.fireSpots = map.fires;
+    this.explosiveBarrels = map.barrels;
+    this.waterTexture = map.waterTexture;
+    // a few pooled lights follow the burning wrecks nearest to the player
+    for (let i = 0; i < 4; i++) {
+      const l = new THREE.PointLight(0xff8a3a, 0, 30, 2);
+      this.scene.add(l);
+      this.fireLights.push(l);
+    }
+
+    // explosion light pool
+    for (let i = 0; i < 4; i++) {
+      const l = new THREE.PointLight(0xffb070, 0, 70, 2);
+      this.scene.add(l);
+      this.flashLights.push(l);
+    }
+  }
+
+  /**
+   * The sky, the sun and the ambient light of the sector.
+   *
+   * These belong to the theme, and the theme belongs to the arena, so they
+   * are rebuilt whenever a new sector is generated.
+   */
+  private buildEnvironment() {
     const scene = this.scene;
     const theme = this.layout.theme;
-    scene.add(new THREE.HemisphereLight(theme.hemiSky, theme.hemiGround, theme.hemiIntensity));
-    scene.add(new THREE.AmbientLight(theme.ambient, theme.ambientIntensity));
+    const hemi = new THREE.HemisphereLight(theme.hemiSky, theme.hemiGround, theme.hemiIntensity);
+    const ambient = new THREE.AmbientLight(theme.ambient, theme.ambientIntensity);
+    this.worldLights.push(hemi, ambient);
+    scene.add(hemi, ambient);
     const sun = new THREE.DirectionalLight(theme.sunColor, theme.sunIntensity);
     sun.castShadow = true;
     sun.shadow.mapSize.set(1024, 1024);
@@ -637,25 +699,127 @@ export class Game {
       scene.add(this.stars);
     }
 
-    // procedural terrain, districts, roads, cover and set dressing
-    const map = buildMap(scene, this.obstacles, () => createTankMesh(PALETTES.wreck).group, this.layout);
+  }
+
+  /**
+   * Throw the arena away and build a fresh sector in its place.
+   *
+   * Winning a stage means the crowd turns on you and the yard drags the
+   * mech to the next sector: new terrain, new districts, new theme, new
+   * seed. The old sector's meshes are disposed so nothing leaks between
+   * stages.
+   */
+  private rebuildArena(stage: number) {
+    const t0 = performance.now();
+
+    // ---- tear the old sector down ------------------------------------
+    this.worldRoot.traverse((o) => {
+      const m = o as THREE.Mesh & { isPoints?: boolean; isLine?: boolean };
+      if (m.isMesh || m.isPoints || m.isLine) {
+        m.geometry?.dispose();
+        const mat = m.material as THREE.Material | THREE.Material[] | undefined;
+        if (Array.isArray(mat)) mat.forEach((x) => x.dispose());
+        else mat?.dispose();
+      }
+    });
+    this.worldRoot.clear();
+    this.obstacles.length = 0;
+    this.fireSpots = [];
+    this.explosiveBarrels = [];
+    if (this.waterTexture) this.waterTexture.dispose();
+    this.waterTexture = null;
+
+    // ---- clear the leftovers of the fight ----------------------------
+    for (const e of this.enemies) this.scene.remove(e.group ?? new THREE.Group());
+    this.enemies.length = 0;
+    for (const p of this.projectiles) this.scene.remove(p.mesh);
+    this.projectiles.length = 0;
+    for (const p of this.pickups) this.scene.remove(p.group);
+    this.pickups.length = 0;
+    for (const d of this.drops) this.scene.remove(d.group);
+    this.drops.length = 0;
+    for (const t of this.turrets) this.scene.remove(t.group);
+    this.turrets.length = 0;
+    for (const m of this.mines) this.scene.remove(m.group);
+    this.mines.length = 0;
+    for (const s of this.strikes) this.scene.remove(s.marker);
+    this.strikes.length = 0;
+    for (const w of this.wrecks) this.scene.remove(w.group);
+    this.wrecks.length = 0;
+    for (const c of this.craters) this.scene.remove(c.mesh);
+    this.craters.length = 0;
+
+    // ---- build the next sector ---------------------------------------
+    this.seedCode = stageSeedCode(this.baseSeed, stage);
+    this.layout = generateLayout(this.seedCode);
+    // the new sector starts tight and opens out to the depth the run has
+    // already reached, so the pits keep growing across the night
+    this.arenaR = START_RADIUS;
+    this.arenaTarget = zoneRadius(this.zone);
+    this.expandTime = this.time;
+
+    const theme = this.layout.theme;
+    this.scene.fog = new THREE.Fog(theme.fog, theme.fogNear, theme.fogFar);
+    this.renderer.toneMappingExposure = theme.exposure;
+
+    // the sky dome, sun disc and stars belong to the theme, so they are
+    // rebuilt with the sector they belong to
+    if (this.sky) {
+      this.scene.remove(this.sky);
+      this.sky.geometry.dispose();
+      (this.sky.material as THREE.Material).dispose();
+    }
+    if (this.sunDisc) {
+      this.scene.remove(this.sunDisc);
+      this.sunDisc.geometry.dispose();
+      (this.sunDisc.material as THREE.Material).dispose();
+    }
+    if (this.stars) {
+      this.scene.remove(this.stars);
+      this.stars.geometry.dispose();
+      (this.stars.material as THREE.Material).dispose();
+      this.stars = null;
+    }
+    if (this.sun) {
+      this.scene.remove(this.sun);
+      this.scene.remove(this.sun.target);
+    }
+    for (const l of this.worldLights) this.scene.remove(l);
+    this.worldLights.length = 0;
+    this.buildEnvironment();
+
+    const map = buildMap(this.worldRoot, this.obstacles, () => createTankMesh(PALETTES.wreck).group, this.layout);
     this.mapApi = map;
     this.fireSpots = map.fires;
     this.explosiveBarrels = map.barrels;
     this.waterTexture = map.waterTexture;
-    // a few pooled lights follow the burning wrecks nearest to the player
-    for (let i = 0; i < 4; i++) {
-      const l = new THREE.PointLight(0xff8a3a, 0, 30, 2);
-      scene.add(l);
-      this.fireLights.push(l);
-    }
 
-    // explosion light pool
-    for (let i = 0; i < 4; i++) {
-      const l = new THREE.PointLight(0xffb070, 0, 70, 2);
-      scene.add(l);
-      this.flashLights.push(l);
-    }
+    // the mech is dropped into the middle of the new sector
+    this.pos.set(0, heightAt(0, 0), 0);
+    this.vel.set(0, 0, 0);
+    this.turretYaw = this.hullYaw = 0;
+    this.pitch = 0;
+    this.primaryCd = 0;
+    this.cannonCd = 0;
+    this.mgTimer = 0;
+    this.mgHeat = 0;
+    this.mgOverheat = false;
+    this.secCd = 0;
+    this.secCdMax = 0;
+    this.beamCd = 0;
+    this.secHeat = 0;
+    this.secOverheat = false;
+    this.reloading = false;
+
+    // a repair kit lands next to the mech so the new sector starts fair
+    const a = rand(0, TWO_PI);
+    const px = Math.sin(a) * 16;
+    const pz = Math.cos(a) * 16;
+    if (!this.obstacles.some((o) => obsDist(o, px, pz) < 3)) this.spawnPickup(px, pz);
+
+    this.setMessage(`NEW SECTOR — ${theme.name} · ${this.layout.districts[0]?.name ?? 'THE PIT'}`);
+    this.addFeed(`THE YARD DROPS YOU IN ${this.seedCode}`);
+    this.buildMs = performance.now() - t0;
   }
 
   private buildWeapon() {
@@ -849,8 +1013,8 @@ export class Game {
     if (!active || !this.alive || this.upgrading) return;
     if (e.code === 'KeyZ') this.zoom = !this.zoom;
     if (e.code === 'KeyM' && !e.repeat) this.audio.toggleMusic();
-    if (!e.repeat && e.code === 'KeyQ') this.useWeapon(this.cfg.loadout.abilityQ);
-    if (!e.repeat && e.code === 'KeyE') this.useWeapon(this.cfg.loadout.abilityE);
+    if (!e.repeat && e.code === 'KeyQ' && this.cfg.loadout.abilityQ) this.useWeapon(this.cfg.loadout.abilityQ);
+    if (!e.repeat && e.code === 'KeyE' && this.cfg.loadout.abilityE) this.useWeapon(this.cfg.loadout.abilityE);
     if (e.code === 'Digit1' || e.code === 'Numpad1') this.pickUpgrade(0);
     if (e.code === 'Digit2' || e.code === 'Numpad2') this.pickUpgrade(1);
     if (e.code === 'Digit3' || e.code === 'Numpad3') this.pickUpgrade(2);
@@ -1000,6 +1164,9 @@ export class Game {
     this.updateSmokeClouds(dt);
     this.updateWrecks(dt);
     this.updateCamera(dt);
+    // the reactor trickles energy back into the grid
+    this.power = Math.min(this.cfg.powerCapacity, this.power + this.cfg.powerOutput * dt);
+    if (this.powerWarnCd > 0) this.powerWarnCd -= dt;
     this.hudTimer += dt;
     if (this.hudTimer >= 1 / 30) {
       this.hudTimer = 0;
@@ -1150,16 +1317,19 @@ export class Game {
     const noHeat = rapid || (this.buffT.overdrive > 0 && this.evolved('overdrive'));
     const rate = (this.buffT.haste > 0 || this.buffT.overdrive > 0 ? 1.3 : 1) * (rapid ? 1.35 : 1);
     this.cannonCd = Math.max(0, this.cannonCd - dt * rate);
+    this.primaryCd = Math.max(0, this.primaryCd - dt * rate);
     this.mgTimer -= dt * rate;
     this.secCd = Math.max(0, this.secCd - dt);
     this.beamCd = Math.max(0, this.beamCd - dt);
     if (this.reloading && this.cannonCd <= 0) { this.reloading = false; this.audio.playReady(); }
     const priHeld = this.mouse.left || this.keys.has('Space') || this.padFire.primary;
     const secHeld = this.mouse.right || this.keys.has('KeyC') || this.padFire.secondary;
-    if (priHeld && !this.mgOverheat) {
+    if (priHeld && !this.mgOverheat && c.loadout.primary) {
       if (c.loadout.primary === 'scatter') {
-        if (this.cannonCd <= 0) this.fireScatter();
-      } else if (this.mgTimer <= 0) {
+        if (this.primaryCd <= 0 && this.spendPower(c.loadout.primary)) {
+          this.fireScatter();
+        }
+      } else if (this.mgTimer <= 0 && this.spendPower(c.loadout.primary)) {
         this.firePrimaryBullets();
         this.mgTimer = c.mgInterval * this.stats.reloadMul;
         if (!noHeat) this.mgHeat = Math.min(1, this.mgHeat + c.mgHeatPerShot * this.stats.mgHeatMul);
@@ -1172,12 +1342,12 @@ export class Game {
       if (this.mgOverheat && this.mgHeat <= 0.15) this.mgOverheat = false;
     }
     if (c.loadout.secondary === 'cannon') {
-      if (secHeld && this.cannonCd <= 0) this.fireCannon();
+      if (secHeld && this.cannonCd <= 0 && this.spendPower(c.loadout.secondary)) this.fireCannon();
     } else if (c.loadout.secondary === 'cryoball') {
-      if (secHeld && this.secCd <= 0) this.throwCryoBall();
-    } else if (secHeld && !this.secOverheat && this.beamCd <= 0) {
+      if (secHeld && this.secCd <= 0 && this.spendPower(c.loadout.secondary)) this.throwCryoBall();
+    } else if (c.loadout.secondary && secHeld && !this.secOverheat && this.beamCd <= 0 && this.spendPower(c.loadout.secondary)) {
       this.fireBeam(this.cfg.loadout.secondary === 'flame' ? 'flame' : 'cryo');
-      this.beamCd = 0.12;
+      this.beamCd = this.cfg.beamInterval;
       if (!noHeat) this.secHeat = Math.min(1, this.secHeat + 0.035 * this.stats.mgHeatMul);
       if (this.secHeat >= 1) this.secOverheat = true;
     }
@@ -1198,6 +1368,27 @@ export class Game {
   }
 
   private evolved(weapon: WeaponId) { return this.taken.has(`evo_${weapon}`); }
+
+  /**
+   * Spend reactor energy for a weapon activation.
+   *
+   * The reactor refills the buffer slowly; a hungry loadout can empty it,
+   * and a dry grid means the guns simply do not fire.
+   */
+  private spendPower(weapon: WeaponId): boolean {
+    const socket = socketForWeapon(weapon, this.cfg.loadout);
+    const cost = socket ? this.cfg.powerCost[socket] : 0;
+    if (cost <= 0) return true;
+    if (this.power < cost) {
+      if (this.powerWarnCd <= 0) {
+        this.powerWarnCd = 2.5;
+        this.addFeed('POWER DEPLETED — WEAPONS OFFLINE');
+      }
+      return false;
+    }
+    this.power -= cost;
+    return true;
+  }
 
   /** First solid point on a weapon ray, sampling both terrain and cover. */
   private traceCover(origin: THREE.Vector3, direction: THREE.Vector3, range: number) {
@@ -1358,7 +1549,7 @@ export class Game {
     const assist = this.assistTarget(muzzle, dir);
     this.spawnProjectile('player', 'bullet', muzzle, vel, c.mgDamage * this.stats.mgDmgMul * (this.buffT.overcharge > 0 ? 1.35 : 1), 0, 0, 0.8, assist ? 2.5 * this.aimAssist : 0, assist);
     const shot = this.projectiles[this.projectiles.length - 1];
-    shot.weapon = c.loadout.primary;
+    if (c.loadout.primary) shot.weapon = c.loadout.primary;
     shot.charged = !coil && this.evolved('autocannon') && this.primaryShots % 6 === 0;
     (shot.mesh as THREE.Mesh).material = coil || shot.charged ? this.mats.playerRocket : this.mats.bullet;
     if (coil) (shot.mesh as THREE.Mesh).scale.set(0.7, 0.7, 1.8);
@@ -1377,8 +1568,7 @@ export class Game {
     this.shotCounter++;
     const over = this.stats.overcharge > 0 && this.shotCounter % 5 === 0;
     const dmgBuff = this.buffT.overcharge > 0 ? 1.35 : 1;
-    this.cannonCd = c.cannonReload * this.stats.reloadMul;
-    this.reloading = true;
+    this.primaryCd = c.scatterReload * this.stats.reloadMul;
     this.camera.updateMatrixWorld();
     const muzzle = this.camera.localToWorld(this.muzzleLocal('cannon').clone());
     const dir = this.camera.getWorldDirection(new THREE.Vector3());
@@ -1388,11 +1578,11 @@ export class Game {
       v.x += rand(-0.085, 0.085);
       v.y += rand(-0.06, 0.06);
       v.z += rand(-0.085, 0.085);
-      v.normalize().multiplyScalar(c.shellSpeed * rand(0.9, 1.1));
+      v.normalize().multiplyScalar(c.scatterSpeed * rand(0.9, 1.1));
       this.spawnProjectile(
         'player', 'shell', muzzle, v,
-        c.cannonDamage * this.stats.cannonDmgMul * dmgBuff * (over ? 2 : 1),
-        c.splash * this.stats.splashMul * (over ? 1.6 : 1), this.shellDrop, 0.45, 0,
+        c.scatterDamage * this.stats.cannonDmgMul * dmgBuff * (over ? 2 : 1),
+        c.scatterSplash * this.stats.splashMul * (over ? 1.6 : 1), this.shellDrop, 0.45, 0,
       );
       this.projectiles[this.projectiles.length - 1].weapon = 'scatter';
     }
@@ -1429,11 +1619,14 @@ export class Game {
   /** Hold-to-fire secondaries: flamethrower (pyre) and cryo lance (glacier). */
   private fireBeam(kind: 'flame' | 'cryo', discrete = false) {
     const flame = kind === 'flame';
+    const c = this.cfg;
     this.camera.updateMatrixWorld();
     const muzzle = this.camera.localToWorld(this.muzzleLocal('mg').clone());
     const origin = this.camera.position.clone();
     const direction = this.camera.getWorldDirection(new THREE.Vector3());
-    const range = flame ? 30 + (this.stats.flameDmgMul - 1) * 5 : discrete ? 95 : 70;
+    const range = flame
+      ? 30 + (this.stats.flameDmgMul - 1) * 5 + (c.flameDamage - 5.4) * 1.2
+      : discrete ? 95 : 70;
     const coverDistance = this.traceCover(origin, direction, range);
     const hits = this.enemies.filter((enemy) => {
       if (!enemy.alive) return false;
@@ -1448,12 +1641,12 @@ export class Game {
     if (!flame && hits[0]) beamEnd.copy(this.enemyCenter(hits[0]));
     for (const enemy of flame ? hits : hits.slice(0, 1)) {
       if (flame) {
-        this.beamHit(enemy, 5.4 * this.stats.flameDmgMul * (this.buffT.overcharge > 0 ? 1.35 : 1));
+        this.beamHit(enemy, c.flameDamage * this.stats.flameDmgMul * (this.buffT.overcharge > 0 ? 1.35 : 1));
         enemy.burnTime = 2.5;
-        enemy.burnDps = 5 * this.stats.flameDmgMul;
+        enemy.burnDps = c.flameDamage * 0.9 * this.stats.flameDmgMul;
       } else {
         // The hardpoint lance is a single decisive shot; the handheld one ticks.
-        this.beamHit(enemy, (discrete ? 30 : 3.8) * this.stats.cryoDmgMul);
+        this.beamHit(enemy, (discrete ? c.cryoGrenadeDamage : c.cryoDamage) * this.stats.cryoDmgMul);
         enemy.slowTime = Math.max(enemy.slowTime, (discrete ? 4.5 : 2.4) * this.stats.cryoSlowMul);
         if (this.evolved('cryo') && enemy.freezeLock <= 0) {
           enemy.cryoCharge += discrete ? 2 : 1;
@@ -1641,7 +1834,7 @@ export class Game {
   // Glacier sniper kit: Cryo Grenade and Veil Smoke
   // ---------------------------------------------------------------------------
   private get cryoCooldown() {
-    return 2.8 * (1 - 0.12 * (this.taken.get('ice_capacity') ?? 0)) * this.stats.reloadMul;
+    return this.cfg.cryoGrenadeReload * (1 - 0.12 * (this.taken.get('ice_capacity') ?? 0)) * this.stats.reloadMul;
   }
 
   private throwCryoBall() {
@@ -1674,7 +1867,7 @@ export class Game {
     for (const enemy of this.enemies) {
       if (!enemy.alive) continue;
       if (enemy.pos.distanceTo(pos) > radius + enemy.radius) continue;
-      this.beamHit(enemy, 26 * this.stats.cryoDmgMul);
+      this.beamHit(enemy, this.cfg.cryoGrenadeDamage * this.stats.cryoDmgMul);
       enemy.stunTime = Math.max(enemy.stunTime, enemy.boss ? 0.4 : 1.4 + (evolved ? 2 : 0));
       enemy.slowTime = Math.max(enemy.slowTime, 5 * this.stats.cryoSlowMul);
       if (evolved) enemy.brittleTime = 5;
@@ -1772,8 +1965,8 @@ export class Game {
       isHeat: pri === 'autocannon' || pri === 'coil',
       heat: this.mgHeat,
       overheat: this.mgOverheat,
-      reloadRemaining: this.cannonCd,
-      reloadTime: this.cfg.cannonReload * this.stats.reloadMul,
+      reloadRemaining: this.primaryCd,
+      reloadTime: this.cfg.scatterReload * this.stats.reloadMul,
     });
   }
 
@@ -1817,6 +2010,7 @@ export class Game {
   /** Q / E abilities. Every mech owns exactly its own four weapons. */
   useWeapon(id: WeaponId) {
     if (!this.alive || this.paused || this.upgrading || !this.owned.has(id) || this.weaponCd[id] > 0) return;
+    if (!this.spendPower(id)) return;
     const s = this.stats;
     if (id === 'missiles') {
       this.missileQueue = s.missileCount;
@@ -3700,6 +3894,12 @@ export class Game {
       if (this.victoryTimer <= 0) {
         this.victoryPending = false;
         this.victoryTimer = 0;
+        // A new sector is generated for every stage that is won.
+        if (this.pendingArena > 0) {
+          const stage = this.pendingArena;
+          this.pendingArena = 0;
+          this.rebuildArena(stage);
+        }
         // One paused upgrade pick per wave, or two after a boss.
         this.grantOffer();
         if (this.wave % 5 === 0) this.grantOffer();
@@ -3723,6 +3923,7 @@ export class Game {
       // field repairs between waves
       this.hp = Math.min(this.maxHp, this.hp + this.maxHp * 0.2);
       this.shieldHp = this.stats.shieldMax;
+      this.power = this.cfg.powerCapacity;
       this.shieldBroken = false;
       this.shieldDelay = 0;
       if (this.wave % 3 === 0 && this.zone < MAX_ZONE) this.expandPerimeter();
@@ -3731,6 +3932,10 @@ export class Game {
       const px = clamp(this.pos.x + Math.sin(a) * 18, -this.arenaR + 20, this.arenaR - 20);
       const pz = clamp(this.pos.z + Math.cos(a) * 18, -this.arenaR + 20, this.arenaR - 20);
       if (!this.obstacles.some((o) => obsDist(o, px, pz) < 2)) this.spawnPickup(px, pz);
+      // The stage is won: the yard moves the mech on to a fresh sector.
+      // The rebuild happens once the celebration has played out, so the
+      // player gets to watch the last kill land before the world moves.
+      this.pendingArena = this.wave;
     }
   }
 
@@ -4159,6 +4364,9 @@ export class Game {
     };
     const slotReady = (id: WeaponId): number => this.weaponReadiness(id);
     const weapons: HudWeapon[] = [pri, sec, this.cfg.loadout.abilityQ, this.cfg.loadout.abilityE].map((id) => {
+      if (!id) {
+        return { id: null, name: 'EMPTY SOCKET', short: 'EMPTY', key: '—', owned: false, ready: 0, active: 0, detail: '' };
+      }
       const info = WEAPON_INFO[id];
       return { id, name: info.name, short: info.short, key: info.key, owned: true, ready: slotReady(id), active: 0, detail: this.evolved(id) ? 'EVOLVED' : slotDetail(id) };
     });
@@ -4222,12 +4430,12 @@ export class Game {
       })(),
       mgHeat: priIsHeat ? this.mgHeat : 0,
       mgOverheat: priIsHeat && this.mgOverheat,
-      priName: WEAPON_INFO[pri].short,
+      priName: pri ? WEAPON_INFO[pri].short : 'EMPTY',
       priReady,
       priIsHeat,
       priHeat: this.mgHeat,
       priOverheat: this.mgOverheat,
-      secName: WEAPON_INFO[sec].short,
+      secName: sec ? WEAPON_INFO[sec].short : 'EMPTY',
       secReady,
       secIsHeat,
       secHeat: this.secHeat,
@@ -4249,6 +4457,10 @@ export class Game {
       damageFlash: this.damageFlash,
       damageDirs: this.damageDirs.filter((d) => this.time - d.time < 1.3).map((d) => ({ angle: d.angle, age: this.time - d.time })),
       waveCountdown: this.waveActive ? 0 : this.waveTimer,
+      power: this.power,
+      powerMax: this.cfg.powerCapacity,
+      powerOutput: this.cfg.powerOutput,
+      powerDraw: this.cfg.powerDraw,
       victoryCountdown: this.victoryPending ? Math.max(0, this.victoryTimer) : 0,
       alive: this.alive,
       time: this.time,

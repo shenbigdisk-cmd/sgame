@@ -188,7 +188,7 @@ function WeaponSlot({ w, accent, onUse }: { w: HudState['weapons'][number]; acce
           )}
         </svg>
         <div className="absolute inset-0 flex items-center justify-center" style={{ color: w.detail === 'EVOLVED' ? '#e8c37c' : '#fff' }}>
-          <Icon name={w.owned ? WEAPON_ICON[w.id] : 'lock'} size={22} />
+          <Icon name={w.owned && w.id ? WEAPON_ICON[w.id] : 'lock'} size={22} />
         </div>
         <div
           className="absolute -top-1 -right-1 w-5 h-5 rounded flex items-center justify-center text-[10px] font-bold"
@@ -208,6 +208,8 @@ function WeaponSlot({ w, accent, onUse }: { w: HudState['weapons'][number]; acce
 export default function HUD({ hud, vehicle, onWeapon, settings }: Props) {
   const accent = VEHICLES[vehicle].accent;
   const hpRatio = clamp01(hud.hp / hud.maxHp);
+  const powerDry = hud.power <= 0.5;
+  const powerColor = powerDry ? '#ff5a5a' : hud.powerDraw > hud.powerOutput ? '#ffb347' : '#7fe0c0';
   const hpColor = hpRatio > 0.5 ? '#62ff7a' : hpRatio > 0.25 ? '#ffc23d' : '#ff4d4d';
   const heading = ((((-hud.turretYaw * 180) / Math.PI) % 360) + 360) % 360;
   const hullRel = wrap(hud.hullYaw - hud.turretYaw);
@@ -504,7 +506,12 @@ export default function HUD({ hud, vehicle, onWeapon, settings }: Props) {
       {/* weapon systems */}
       <div className="absolute right-[2.5%] flex items-end gap-0.5" style={{ bottom: `calc(${consoleH} + 1.5%)` }}>
         {hud.weapons.map((w) => (
-          <WeaponSlot key={w.id} w={w} accent={accent} onUse={w.key === 'Q' || w.key === 'E' ? () => onWeapon?.(w.id) : undefined} />
+          <WeaponSlot
+            key={w.id ?? w.key}
+            w={w}
+            accent={accent}
+            onUse={w.id && (w.key === 'Q' || w.key === 'E') ? () => onWeapon?.(w.id!) : undefined}
+          />
         ))}
       </div>
 
@@ -531,6 +538,13 @@ export default function HUD({ hud, vehicle, onWeapon, settings }: Props) {
             <div className="flex-1"><Bar ratio={hud.shield / Math.max(1, hud.shieldMax)} color={hud.shieldActive ? '#59c8ff' : '#d6a45b'} height={5} /></div>
             <span className="text-[9px] opacity-80 text-right whitespace-nowrap" style={{ color: hud.shieldActive ? '#9de9ff' : '#ffb76b' }}>
               {hud.shieldStatus === 'restarting' ? (hud.shieldDelay > 0 ? `REBOOT ${Math.ceil(hud.shieldDelay)}S` : 'REBOOTING') : hud.shieldStatus === 'recharging' ? 'RECHARGING' : `${Math.ceil(hud.shield)}/${hud.shieldMax}`}
+            </span>
+          </div>
+          <div className="mt-1.5 flex items-center gap-2">
+            <span className="text-[9px] tracking-[0.2em] opacity-70 w-[52px]">POWER</span>
+            <div className="flex-1"><Bar ratio={hud.power / Math.max(1, hud.powerMax)} color={powerColor} height={5} /></div>
+            <span className="text-[9px] opacity-80 text-right whitespace-nowrap" style={{ color: powerColor }}>
+              {Math.ceil(hud.power)}/{hud.powerMax} KJ
             </span>
           </div>
           <div className="mt-1.5 text-[10px] tracking-[0.25em] opacity-70 truncate">{hud.vehicleName}</div>

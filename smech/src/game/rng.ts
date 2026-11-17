@@ -58,3 +58,20 @@ export function randomSeedCode() {
   for (let i = 0; i < 6; i++) s += CODE_CHARS[Math.floor(Math.random() * CODE_CHARS.length)];
   return `${s.slice(0, 3)}-${s.slice(3)}`;
 }
+
+/**
+ * The sector code for a given stage of a run.
+ *
+ * Every stage clears into a brand new arena, so the sector code changes with
+ * it. It is derived from the run seed so a replay of the same seed walks the
+ * same chain of arenas.
+ */
+export function stageSeedCode(base: string, stage: number): string {
+  let h = seedFromString(`${base}#${stage}`);
+  let s = '';
+  for (let i = 0; i < 6; i++) {
+    s += CODE_CHARS[h % CODE_CHARS.length];
+    h = Math.floor(h / CODE_CHARS.length) + 0x9e3779b9;
+  }
+  return `${s.slice(0, 3)}-${s.slice(3)}`;
+}

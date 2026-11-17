@@ -18,7 +18,7 @@ export {
   zoneRadius,
 } from './layout';
 export type { District, DistrictType, Layout, Theme } from './layout';
-export { randomSeedCode, seedFromString } from './rng';
+export { randomSeedCode, seedFromString, stageSeedCode } from './rng';
 export { nearObstacles, obsCorners, obsDist, obsResolve } from './colliders';
 export type { Obstacle } from './colliders';
 export { buildMap } from './mapBuilder';
