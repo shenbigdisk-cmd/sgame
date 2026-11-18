@@ -81,3 +81,17 @@ describe('power sockets', () => {
     expect(socketForWeapon('scatter', loadout)).toBeNull();
   });
 });
+
+describe('shorter additional weapon cooldowns', () => {
+  it('reduces every existing special’s base recharge without changing primary or secondary timing', () => {
+    const previous = { cinder: 10, mines: 9, smoke: 14, missiles: 8, turret: 22, mortar: 20, overdrive: 22, rail: 8, nova: 15 } as const;
+    for (const [id, cooldown] of Object.entries(previous)) {
+      const weapon = id as keyof typeof previous;
+      expect(WEAPON_INFO[weapon].cooldown, weapon).toBeGreaterThan(0);
+      expect(WEAPON_INFO[weapon].cooldown, weapon).toBeLessThan(cooldown);
+    }
+    expect(WEAPON_INFO.orbital.cooldown).toBe(7);
+    expect(WEAPON_INFO.cannon.cooldown).toBe(0.9);
+    expect(WEAPON_INFO.cryoball.cooldown).toBe(2.8);
+  });
+});

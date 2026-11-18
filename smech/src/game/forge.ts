@@ -20,6 +20,9 @@ import { VEHICLES, WEAPON_INFO, type VehicleConfig, type PowerCosts, type Weapon
 
 /** Energy the mech's own systems draw every second, before any weapon. */
 export const HULL_DRAW = 4;
+export function reserveRecharge(output:number,sectorMultiplier=1){
+  return Math.max(0,output*sectorMultiplier-HULL_DRAW);
+}
 
 export type ComponentSlot =
   | 'frame'
@@ -411,9 +414,10 @@ const WEAPON_COMPONENTS: ComponentDef[] = [
   // ---- specials (usable in either special slot) ----
   { id: 'x_missiles', slot: 'specialQ', name: 'HOMING MISSILES', desc: 'A salvo of guided rockets.', cost: 300, icon: 'missile', weight: 2.2, power: 16, powerInterval: WEAPON_INFO.missiles.cooldown, weapon: 'missiles' },
   { id: 'x_turret', slot: 'specialQ', name: 'SENTRY TURRET', desc: 'An automated gun turret. Holds a flank for 24s.', cost: 340, icon: 'turret', weight: 2.0, power: 12, powerInterval: WEAPON_INFO.turret.cooldown, weapon: 'turret' },
-  { id: 'x_jump', slot: 'specialQ', name: 'SKYFALL SLAM', desc: 'Rocket-jump forward and crash down with a fiery shockwave.', cost: 420, icon: 'jump', weight: 2.6, power: 30, powerInterval: WEAPON_INFO.jump.cooldown, weapon: 'jump' },
+  { id: 'x_orbital', slot: 'specialQ', name: 'SKYFALL ORBITAL', desc: 'Mark a wide area under the sight for a barrage from orbit.', cost: 560, icon: 'strike', weight: 2.6, power: 30, powerInterval: WEAPON_INFO.orbital.cooldown, weapon: 'orbital' },
+  { id: 'x_jump', slot: 'specialQ', name: 'CINDER CANISTER', desc: 'Lob a fire canister that bursts on impact and burns the ground for 6 seconds.', cost: 420, icon: 'flame', weight: 2.6, power: 30, powerInterval: WEAPON_INFO.cinder.cooldown, weapon: 'cinder' },
   { id: 'x_mines', slot: 'specialQ', name: 'CINDER MINES', desc: 'Deploy proximity mines that detonate into fire.', cost: 380, icon: 'mines', weight: 1.9, power: 8, powerInterval: WEAPON_INFO.mines.cooldown, weapon: 'mines' },
-  { id: 'x_smoke', slot: 'specialQ', name: 'VEIL SMOKE', desc: 'Pop a dense smoke screen to break line of sight and escape.', cost: 260, icon: 'smoke', weight: 1.4, power: 10, powerInterval: WEAPON_INFO.smoke.cooldown, weapon: 'smoke' },
+  { id: 'x_smoke', slot: 'specialQ', name: 'VEIL SMOKE', desc: 'Block enemy bullets and break locks. Heavy shots penetrate at 70% damage; move to avoid blind fire.', cost: 260, icon: 'smoke', weight: 1.4, power: 10, powerInterval: WEAPON_INFO.smoke.cooldown, weapon: 'smoke' },
   { id: 'x_rail', slot: 'specialQ', name: 'LONGBOW RAILGUN', desc: 'An instant lightning beam. Lethal precision.', cost: 640, icon: 'target', weight: 3.2, power: 55, powerInterval: WEAPON_INFO.rail.cooldown, weapon: 'rail' },
   { id: 'x_mortar', slot: 'specialQ', name: 'INCENDIARY MORTARS', desc: 'Marks an area for burning mortar shells.', cost: 560, icon: 'mortar', weight: 3.4, power: 24, powerInterval: WEAPON_INFO.mortar.cooldown, weapon: 'mortar' },
   { id: 'x_overdrive', slot: 'specialQ', name: 'OVERDRIVE VENT', desc: 'Vent the reactor: speed, reload and a burn nova.', cost: 600, icon: 'overdrive', weight: 2.4, power: 45, powerInterval: WEAPON_INFO.overdrive.cooldown, weapon: 'overdrive' },
@@ -495,7 +499,7 @@ export const STARTER_EQUIPPED: Record<ComponentSlot, string> = {
 export const SLOT_WEAPONS: Record<'primary' | 'secondary' | 'special', WeaponId[]> = {
   primary: ['autocannon', 'scatter', 'coil'],
   secondary: ['cannon', 'cryoball', 'flame', 'cryo'],
-  special: ['missiles', 'turret', 'jump', 'mines', 'smoke', 'rail', 'mortar', 'overdrive', 'nova'],
+  special: ['missiles', 'turret', 'orbital', 'cinder', 'mines', 'smoke', 'rail', 'mortar', 'overdrive', 'nova'],
 };
 
 /* ------------------------------------------------------------------ *
@@ -531,12 +535,12 @@ export const PRESETS: Preset[] = [
     id: 'pyre',
     name: 'PYRE-12',
     frame: 'pyre',
-    blurb: 'Scattergun, dragon breath and a skyfall slam. Built to burn a crowd.',
+    blurb: 'Scattergun, dragon breath and an orbital barrage. Built to break a crowd.',
     equipped: {
       frame: 'f_pyre',
       primary: 'p_scatter',
       secondary: 's_flame',
-      specialQ: 'x_jump',
+      specialQ: 'x_orbital',
       specialE: 'x_mines',
       armour: 'h_service',
       reactor: 'c_fused',

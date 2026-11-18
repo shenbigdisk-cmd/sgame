@@ -1,3 +1,4 @@
+import {reserveRecharge} from '../game/forge';
 import { useMemo, useState } from 'react';
 import {
   SLOT_LABELS,
@@ -177,7 +178,7 @@ export default function MechBuilder({ garage, onBuild, onCancel, accent }: Props
               <div><span>POWER</span><strong>{stats.powerCapacity} <small>KJ</small></strong></div>
             </div>
             <div className="builder-specs-sub">
-              <span>MASS: <b>{stats.mass.toFixed(1)} T</b></span>
+              <span>RESERVE +{Math.round(reserveRecharge(stats.powerOutput))} kJ/s</span><span>MASS: <b>{stats.mass.toFixed(1)} T</b></span>
               <span className={deficit ? 'text-red-400 font-bold' : 'text-emerald-400'}>
                 {deficit ? 'POWER DEFICIT' : 'GRID BALANCED'}
               </span>
@@ -243,6 +244,7 @@ export default function MechBuilder({ garage, onBuild, onCancel, accent }: Props
                         {comp.weight.toFixed(1)} T
                         {comp.powerCapacity ? ` · ${comp.powerCapacity} KJ` : ''}
                         {comp.powerOutput ? ` · +${comp.powerOutput} KJ/S` : ''}
+                        {comp.power ? ` · ${comp.power} kJ / USE` : ''}
                         {comp.power && comp.powerInterval ? ` · ${(comp.power / comp.powerInterval).toFixed(0)} KJ/S DRAW` : ''}
                       </span>
                     </div>

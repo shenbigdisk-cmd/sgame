@@ -53,7 +53,7 @@ It is committed on purpose so the game can be opened straight from a raw file
 URL, with no server and no install step:
 
 ```
-https://raw.githubusercontent.com/shenbigdisk-cmd/sgame/arena/e2b67aef-sgame/preview/index.html
+https://raw.githubusercontent.com/shenbigdisk-cmd/sgame/main/preview/index.html
 ```
 
 ---
@@ -75,8 +75,12 @@ https://raw.githubusercontent.com/shenbigdisk-cmd/sgame/arena/e2b67aef-sgame/pre
 
 ![In the arena](docs/screenshot-gameplay.png)
 
-On touch devices an on-screen stick, fire buttons and module buttons appear
-automatically. Empty weapon sockets are shown as empty and simply do not fire.
+On touch devices, drag on the left to move and drag on the right to aim. Tap or
+hold the right side to fire primary; once firing, drag to aim while holding. To
+fire secondary, add a second finger on the right (start both touches together,
+or drag first, to fire it without the primary). Tap the round Q/E controls to
+use additional weapons and the small top-right scope button to zoom. Empty
+sockets do not fire.
 
 ---
 
@@ -85,8 +89,8 @@ automatically. Empty weapon sockets are shown as empty and simply do not fire.
 | Chassis | Role | Factory loadout | Reactor |
 | --- | --- | --- | --- |
 | **WARDEN-9 "Oathkeeper"** | Balanced veteran | Rotary autocannons · 60mm cannons · Homing missiles · Sentry turret | Standard Core |
-| **PYRE-12 "Crowd-Eater"** | Fire brawler | Scrap scattergun · Dragon's Breath · Skyfall slam · Cinder mines | Fused Capacitor |
-| **GLACIER-7 "The Exile"** | Cryo duelist | Coil repeater · Cryo lance · Longbow railgun · Veil smoke | Titan Reactor |
+| **PYRE-12 "Crowd-Eater"** | Fire brawler | Scrap scattergun · Dragon's Breath · Skyfall orbital · Cinder mines | Fused Capacitor |
+| **GLACIER-7 "The Exile"** | Cryo duelist | Coil repeater · Cryo grenade · Longbow railgun · Veil smoke | Titan Reactor |
 
 Each factory blueprint is power-positive: its reactor output covers the
 sustained draw of the mounted loadout. Swapping in heavier toys can still run
@@ -105,10 +109,22 @@ generates a fresh sector from a deterministic per-stage seed; the old arena's
 meshes are disposed, the theme and sky are rebuilt, and the mech is moved to
 the new pit with a repair kit nearby.
 
+The deployment preview shows the sector condition before you launch: **Grid
+surge** boosts reactor recharge by 25%, **Cold front** improves weapon cooling
+by 30%, and **Signal haze** reduces enemy sight range by 20%. The landing
+plaza varies its high cover and low firing positions with the seed. Look for
+ring markers on radar: hold inside a green field relay for two uninterrupted
+seconds to repair, or an amber relay to gain 25 seconds of rapid reload. Each
+can be claimed once in that sector.
+
 ### Waves
-Each wave picks a tag — `SWARM`, `ARMORED PUSH`, `SNIPER NEST` or
-`FLANKING AMBUSH` — and mixes four enemy chassis (raider tank, hound walker,
-goliath heavy, longbow sniper) plus an elite champion. Every fifth wave a
+Waves mix seven enemy chassis and can roll `SWARM`, `ARMORED PUSH`, `SNIPER NEST`,
+`FLANKING AMBUSH` or `REPAIR CONVOY`. Convoys form up around a **Mender**,
+which repairs a wounded ally within 42 m every four seconds if it has line of
+sight. Eliminate it first or separate it from the formation. The **Bastion**
+halves bullet damage but takes 1.5× damage from shell and rocket impacts.
+Raiders, Hounds, Goliaths and Longbows round out the roster. Inspect **Enemy
+intel** in the hangar for all seven counters. Every fifth wave a
 **WARLORD** boss enters the arena. Between waves the arena is repaired, the
 shield is refilled and you choose one of three rewards.
 
@@ -117,8 +133,38 @@ the arena stays live for 2.8 seconds of stage time so the clear, the crowd and
 the wreck can land, and a `REWARD DRAFT IN N` countdown tells you the draft is
 on its way. The next sector is built once that celebration finishes.
 
+### Salvage Rush and sky loot
+Deploy normally: special encounters are rolled automatically, not selected in the hangar.
+Salvage Rush can occur on any non-boss wave, including the opener. When it does,
+two gold credit caches and one random combat core descend into the arena. The Jackal
+runner races to a landed cache and retreats with it; destroy a loaded runner to
+recover its cargo. Follow the gold bearing and distance on the HUD, then drive
+over a landed cache to **bank 25–60 Forge credits immediately**. Unclaimed
+caches stay behind when you leave the sector. A cleared Salvage Rush allows a
+10-second sweep; press Enter or tap Extract to leave early.
+
+The Field manual lists all nine supply symbols, which match the radar and world-space crate labels.
+Regular air shipments can also carry coins, **Aegis** (six seconds of immunity
+for hull and shield), or **Overcharge** (+35% offensive damage for 25 seconds).
+Repeat cores refresh the timer instead of stacking. Veil smoke is not Aegis:
+hostile bullets dissipate in it, but shells and rockets retain 70% damage.
+Rockets lose guidance, sniper locks break, and recently alerted enemies can
+continue suppressing their last known contact. The base cloud lasts six seconds;
+even a fully upgraded belt leaves a gap between screens. Relocate rather than
+sitting in the cloud.
+
+Q carries **five charges** and E carries **three**. Every stage begins with both mounted racks fully refilled and their cooldowns reset. One activation uses one charge, even for a whole salvo or mine pattern. A blue **Rearm crate** restores one to each equipped rack up to its slot’s capacity; it does not skip cooldowns. If a rack is empty and no rearm crate is on the field, the next ordinary shipment carries one. Primary and secondary weapons do not use cartridges.
+
+Pyre’s **Skyfall Orbital** marks the ground or visible enemy under the sight, then brings a broad barrage straight down from above. Its first blast damages the full 24-metre radius; six more impacts follow. Targeting Uplink widens the area and shortens its cooldown, while Zenith Protocol further widens and strengthens the strikes. The Cinder Canister remains available for custom builds, where its impact leaves six seconds of ground fire.
+
+### Cover and reactor tactics
+Amber bands mark breachable buildings, warehouses, towers, ruins and blast screens. The sight stays a pale, broken ring over cover and open ground. It turns solid red when a visible enemy overlaps the ring; aiming never opens a target label. Shells and rockets can bring these structures down. Facade sections tumble into dust and leave traversable rubble. Keep a relay screen for protection while capturing, or blast a shorter approach. Low-flying Wisp scouts can cross low cover but take 50% extra bullet damage.
+
+Your reactor starts full. The hangar lists each weapon's kJ cost, and the round special controls show charges, cooldown, low power, or rearm status. Shield recovery is automatic. **Induction Loop** refunds 8 kJ per kill per rank; **Breach Charges** adds 50% base structure damage per rank.
+
 ### Rewards
-Upgrades roll as **STANDARD / RARE / UNIQ** and cover hull, weapon, system and
+Repeat picks show their new rank in the name: **Flux Regulator**, then **Flux Regulator 2**. One-time upgrades and instant repairs stay unnumbered.
+Upgrades roll as **STANDARD / RARE / EPIC** and cover hull, weapon, system and
 signature categories. Weapons can be **evolved** into stronger forms
 (`STATIC LINK`, `CONCUSSION CORE`, `ABSOLUTE ZERO`, …), and signature upgrades
 introduce new mechanics (cluster munitions, reactive armour, overcharged
@@ -126,10 +172,11 @@ rounds, repair swarm, killstreak surge, arc discharger, bulwark field,
 saturation barrage, supply network).
 
 Every weapon has exactly one evolution, and an evolution only appears once you
-own the weapon it upgrades. The four Forge specials evolve too:
+own the weapon it upgrades. Forge specials evolve too:
 
 | Forge special | Evolution | Effect |
 | --- | --- | --- |
+| `SKYFALL ORBITAL` | `ZENITH PROTOCOL` | Strikes cover a wider area and deal more damage |
 | `INCENDIARY MORTARS` | `THERMAL DRUMS` | Pools burn hotter and longer, and never scorch you |
 | `STASIS NOVA` | `GLACIAL SHATTER` | Nova deals 20 damage and leaves enemies brittle |
 | `OVERDRIVE VENT` | `REACTOR PURGE` | Venting restores shield and purges weapon heat |
@@ -149,7 +196,7 @@ empty:
 | `FRAME` | The chassis you walk out in — always free | `WARDEN`, `PYRE`, `GLACIER` |
 | `PRIMARY` | The trigger weapon | Rotary autocannons, scattergun, coil repeater |
 | `SECONDARY` | The heavy weapon | 60mm cannons, cryo grenade, Dragon's Breath, cryo lance |
-| `SPECIAL · Q` | One of the Forge specials | Homing missiles, skyfall slam, longbow railgun |
+| `SPECIAL · Q` | One of the Forge specials | Homing missiles, Skyfall orbital, longbow railgun |
 | `SPECIAL · E` | A second special | Sentry turret, cinder mines, veil smoke |
 | `ARMOUR` | Hull plating | Lattice armour, ablative carapace, reactive skin |
 | `REACTOR` | Shield and power | Standard core, fused capacitor, titan reactor |
@@ -200,9 +247,15 @@ alongside them.
 ### Feedback
 Procedural audio (weapons, explosions, engines, ambience and an adaptive
 score) is synthesised with the Web Audio API and spatialised with stereo pan,
-distance muffling and speed-of-sound delay. The HUD tracks hull, shield,
-reactor power, heat, cooldowns, a radar, target telemetry, kill streaks and
-incoming damage directions.
+distance muffling and speed-of-sound delay. A slim cockpit rim and floating HUD
+instruments keep the combat view open without a solid bottom banner. Hull and
+shield bars sit at the bottom left, two round special-weapon indicators at the
+bottom center, and a larger tactical radar at the bottom right. The circular
+sight turns red over a visible enemy without covering it with text. One notice
+at a time shows threats, objectives or routine updates; small viewports drop
+secondary information rather than crowding the sight.
+
+Cockpit design references: [Hawken Reborn's HUD update](https://hawkenreborn.com/devblog/update02/) discusses high-contrast health bars and cockpit-integrated UI, while [Titanfall 2's Titan HUD](https://interfaceingame.com/screenshots/titanfall-2-titan-hud-in-combat/) shows how instruments can frame rather than fill the combat view. These informed the layout; no game assets were reused.
 
 ---
 
@@ -225,7 +278,7 @@ smech/
    │  ├─ UpgradeScreen.tsx  # between-wave reward draft
    │  ├─ GameOver.tsx       # debrief and hall of fame
    │  ├─ SettingsPanel.tsx  # cockpit configuration
-   │  ├─ TouchControls.tsx  # on-screen stick + buttons
+   │  ├─ TouchControls.tsx  # movement stick and aiming/firing gestures
    │  ├─ Icons.tsx          # inline SVG icon set
    │  └─ FullscreenButton.tsx
    └─ game/

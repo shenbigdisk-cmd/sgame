@@ -1,0 +1,494 @@
+/* A clear combat window with floating HUD instruments. */
+.cp-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 11;
+  overflow: hidden;
+  pointer-events: none;
+  user-select: none;
+  color: #dcebee;
+  font:
+    12px/1.2 'Share Tech Mono',
+    monospace;
+  text-transform: uppercase;
+  --cp-pad: clamp(12px, 1.7vw, 24px);
+}
+.cp-overlay button {
+  font: inherit;
+  text-transform: inherit;
+  pointer-events: auto;
+  touch-action: none;
+}
+.cp-glass {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(180deg, #07141b38, transparent 13%, transparent 84%, #06131b38);
+}
+.cp-canopy {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+}
+
+/* Mission information remains away from the sight. */
+.cp-top {
+  position: absolute;
+  inset: var(--cp-pad) var(--cp-pad) auto;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: start;
+  gap: 5px 12px;
+  text-shadow:
+    0 1px 4px #000,
+    0 0 8px #000b;
+}
+.cp-stage {
+  width: max-content;
+  max-width: 100%;
+  padding: 3px 20px 4px 9px;
+  border-left: 2px solid var(--cp-accent);
+  background: linear-gradient(90deg, #07131de0, #07131d75 70%, transparent);
+}
+.cp-eyebrow,
+.cp-wave {
+  font-size: 10px;
+  letter-spacing: 0.14em;
+  color: #a7c3c8;
+}
+.cp-stage-line {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+  margin-top: 4px;
+  white-space: nowrap;
+}
+.cp-stage-line b {
+  color: #e5f5f5;
+  font:
+    700 15px 'Orbitron',
+    sans-serif;
+}
+.cp-stage-line span {
+  color: #b7d9dd;
+}
+.cp-wave {
+  display: block;
+  margin-top: 4px;
+  color: var(--cp-accent);
+}
+.cp-boss {
+  margin-top: 5px;
+  overflow: hidden;
+  color: #ffac9d;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.cp-notice {
+  grid-column: 1 / -1;
+  justify-self: center;
+  max-width: min(92%, 540px);
+  padding: 5px 11px;
+  text-align: center;
+  text-wrap: balance;
+  color: #e4f5f6;
+  background: linear-gradient(90deg, transparent, #06121cdd 12%, #06121cdd 88%, transparent);
+}
+.cp-notice:empty {
+  display: none;
+}
+.cp-touch-hint-compact {
+  display: none;
+}
+.cp-danger {
+  color: #ffab92;
+}
+.cp-extract,
+.cp-zoom {
+  color: var(--cp-accent);
+  border: 1px solid #8bc7d080;
+  background: #091d25e8;
+  padding: 4px 7px;
+}
+.cp-extract:focus-visible,
+.cp-zoom:focus-visible,
+.cp-special:focus-visible {
+  outline: 2px solid var(--cp-accent);
+  outline-offset: -2px;
+}
+
+/* The ring and acquisition radius share the same geometry in aimRing.ts. */
+.cp-aim {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 0;
+  height: 0;
+}
+.cp-reticle {
+  position: absolute;
+  left: 0;
+  top: 0;
+  transform: translate(-50%, -50%);
+  filter: drop-shadow(0 1px 1px #000) drop-shadow(0 0 2px #000b);
+}
+.cp-reticle-ring {
+  transition: stroke 90ms linear;
+}
+.cp-scope {
+  position: absolute;
+  width: min(56vh, 70vw);
+  aspect-ratio: 1;
+  border: 1px solid #a5dee650;
+  border-radius: 50%;
+  transform: translate(-50%, -50%);
+}
+
+/* Three independent groups float over the scene; the radar anchors the right corner. */
+.cp-dock {
+  --radar-size: clamp(132px, 16vh, 168px);
+  --special-size: 56px;
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  box-sizing: border-box;
+  width: 100%;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+  grid-template-areas: 'vitals weapons radar';
+  align-items: end;
+  gap: clamp(8px, 1vw, 16px);
+  padding: 0 max(18px, env(safe-area-inset-right)) max(14px, env(safe-area-inset-bottom))
+    max(18px, env(safe-area-inset-left));
+}
+.flight-vitals {
+  grid-area: vitals;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
+  min-width: 0;
+}
+.cp-vitals {
+  display: grid;
+  gap: 7px;
+  width: min(100%, 220px);
+  min-width: 0;
+  text-shadow:
+    0 1px 2px #000,
+    0 0 5px #000;
+}
+.cp-meter {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: baseline;
+  gap: 3px 8px;
+  min-width: 0;
+}
+.cp-meter label {
+  color: #b9dadd;
+  font-size: 10px;
+  letter-spacing: 0.13em;
+}
+.cp-meter b {
+  color: #e0f4f2;
+  font:
+    400 12px 'Orbitron',
+    sans-serif;
+}
+.cp-meter > div {
+  grid-column: 1 / -1;
+}
+.cp-buffs {
+  order: -1;
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+  max-width: 100%;
+  color: #b5d8dc;
+  font-size: 10px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-shadow:
+    0 1px 2px #000,
+    0 0 5px #000;
+}
+.cp-buffs span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.flight-contact {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 8px;
+  min-width: 0;
+  font-size: 10px;
+  letter-spacing: 0.06em;
+  text-shadow: 0 1px 3px #000;
+}
+.flight-contact b {
+  font-weight: 400;
+  white-space: nowrap;
+}
+.flight-contact small {
+  color: #b8d6d8;
+}
+.flight-radar {
+  grid-area: radar;
+  position: relative;
+  justify-self: end;
+  padding: 3px;
+  border: 1px solid #9bdae0a0;
+  border-radius: 50%;
+  background: #081b22d9;
+  box-shadow:
+    0 0 0 3px #07131de8,
+    0 0 0 4px #77cbd042,
+    0 0 15px #5bbec42a;
+}
+.flight-radar::before {
+  content: '';
+  position: absolute;
+  width: 5px;
+  height: 5px;
+  left: 50%;
+  top: -4px;
+  transform: translateX(-50%) rotate(45deg);
+  background: var(--cp-accent);
+  box-shadow: 0 0 6px var(--cp-accent);
+}
+.flight-radar > svg {
+  display: block;
+  width: var(--radar-size);
+  height: auto;
+}
+.cp-weapons {
+  grid-area: weapons;
+  display: flex;
+  justify-self: center;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  padding-bottom: 3px;
+}
+.cp-special {
+  position: relative;
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: var(--special-size);
+  height: var(--special-size);
+  padding: 0;
+  border: 1px solid #8fbfc250;
+  border-radius: 50%;
+  color: #d9f2f2;
+  background: radial-gradient(circle, #17333bdc 25%, #071820e8 85%);
+  box-shadow: 0 1px 6px #0009;
+  cursor: pointer;
+}
+.cp-special-ring {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+}
+.cp-special-track,
+.cp-special-progress {
+  fill: none;
+  stroke-width: 1.4;
+}
+.cp-special-track {
+  stroke: #98d6d133;
+}
+.cp-special-progress {
+  stroke: var(--cp-accent);
+  stroke-linecap: round;
+  transition: stroke-dasharray 100ms linear;
+}
+.cp-special-key,
+.cp-special-count {
+  position: absolute;
+  left: 0;
+  right: 0;
+  line-height: 1;
+  text-align: center;
+  font-size: 9px;
+}
+.cp-special-key {
+  top: 10%;
+  color: var(--cp-accent);
+}
+.cp-special-count {
+  bottom: 9%;
+  color: #cee6e5;
+}
+.cp-special-face {
+  position: absolute;
+  inset: 28% 0 27%;
+  display: grid;
+  place-items: center;
+  font:
+    700 11px 'Share Tech Mono',
+    monospace;
+}
+.cp-special-face svg {
+  width: 36%;
+  height: auto;
+}
+.cp-special.is-warning,
+.cp-special.is-warning .cp-special-count {
+  color: #ffb385;
+}
+.cp-special.is-warning .cp-special-progress {
+  stroke: #ffb385;
+}
+.cp-special.is-empty {
+  opacity: 0.55;
+}
+.cp-special:active:not(:disabled) {
+  background: #376d72e8;
+}
+.cp-special:disabled {
+  cursor: default;
+}
+.cp-zoom {
+  display: grid;
+  place-items: center;
+  justify-self: end;
+  width: 38px;
+  height: 38px;
+  padding: 0;
+  border-radius: 50%;
+}
+
+/* Optional telemetry goes first; the bars, specials and radar remain separate. */
+@media (max-width: 1180px), (max-height: 550px) {
+  .cp-buffs {
+    display: none;
+  }
+}
+@media (max-width: 760px) {
+  .cp-overlay {
+    --cp-pad: 10px;
+  }
+  .cp-stage {
+    padding: 3px 14px 4px 7px;
+  }
+  .cp-stage-line {
+    gap: 8px;
+  }
+  .cp-stage-line b {
+    font-size: 13px;
+  }
+  .cp-eyebrow span {
+    display: none;
+  }
+  .cp-dock {
+    --radar-size: clamp(80px, 22vw, 128px);
+    --special-size: 52px;
+    gap: 8px;
+    padding: 0 max(10px, env(safe-area-inset-right)) max(10px, env(safe-area-inset-bottom))
+      max(10px, env(safe-area-inset-left));
+  }
+  .cp-vitals {
+    gap: 5px;
+  }
+  .cp-weapons {
+    gap: 6px;
+  }
+}
+@media (max-width: 440px) {
+  .cp-dock {
+    --radar-size: clamp(66px, 25vw, 104px);
+    --special-size: clamp(44px, 12vw, 50px);
+    gap: 6px;
+    padding-inline: max(8px, env(safe-area-inset-left)) max(8px, env(safe-area-inset-right));
+  }
+  .cp-weapons {
+    gap: 4px;
+  }
+  .flight-contact {
+    display: none;
+  }
+  .cp-meter {
+    gap: 2px 5px;
+  }
+}
+@media (max-height: 550px) {
+  .cp-overlay {
+    --cp-pad: 8px;
+  }
+  .cp-stage .cp-eyebrow,
+  .cp-wave {
+    display: none;
+  }
+  .cp-stage-line {
+    margin-top: 0;
+  }
+  .cp-notice {
+    font-size: 11px;
+    padding-block: 3px;
+  }
+  .cp-dock {
+    --radar-size: max(60px, min(104px, 20vh, 25vw));
+    padding-bottom: max(8px, env(safe-area-inset-bottom));
+  }
+}
+@media (max-height: 420px) {
+  .cp-dock {
+    --radar-size: max(52px, min(84px, 20vh, 25vw));
+    gap: 6px;
+    padding-bottom: max(6px, env(safe-area-inset-bottom));
+  }
+  .flight-contact {
+    display: none;
+  }
+  .cp-vitals {
+    gap: 3px;
+  }
+  .cp-meter {
+    gap: 1px 5px;
+  }
+  .cp-meter label,
+  .cp-meter b {
+    font-size: 10px;
+  }
+  .cp-boss {
+    margin-top: 2px;
+    font-size: 10px;
+    line-height: 1;
+  }
+  .cp-notice {
+    padding-block: 2px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .cp-zoom {
+    width: 32px;
+    height: 32px;
+  }
+}
+@media (max-height: 420px) and (max-width: 360px) {
+  .cp-touch-hint-full {
+    display: none;
+  }
+  .cp-touch-hint-compact {
+    display: inline;
+  }
+}
+@media (max-height: 300px) {
+  .cp-dock {
+    padding-bottom: max(4px, env(safe-area-inset-bottom));
+  }
+  .cp-vitals {
+    gap: 2px;
+  }
+  .cp-meter label,
+  .cp-meter b {
+    font-size: 9px;
+    line-height: 1;
+  }
+}

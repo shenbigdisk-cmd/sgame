@@ -1815,3 +1815,4 @@ canvas {
   .builder-body { flex-direction: column; }
   .builder-slots-sidebar { width: 100%; height: 210px; }
 }
+@media(max-width:760px){.victory-screen{overflow-y:auto}.victory-layout{height:auto;min-height:100%}.victory-choices{grid-template-rows:auto}.victory-choice{min-height:min-content}}

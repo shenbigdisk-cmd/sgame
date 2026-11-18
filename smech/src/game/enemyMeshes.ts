@@ -166,3 +166,15 @@ export function createBar(): HealthBar {
   bar.add(bg, fg);
   return { bar, fg };
 }
+
+/** A low-altitude twin-duct scout. Its gimballed nose follows its aim independently. */
+export function createSkimmerMesh(p:Palette):TankMesh {
+  const {hull,dark,glow}=makeMats(p), group=new THREE.Group(), turret=new THREE.Group();
+  const pod=new THREE.Mesh(new THREE.OctahedronGeometry(1.4),hull);pod.scale.set(0.86,0.58,1.5);pod.position.y=0.9;group.add(pod);
+  for(const side of [-1,1]) {
+    const duct=new THREE.Mesh(new THREE.TorusGeometry(1.0,0.23,6,16),dark);duct.rotation.x=Math.PI/2;duct.position.set(side*1.65,0.9,0);group.add(duct);
+    const blade=new THREE.Mesh(new THREE.BoxGeometry(1.9,0.11,0.25),glow);blade.position.copy(duct.position);group.add(blade);
+  }
+  turret.position.y=0.65;const eye=new THREE.Mesh(new THREE.BoxGeometry(0.65,0.32,0.6),glow);eye.position.z=1.48;turret.add(eye);group.add(turret);setShadows(group);
+  return {group,turret,flashMats:[hull]};
+}

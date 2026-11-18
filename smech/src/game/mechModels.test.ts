@@ -34,6 +34,16 @@ describe('factory floor models', () => {
     for (const mech of mechs) disposeMech(mech);
   });
 
+  it('builds a distinct satellite uplink on the Skyfall shoulder', () => {
+    const orbital = buildMech({ ...STARTER_EQUIPPED, specialQ: 'x_orbital' });
+    const cinder = buildMech({ ...STARTER_EQUIPPED, specialQ: 'x_jump' });
+    expect(orbital.getObjectByName('orbital-uplink')).toBeTruthy();
+    expect(cinder.getObjectByName('orbital-uplink')).toBeUndefined();
+    expect(componentModelKey('x_orbital')).not.toBe(componentModelKey('x_jump'));
+    disposeMech(orbital);
+    disposeMech(cinder);
+  });
+
   it('still assembles a bare frame when every weapon socket is stripped', () => {
     const mech = buildMech({ frame: 'f_glacier' });
     expect(meshCount(mech)).toBeGreaterThan(10);

@@ -68,13 +68,17 @@ export default function App() {
     audioRef.current?.setMusicVolume(next.music);
   }, []);
 
+  const bankLoot = useCallback((amount: number) => {
+    setGarage(current => grantCredits(current, amount));
+  }, []);
+
   const handleGameOver = useCallback((s: GameStats) => {
     const { records: next, isBest, rank } = submitRecord(s);
     setRecords(next);
     // Winning in the sand pays out credits for the forge.
     const earned = creditsForRun(s, isBest);
     setGarage((current) => grantCredits(current, earned));
-    setStats({ ...s, isBest, rank, credits: earned, mechName: garage.mechName });
+    setStats({ ...s, isBest, rank, credits: earned + (s.lootCredits ?? 0), mechName: garage.mechName });
     setScreen('gameover');
   }, [garage.mechName]);
 
@@ -108,6 +112,7 @@ export default function App() {
           audio={audio}
           settings={settings}
           onSettings={updateSettings}
+          onLoot={bankLoot}
           onGameOver={handleGameOver}
           onAbort={() => setScreen('menu')}
         />

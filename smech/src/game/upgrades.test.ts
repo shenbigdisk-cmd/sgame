@@ -1,12 +1,12 @@
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { EVOLUTIONS, UPGRADES, defaultStats, rollOffer } from './upgrades';
 import type { WeaponId } from './types';
 
 const ALL: WeaponId[] = [
   'autocannon', 'cannon', 'scatter', 'coil', 'flame', 'cryo', 'cryoball',
-  'jump', 'mines', 'smoke', 'missiles', 'turret', 'mortar', 'overdrive', 'rail', 'nova',
+  'cinder', 'orbital', 'mines', 'smoke', 'missiles', 'turret', 'mortar', 'overdrive', 'rail', 'nova',
 ];
 
 describe('player stats', () => {
@@ -44,7 +44,7 @@ describe('upgrade catalogue', () => {
     // The engine gates behaviour on evolved('mortar' | 'nova' | 'overdrive' | 'cryo');
     // a missing evolution would leave those branches permanently unreachable.
     const evoIds = new Set(EVOLUTIONS.map((e) => e.id));
-    for (const special of ['mortar', 'nova', 'overdrive', 'cryo'] as WeaponId[]) {
+    for (const special of ['mortar', 'nova', 'overdrive', 'cryo', 'orbital'] as WeaponId[]) {
       expect(evoIds.has(`evo_${special}`)).toBe(true);
     }
   });
@@ -108,6 +108,29 @@ describe('rollOffer', () => {
         if (upgrade.id === 'overdrive_up') expect(owned.has('overdrive')).toBe(true);
         if (upgrade.id === 'cryo_lance') expect(owned.has('cryo')).toBe(true);
       }
+    }
+  });
+
+  it('offers the orbital evolution and uplink only to a mech with Skyfall', () => {
+    const owned = new Set<WeaponId>(['orbital']);
+    const without = new Set<WeaponId>(['cinder']);
+    const seen = new Set<string>();
+    let seed = 12345;
+    const random = vi.spyOn(Math, 'random').mockImplementation(() => {
+      seed = (Math.imul(seed, 1664525) + 1013904223) >>> 0;
+      return seed / 2 ** 32;
+    });
+    try {
+      for (let i = 0; i < 1000; i++) {
+        for (const upgrade of rollOffer(new Map(), owned)) seen.add(upgrade.id);
+        for (const upgrade of rollOffer(new Map(), without)) {
+          expect(['evo_orbital', 'orbital_uplink']).not.toContain(upgrade.id);
+        }
+      }
+      expect(seen.has('evo_orbital')).toBe(true);
+      expect(seen.has('orbital_uplink')).toBe(true);
+    } finally {
+      random.mockRestore();
     }
   });
 

@@ -1,35 +1,168 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { Game } from '../game/engine';
-import type { HudWeapon } from '../game/types';
 
 interface Props {
   game: Game | null;
   accent: string;
-  weapons: HudWeapon[];
+  enabled?: boolean;
 }
 
-const DISPLAY = "'Orbitron', 'Share Tech Mono', monospace";
+type FireChannel = 'primary' | 'secondary';
+const HOLD_TO_FIRE_MS = 200;
+const MIN_FIRE_MS = 120;
+const AIM_DRAG_PX = 10;
+const RADIUS = 62;
 
 /**
- * On-screen controls for touch devices: a virtual stick on the left for
- * movement (relative to where you are looking), drag anywhere on the right to
- * aim, and big fire buttons.
+ * The left side is a movement stick. On the right, drag to aim, tap or hold to
+ * fire primary, and add a second finger for secondary. A deliberate drag does
+ * not fire unless the first finger was already held long enough to shoot.
  */
-export default function TouchControls({ game, accent, weapons }: Props) {
-  const [stick, setStick] = useState<{ active: boolean; ox: number; oy: number; dx: number; dy: number }>({ active: false, ox: 0, oy: 0, dx: 0, dy: 0 });
-  const lookId = useRef<number | null>(null);
-  const lookLast = useRef({ x: 0, y: 0 });
-  const stickId = useRef<number | null>(null);
-  const [firing, setFiring] = useState<{ primary: boolean; secondary: boolean }>({ primary: false, secondary: false });
-
+export default function TouchControls({ game, accent, enabled = true }: Props) {
   useEffect(() => {
     game?.setTouchMode(true);
     return () => game?.setTouchMode(false);
   }, [game]);
+  // Removing the surfaces also releases every captured touch during an upgrade.
+  return enabled ? <TouchSurface game={game} accent={accent} /> : null;
+}
 
-  const RADIUS = 62;
-
+function TouchSurface({ game, accent }: Omit<Props, 'enabled'>) {
+  const [stick, setStick] = useState<{ active: boolean; ox: number; oy: number; dx: number; dy: number }>({
+    active: false,
+    ox: 0,
+    oy: 0,
+    dx: 0,
+    dy: 0,
+  });
+  const stickId = useRef<number | null>(null);
   const stickOrigin = useRef({ x: 0, y: 0 });
+  const lookId = useRef<number | null>(null);
+  const secondId = useRef<number | null>(null);
+  const lookOrigin = useRef({ x: 0, y: 0 });
+  const lookLast = useRef({ x: 0, y: 0 });
+  const lookMoved = useRef(false);
+  const multiTouch = useRef(false);
+  const fire = useRef({ primary: false, secondary: false });
+  const fireSince = useRef({ primary: 0, secondary: 0 });
+  const holdTimer = useRef<number | null>(null);
+  const releaseTimers = useRef<Record<FireChannel, number | null>>({ primary: null, secondary: null });
+
+  const setChannel = useCallback(
+    (channel: FireChannel, down: boolean) => {
+      if (fire.current[channel] === down) return;
+      fire.current[channel] = down;
+      game?.setPadFire(fire.current.primary, fire.current.secondary);
+    },
+    [game],
+  );
+
+  const releaseAll = useCallback(
+    (hideStick = true) => {
+      if (holdTimer.current !== null) window.clearTimeout(holdTimer.current);
+      holdTimer.current = null;
+      for (const channel of ['primary', 'secondary'] as const) {
+        const timer = releaseTimers.current[channel];
+        if (timer !== null) window.clearTimeout(timer);
+        releaseTimers.current[channel] = null;
+      }
+      stickId.current = lookId.current = secondId.current = null;
+      fire.current = { primary: false, secondary: false };
+      game?.setPadFire(false, false);
+      game?.setPadMove(0, 0);
+      if (hideStick) setStick((s) => (s.active ? { ...s, active: false, dx: 0, dy: 0 } : s));
+    },
+    [game],
+  );
+
+  useEffect(() => {
+    const onBlur = () => releaseAll();
+    const onVisibility = () => {
+      if (document.hidden) releaseAll();
+    };
+    window.addEventListener('blur', onBlur);
+    document.addEventListener('visibilitychange', onVisibility);
+    return () => {
+      window.removeEventListener('blur', onBlur);
+      document.removeEventListener('visibilitychange', onVisibility);
+      releaseAll(false);
+    };
+  }, [releaseAll]);
+
+  const cancelHold = () => {
+    if (holdTimer.current !== null) window.clearTimeout(holdTimer.current);
+    holdTimer.current = null;
+  };
+  const cancelRelease = (channel: FireChannel) => {
+    const timer = releaseTimers.current[channel];
+    if (timer !== null) window.clearTimeout(timer);
+    releaseTimers.current[channel] = null;
+  };
+  const press = (channel: FireChannel) => {
+    cancelRelease(channel);
+    if (!fire.current[channel]) fireSince.current[channel] = Date.now();
+    setChannel(channel, true);
+  };
+  const release = (channel: FireChannel, completeTap: boolean) => {
+    cancelRelease(channel);
+    if (!fire.current[channel]) return;
+    // Keep a quick tap down briefly so the simulation can register it.
+    const remaining = completeTap ? Math.max(0, MIN_FIRE_MS - (Date.now() - fireSince.current[channel])) : 0;
+    if (remaining) {
+      releaseTimers.current[channel] = window.setTimeout(() => {
+        releaseTimers.current[channel] = null;
+        setChannel(channel, false);
+      }, remaining);
+    } else setChannel(channel, false);
+  };
+
+  // The first right-hand pointer aims. A second one fires the alternate weapon.
+  const startLook = (e: React.PointerEvent) => {
+    if (lookId.current === null) {
+      e.currentTarget.setPointerCapture(e.pointerId);
+      cancelRelease('primary');
+      setChannel('primary', false);
+      lookId.current = e.pointerId;
+      lookOrigin.current = lookLast.current = { x: e.clientX, y: e.clientY };
+      lookMoved.current = false;
+      multiTouch.current = secondId.current !== null;
+      if (!multiTouch.current) {
+        holdTimer.current = window.setTimeout(() => {
+          holdTimer.current = null;
+          if (lookId.current === e.pointerId && !lookMoved.current && !multiTouch.current) press('primary');
+        }, HOLD_TO_FIRE_MS);
+      }
+    } else if (secondId.current === null && e.pointerId !== lookId.current) {
+      e.currentTarget.setPointerCapture(e.pointerId);
+      secondId.current = e.pointerId;
+      multiTouch.current = true;
+      cancelHold();
+      press('secondary');
+    }
+  };
+  const moveLook = (e: React.PointerEvent) => {
+    if (lookId.current !== e.pointerId) return;
+    const dx = e.clientX - lookLast.current.x;
+    const dy = e.clientY - lookLast.current.y;
+    lookLast.current = { x: e.clientX, y: e.clientY };
+    if (Math.hypot(e.clientX - lookOrigin.current.x, e.clientY - lookOrigin.current.y) > AIM_DRAG_PX) {
+      lookMoved.current = true;
+      cancelHold();
+    }
+    game?.addPadLook(dx, dy);
+  };
+  const endLook = (e: React.PointerEvent) => {
+    const completed = e.type === 'pointerup';
+    if (lookId.current === e.pointerId) {
+      cancelHold();
+      lookId.current = null;
+      if (completed && !lookMoved.current && !multiTouch.current && !fire.current.primary) press('primary');
+      release('primary', completed);
+    } else if (secondId.current === e.pointerId) {
+      secondId.current = null;
+      release('secondary', completed);
+    }
+  };
 
   const onStickMove = useCallback(
     (x: number, y: number) => {
@@ -47,25 +180,6 @@ export default function TouchControls({ game, accent, weapons }: Props) {
     [game],
   );
 
-  // --- aiming: any touch that starts on the right half (not on a button) ---
-  const startLook = (e: React.PointerEvent) => {
-    if (lookId.current !== null) return;
-    e.currentTarget.setPointerCapture(e.pointerId);
-    lookId.current = e.pointerId;
-    lookLast.current = { x: e.clientX, y: e.clientY };
-  };
-  const moveLook = (e: React.PointerEvent) => {
-    if (lookId.current !== e.pointerId) return;
-    const dx = e.clientX - lookLast.current.x;
-    const dy = e.clientY - lookLast.current.y;
-    lookLast.current = { x: e.clientX, y: e.clientY };
-    game?.addPadLook(dx, dy);
-  };
-  const endLook = (e: React.PointerEvent) => {
-    if (lookId.current === e.pointerId) lookId.current = null;
-  };
-
-  // --- movement stick: any touch on the left third ---
   const startStick = (e: React.PointerEvent) => {
     if (stickId.current !== null) return;
     e.currentTarget.setPointerCapture(e.pointerId);
@@ -74,8 +188,7 @@ export default function TouchControls({ game, accent, weapons }: Props) {
     setStick({ active: true, ox: e.clientX, oy: e.clientY, dx: 0, dy: 0 });
   };
   const moveStick = (e: React.PointerEvent) => {
-    if (stickId.current !== e.pointerId) return;
-    onStickMove(e.clientX, e.clientY);
+    if (stickId.current === e.pointerId) onStickMove(e.clientX, e.clientY);
   };
   const endStick = (e: React.PointerEvent) => {
     if (stickId.current === e.pointerId) {
@@ -85,31 +198,41 @@ export default function TouchControls({ game, accent, weapons }: Props) {
     }
   };
 
-  const fireRef = useRef({ primary: false, secondary: false });
-  const setFire = (which: 'primary' | 'secondary', on: boolean) => {
-    if (which === 'primary') fireRef.current.primary = on;
-    else fireRef.current.secondary = on;
-    setFiring({ ...fireRef.current });
-    game?.setPadFire(fireRef.current.primary, fireRef.current.secondary);
-  };
-
-  // The cockpit always reports the two trigger weapons first, tagged by their
-  // hardpoint key — look them up instead of assuming a fixed array order.
-  const primary = weapons.find((w) => w.key === 'LMB');
-  const secondary = weapons.find((w) => w.key === 'RMB');
-  const specials = weapons.filter((w) => w.key === 'Q' || w.key === 'E');
-
   return (
     <div className="absolute inset-0 z-10" style={{ touchAction: 'none' }}>
-      {/* look surface (right side, above the buttons) */}
-      <div className="absolute inset-y-0 right-0" style={{ width: '62%' }} onPointerDown={startLook} onPointerMove={moveLook} onPointerUp={endLook} onPointerCancel={endLook} />
-      {/* movement stick surface (left side) */}
-      <div className="absolute inset-y-0 left-0" style={{ width: '38%' }} onPointerDown={startStick} onPointerMove={moveStick} onPointerUp={endStick} onPointerCancel={endStick} />
+      <div
+        className="touch-look absolute inset-y-0 right-0"
+        style={{ width: '62%' }}
+        onPointerDown={startLook}
+        onPointerMove={moveLook}
+        onPointerUp={endLook}
+        onPointerCancel={endLook}
+        onLostPointerCapture={endLook}
+      />
+      <div
+        className="touch-stick absolute inset-y-0 left-0"
+        style={{ width: '38%' }}
+        onPointerDown={startStick}
+        onPointerMove={moveStick}
+        onPointerUp={endStick}
+        onPointerCancel={endStick}
+        onLostPointerCapture={endStick}
+      />
 
-      {/* stick visual */}
       {stick.active && (
-        <div className="absolute pointer-events-none" style={{ left: stick.ox, top: stick.oy, transform: 'translate(-50%, -50%)' }}>
-          <div className="rounded-full" style={{ width: RADIUS * 2, height: RADIUS * 2, border: `2px solid ${accent}66`, background: 'rgba(0,0,0,0.25)' }} />
+        <div
+          className="absolute pointer-events-none"
+          style={{ left: stick.ox, top: stick.oy, transform: 'translate(-50%, -50%)' }}
+        >
+          <div
+            className="rounded-full"
+            style={{
+              width: RADIUS * 2,
+              height: RADIUS * 2,
+              border: `2px solid ${accent}66`,
+              background: 'rgba(0,0,0,0.25)',
+            }}
+          />
           <div
             className="absolute rounded-full"
             style={{
@@ -123,85 +246,6 @@ export default function TouchControls({ game, accent, weapons }: Props) {
           />
         </div>
       )}
-      {!stick.active && (
-        <div className="absolute pointer-events-none left-[8%] bottom-[26%] text-[10px] tracking-[0.3em] opacity-40" style={{ fontFamily: DISPLAY, color: accent }}>
-          DRAG TO MOVE
-        </div>
-      )}
-
-      {/* special weapon hardpoints */}
-      <div className="absolute right-5 top-[24%] flex flex-wrap gap-2 justify-end" style={{ maxWidth: '58vw' }}>
-        {specials.map((weapon) => (
-          <button
-            key={`${weapon.id}-${weapon.key}`}
-            className="min-w-[74px] rounded px-2 py-3 text-[10px] tracking-wider disabled:opacity-40"
-            style={{ fontFamily: DISPLAY, border: `1px solid ${accent}`, background: 'rgba(0,0,0,0.68)', color: accent, opacity: weapon.ready >= 1 ? 1 : 0.5 }}
-            disabled={weapon.ready < 1}
-            onPointerDown={(e) => { e.preventDefault(); if (weapon.id) game?.useWeapon(weapon.id); }}
-          >
-            {weapon.key}<br />{weapon.short}
-          </button>
-        ))}
-      </div>
-
-      {/* trigger buttons: the secondary sits above the primary so the thumb can rest on it */}
-      <div className="absolute right-5 bottom-24 flex flex-col items-end gap-3">
-        <button
-          className="rounded-full flex items-center justify-center active:scale-95 transition-transform"
-          style={{
-            width: 74,
-            height: 74,
-            background: firing.secondary ? '#ff8a3d' : 'rgba(20,12,8,0.6)',
-            border: `2px solid ${accent}`,
-            color: '#fff',
-            fontFamily: DISPLAY,
-            opacity: secondary && secondary.ready < 1 ? 0.55 : 1,
-          }}
-          onPointerDown={(e) => {
-            e.preventDefault();
-            setFire('secondary', true);
-          }}
-          onPointerUp={() => setFire('secondary', false)}
-          onPointerLeave={() => setFire('secondary', false)}
-          onPointerCancel={() => setFire('secondary', false)}
-        >
-          <span className="text-[10px] tracking-[0.2em]">{secondary?.short ?? 'SEC'}</span>
-        </button>
-        <button
-          className="rounded-full flex items-center justify-center active:scale-95 transition-transform"
-          style={{
-            width: 96,
-            height: 96,
-            background: firing.primary ? accent : 'rgba(20,12,8,0.6)',
-            border: `3px solid ${accent}`,
-            color: firing.primary ? '#000' : '#fff',
-            fontFamily: DISPLAY,
-            boxShadow: `0 0 20px ${accent}55`,
-            opacity: primary && primary.ready < 1 ? 0.6 : 1,
-          }}
-          onPointerDown={(e) => {
-            e.preventDefault();
-            setFire('primary', true);
-          }}
-          onPointerUp={() => setFire('primary', false)}
-          onPointerLeave={() => setFire('primary', false)}
-          onPointerCancel={() => setFire('primary', false)}
-        >
-          <span className="text-xs tracking-[0.2em]">{primary?.short ?? 'FIRE'}</span>
-        </button>
-      </div>
-
-      {/* scope toggle */}
-      <button
-        className="absolute right-5 bottom-[46%] rounded px-3 py-2 text-[10px] tracking-[0.25em] active:scale-95"
-        style={{ fontFamily: DISPLAY, border: `1px solid ${accent}88`, background: 'rgba(0,0,0,0.45)', color: accent }}
-        onPointerDown={(e) => {
-          e.preventDefault();
-          game?.toggleZoom();
-        }}
-      >
-        SCOPE
-      </button>
     </div>
   );
 }

@@ -16,10 +16,11 @@ import {
   renameMech,
   saveBlueprint,
   saveGarage,
+  selectMech,
   unequipSlot,
   type GarageState,
 } from './garage';
-import { getComponent, PRESETS, STARTER_COMPONENTS, STARTER_EQUIPPED } from './forge';
+import { buildConfig, getComponent, PRESETS, STARTER_COMPONENTS, STARTER_EQUIPPED } from './forge';
 import type { GameStats } from './types';
 
 const stats = (over: Partial<GameStats> = {}): GameStats => ({
@@ -290,5 +291,61 @@ describe('custom mech construction and sales', () => {
     const sellRes = sellCustomMech(garage, 'prebuilt:warden');
     expect(sellRes.ok).toBe(false);
     expect(sellRes.reason).toBe('cannot_sell_prebuilt');
+  });
+});
+
+describe('Pyre orbital factory upgrade', () => {
+  const oldFactoryPyre = { ...PRESETS[1].equipped, specialQ: 'x_jump' };
+
+  it('keeps the new factory loadout when selecting and reloading Pyre without purchased parts', () => {
+    const selected = selectMech(loadGarage(), 'prebuilt:pyre');
+    expect(selected.equipped.specialQ).toBe('x_orbital');
+    expect(selected.owned).not.toContain('x_orbital');
+    const restored = loadGarage();
+    expect(restored.equipped).toEqual(PRESETS[1].equipped);
+    expect(buildConfig(restored.equipped).loadout).toMatchObject({ abilityQ: 'orbital', abilityE: 'mines' });
+  });
+
+  it('replaces Cinder on an already selected old factory Pyre and survives another save', () => {
+    localStorage.setItem(GARAGE_STORAGE_KEY, JSON.stringify({ ...DEFAULT_GARAGE, activeMechId: 'prebuilt:pyre', equipped: oldFactoryPyre }));
+    const restored = loadGarage();
+    expect(restored.equipped).toEqual(PRESETS[1].equipped);
+    expect(buildConfig(restored.equipped).loadout.abilityQ).toBe('orbital');
+    saveGarage(restored);
+    expect(loadGarage().equipped).toEqual(PRESETS[1].equipped);
+  });
+
+  it('recognises an exact older factory Pyre even without an active mech id', () => {
+    const legacy: Partial<GarageState> = { ...DEFAULT_GARAGE, equipped: oldFactoryPyre };
+    delete legacy.activeMechId;
+    localStorage.setItem(LEGACY_GARAGE_STORAGE_KEY, JSON.stringify(legacy));
+    const restored = loadGarage();
+    expect(restored.activeMechId).toBe('prebuilt:pyre');
+    expect(restored.equipped.specialQ).toBe('x_orbital');
+    expect(restored.equipped.specialE).toBe('x_mines');
+  });
+
+  it('does not rewrite custom mechs or saved builds that use Cinder', () => {
+    const equipped = { frame: 'f_pyre', specialQ: 'x_jump' };
+    const custom = { id: 'mech_old', name: 'OLD PYRE', frame: 'pyre', equipped, cost: 420, createdAt: 1 };
+    localStorage.setItem(GARAGE_STORAGE_KEY, JSON.stringify({
+      ...DEFAULT_GARAGE, activeMechId: custom.id, equipped,
+      owned: [...STARTER_COMPONENTS, 'x_jump'], customMechs: [custom],
+      blueprints: [{ id: 'saved', name: 'OLD BUILD', equipped }],
+    }));
+    const restored = loadGarage();
+    expect(restored.equipped.specialQ).toBe('x_jump');
+    expect(restored.customMechs[0].equipped.specialQ).toBe('x_jump');
+    expect(restored.blueprints[0].equipped.specialQ).toBe('x_jump');
+    expect(buildConfig(restored.equipped).loadout.abilityQ).toBe('cinder');
+  });
+
+  it('does not replace deliberately empty sockets on a factory Pyre', () => {
+    const equipped = { ...PRESETS[1].equipped } as Partial<GarageState['equipped']>;
+    delete equipped.specialQ;
+    localStorage.setItem(GARAGE_STORAGE_KEY, JSON.stringify({ ...DEFAULT_GARAGE, activeMechId: 'prebuilt:pyre', equipped }));
+    const restored = loadGarage();
+    expect(restored.equipped.specialQ).toBeUndefined();
+    expect(restored.equipped.specialE).toBe('x_mines');
   });
 });
