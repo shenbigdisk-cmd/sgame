@@ -226,6 +226,12 @@ describe('custom mech construction and sales', () => {
     const name = generateCoolMechName();
     expect(name.length).toBeGreaterThan(4);
     expect(name).toMatch(/[A-Z]+ [A-Z]+-\d/);
+    // Long prefixes must still leave room for a complete suffix and number.
+    for (let i = 0; i < 200; i++) {
+      const generated = generateCoolMechName();
+      expect(generated.length).toBeLessThanOrEqual(18);
+      expect(generated).toMatch(/^[A-Z]+ [A-Z]+-\d$/);
+    }
   });
 
   it('lists custom mechs at the start, followed by the 3 fixed prebuilt mechs', async () => {
@@ -283,6 +289,24 @@ describe('custom mech construction and sales', () => {
     expect(sellRes.refund).toBe(Math.floor(mech.cost / 2));
     expect(sellRes.state.credits).toBe(creditsAfterBuild + Math.floor(mech.cost / 2));
     expect(sellRes.state.customMechs).toHaveLength(0);
+  });
+
+  it('charges the selected range, stability and EMP parts and keeps the paid refund across reloads', async () => {
+    const { buildNewMech, calculateBuildCost, sellCustomMech } = await import('./garage');
+    const garage = grantCredits(loadGarage(), 6000);
+    const basic = { ...STARTER_EQUIPPED };
+    const tuned = { ...basic, primary: 'p_coil_rail', secondary: 's_emp', drive: 'd_atlas' };
+    const cost = calculateBuildCost(tuned);
+    expect(cost).toBeGreaterThan(calculateBuildCost(basic));
+    const result = buildNewMech(garage, 'VOLT SCOUT', tuned);
+    expect(result.ok).toBe(true);
+    expect(result.state.credits).toBe(garage.credits - cost);
+    const restored = loadGarage();
+    expect(restored.customMechs[0].equipped).toEqual(tuned);
+    expect(buildConfig(restored.equipped)).toMatchObject({ primaryRange: 225, secondaryRange: 110, driveStability: 0.22 });
+    const sold = sellCustomMech(restored, restored.customMechs[0].id);
+    expect(sold.refund).toBe(Math.floor(cost / 2));
+    expect(sold.state.credits).toBe(restored.credits + Math.floor(cost / 2));
   });
 
   it('forbids selling the 3 prebuilt factory mechs', async () => {

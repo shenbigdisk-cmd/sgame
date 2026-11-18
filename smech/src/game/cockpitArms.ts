@@ -62,6 +62,13 @@ export function makeHardpoint(id: WeaponId | null, cfg: VehicleConfig) {
       for(const x of [-.22,0,.22]){tube(.094,.094,.67,x,.275,-.19,lamp);for(const z of [.1,-.45])tube(.107,.107,.095,x,.275,z,steel)}
       tipAt(-1.30);break;
     }
+    case 'emp': {
+      const electric=new THREE.MeshStandardMaterial({color:0x84e9ff,emissive:0x29bce8,emissiveIntensity:1.8});
+      box(.58,.42,1.12,0,0,-.22,dark);tube(.13,.10,1.6,0,0,-.97,electric,10);
+      for(const x of [-.23,.23]){box(.10,.23,1.55,x,0,-.92,alloy);box(.055,.025,1.22,x,.14,-.92,electric)}
+      for(const z of [-.65,-1.1,-1.5])hoop(.25,.035,z,electric);
+      tipAt(-1.78);break;
+    }
   }
   return {root,tip,rotor};
 }

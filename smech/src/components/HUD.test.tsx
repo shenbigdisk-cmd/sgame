@@ -72,6 +72,7 @@ const state: HudState = {
   seenBy: 0,
   ambushAge: 10,
   inWater: false,
+  concealed: false,
   buffs: [],
   drops: [],
   overchargeCount: 0,
@@ -117,6 +118,9 @@ const weapons: HudWeapon[] = [
     ready: 1,
     active: 0,
     detail: '',
+    upgradeCount: 0,
+    upgrades: [],
+    evolved: false,
   },
   {
     id: 'cannon',
@@ -127,6 +131,9 @@ const weapons: HudWeapon[] = [
     ready: 1,
     active: 0,
     detail: '',
+    upgradeCount: 0,
+    upgrades: [],
+    evolved: false,
   },
   {
     id: 'missiles',
@@ -137,6 +144,9 @@ const weapons: HudWeapon[] = [
     ready: 1,
     active: 0,
     detail: '',
+    upgradeCount: 0,
+    upgrades: [],
+    evolved: false,
     charges: 5,
     capacity: 5,
     cost: 20,
@@ -150,6 +160,9 @@ const weapons: HudWeapon[] = [
     ready: 1,
     active: 0,
     detail: '',
+    upgradeCount: 0,
+    upgrades: [],
+    evolved: false,
     charges: 3,
     capacity: 3,
     cost: 30,
@@ -228,6 +241,76 @@ describe('cockpit health and shield bars', () => {
     const restored = meter(renderHud({ shield: 40, shieldActive: true, shieldDelay: 0 }), 'Shield');
     expect(restored.querySelector('b')?.textContent).toBe('40');
     expect(fillWidth(restored)).toBe('100%');
+  });
+});
+
+describe('upgrade and status feedback', () => {
+  it('puts the actual upgrade count on the matching special even while cooling or empty', () => {
+    const upgraded: HudWeapon = {
+      ...weapons[3], ready: 0, charges: 0, evolved: true, upgradeCount: 3,
+      upgrades: [
+        { name: 'SENTRY PROTOCOLS', rank: 2, evolution: false },
+        { name: 'ARC SENTRY', rank: 1, evolution: true },
+      ],
+    };
+    const container = renderHud({ weapons: [...weapons.slice(0, 3), upgraded] });
+    const [missiles, turret] = container.querySelectorAll<HTMLButtonElement>('.cp-special');
+    expect(missiles.querySelector('.cp-upgrade-badge')).toBeNull();
+    expect(turret.querySelector('.cp-upgrade-badge')?.textContent).toBe('+3');
+    expect(turret.classList.contains('is-evolved')).toBe(true);
+    expect(turret.getAttribute('aria-label')).toContain('3 upgrades, evolved');
+    expect(turret.getAttribute('title')).toContain('SENTRY PROTOCOLS ×2');
+    expect(turret.getAttribute('title')).toContain('ARC SENTRY (evolution)');
+    expect(turret.querySelector('.cp-special-face')?.textContent).toBe('REARM');
+  });
+
+  it('adds compact primary and secondary icons only when those weapons have upgrades', () => {
+    const container = renderHud({ weapons: [
+      { ...weapons[0], upgradeCount: 2, upgrades: [{ name: 'AP ROUNDS', rank: 2, evolution: false }] },
+      weapons[1],
+      weapons[2],
+      weapons[3],
+    ] });
+    const badges = container.querySelectorAll('.cp-main-weapon');
+    expect(badges).toHaveLength(1);
+    expect(badges[0].querySelector('svg')).not.toBeNull();
+    expect(badges[0].querySelector('b')?.textContent).toBe('+2');
+    expect(badges[0].getAttribute('aria-label')).toContain('Primary ROTARY AUTOCANNONS, 2 upgrades');
+    expect(container.querySelectorAll('.cp-weapons button')).toHaveLength(2);
+    expect(renderHud({ weapons }).querySelector('.cp-main-upgrades')).toBeNull();
+
+    const manyRanks = renderHud({ weapons: [
+      { ...weapons[0], upgradeCount: 21, upgrades: [{ name: 'UPGRADES', rank: 21, evolution: false }] },
+      { ...weapons[1], upgradeCount: 12, upgrades: [{ name: 'UPGRADES', rank: 12, evolution: false }] },
+      weapons[2], weapons[3],
+    ] });
+    expect([...manyRanks.querySelectorAll('.cp-main-weapon b')].map((badge) => badge.textContent)).toEqual(['+21', '+12']);
+  });
+
+  it('renders every status and its countdown without equating undetected with smoke cover', () => {
+    const buffs = [
+      { id: 'veiled', name: 'VEILED IN SMOKE', icon: 'smoke', time: 5.2, max: 6 },
+      { id: 'aegis', name: 'INVULNERABLE', icon: 'shield', time: 3, max: 6 },
+      { id: 'overcharge', name: 'FIREPOWER +35%', icon: 'bolt', time: 24, max: 25 },
+      { id: 'rapid', name: 'RAPID RELOAD', icon: 'clock', time: 12, max: 25 },
+      { id: 'haste', name: 'KILLSTREAK SURGE', icon: 'gear', time: 7, max: 8 },
+      { id: 'overdrive', name: 'OVERDRIVE', icon: 'overdrive', time: 15, max: 16 },
+      { id: 'smoke', name: 'VEIL SPRINT', icon: 'smoke', time: 2, max: 4.5 },
+    ];
+    const covered = renderHud({ concealed: true, buffs }, true, true);
+    expect(covered.querySelector('.cp-veil-effect')).not.toBeNull();
+    expect(covered.querySelectorAll('.cp-buff')).toHaveLength(7);
+    expect(covered.querySelector('.cp-buff-veiled b')?.textContent).toBe('6s');
+    expect(covered.querySelector('.cp-buff-veiled')?.getAttribute('aria-label')).toContain('while inside');
+    expect(covered.querySelector('.cp-buff-veiled')?.getAttribute('aria-label')).toContain('heavy fire can penetrate');
+    expect(covered.querySelector('.cp-buff-smoke b')?.textContent).toBe('2s');
+    expect(covered.querySelector('.cp-buff-overdrive .cp-buff-progress')?.getAttribute('style')).toContain('93.75%');
+    expect(covered.querySelector('.cp-reticle')?.textContent).toBe('');
+    const open = renderHud({ detected: 0, seenBy: 0, buffs: [buffs[6]] });
+    expect(open.querySelector('.cp-veil-effect')).toBeNull();
+    expect(open.querySelector('.cp-buff-veiled')).toBeNull();
+    expect(open.querySelector('.flight-contact')?.textContent).toContain('Undetected');
+    expect(open.querySelector('.flight-contact')?.textContent).not.toContain('Concealed');
   });
 });
 

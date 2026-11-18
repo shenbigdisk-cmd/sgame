@@ -1,4 +1,5 @@
 import type { UpgradeDef, WeaponId } from './types';
+import type { WeaponSocket } from './vehicles';
 
 /** The first installation has no suffix; only installed stacks advance the name. */
 export function upgradeName(name: string, rank: number): string {
@@ -105,6 +106,7 @@ export const EVOLUTIONS: UpgradeDef[] = [
   { id: 'evo_mines', name: 'CLUSTER MINES', desc: 'Deploy three mines at once. Mine blasts are 50% larger and ignite enemies.', rarity: 'epic', icon: 'mines', tag: 'SIGNATURE', signature: true, evolution: true, evolves: 'mines', max: 1 },
   { id: 'evo_coil', name: 'SPLINTER NEEDLES', desc: 'Coil rounds deal 45% more damage against chilled or frozen enemies.', rarity: 'epic', icon: 'coil', tag: 'SIGNATURE', signature: true, evolution: true, evolves: 'coil', max: 1 },
   { id: 'evo_cryoball', name: 'ABSOLUTE ZERO', desc: 'Ice grenades freeze for 2 extra seconds and leave targets brittle: +25% damage taken for 5s.', rarity: 'epic', icon: 'cryoball', tag: 'SIGNATURE', signature: true, evolution: true, evolves: 'cryoball', max: 1 },
+  { id: 'evo_emp', name: 'CIRCUIT BREAKER', desc: 'EMP pulses arc to one nearby enemy for half damage and a shorter disruption. Both targets resist repeat EMP for 4s.', rarity: 'epic', icon: 'bolt', tag: 'SIGNATURE', signature: true, evolution: true, evolves: 'emp', max: 1 },
   { id: 'evo_rail', name: 'CHAIN REACTION', desc: 'Your railgun lightning jumps to two more targets for 55% and 35% damage.', rarity: 'epic', icon: 'target', tag: 'SIGNATURE', signature: true, evolution: true, evolves: 'rail', max: 1 },
   { id: 'evo_smoke', name: 'CHOKE SCREEN', desc: 'Smoke is wider, lasts 2s longer, and restores up to 30 shield points inside the cloud.', rarity: 'epic', icon: 'smoke', tag: 'SIGNATURE', signature: true, evolution: true, evolves: 'smoke', max: 1 },
   { id: 'evo_mortar', name: 'THERMAL DRUMS', desc: 'Mortar pools burn 55% hotter and 65% longer, and your own fire never scorches you.', rarity: 'epic', icon: 'mortar', tag: 'SIGNATURE', signature: true, evolution: true, evolves: 'mortar', max: 1 },
@@ -172,6 +174,72 @@ export const UPGRADES: UpgradeDef[] = [
   { id: 'veteran', name: 'VETERAN INSTINCT', desc: '+10% hull capacity and repair 30 hull. Always available.', rarity: 'rare', icon: 'armor', tag: 'HULL' },
   { id: 'laurels', name: 'CHAMPION\'S RESOLVE', desc: '+30 shield capacity. Fully recharge your shield.', rarity: 'epic', icon: 'shield', tag: 'SYSTEM', signature: true },
 ];
+
+/**
+ * Which weapons use each installed upgrade in the simulation. Keep this based
+ * on effects rather than reward tags: some system/signature upgrades change a
+ * weapon, while many perks have no bearing on one at all. Evolutions use the
+ * catalogue's `evolves` field instead of a second hand-maintained list.
+ */
+const WEAPON_UPGRADE_EFFECTS: Readonly<Record<string, readonly WeaponId[]>> = {
+  autoloader: ['autocannon', 'coil', 'scatter', 'cannon', 'cryoball', 'emp'],
+  he: ['cannon', 'scatter', 'missiles', 'mortar'],
+  crit: ['autocannon', 'cannon', 'scatter', 'coil', 'flame', 'cryo', 'cryoball', 'emp', 'cinder', 'orbital', 'mines', 'missiles', 'turret', 'mortar', 'overdrive', 'rail'],
+  coolant: ['autocannon', 'coil', 'flame'],
+  ap: ['autocannon', 'coil'],
+  breacher: ['cannon', 'scatter', 'missiles', 'mortar', 'cinder', 'orbital'],
+  targeting: ['autocannon', 'coil', 'cannon', 'emp', 'missiles', 'mortar', 'rail'],
+  sig_cluster: ['cannon', 'scatter', 'cinder', 'mortar'],
+  sig_overcharge: ['cannon', 'scatter'],
+  sig_haste: ['autocannon', 'coil', 'scatter', 'cannon'],
+  sig_surge: ['missiles', 'mortar'],
+  belt: ['autocannon'],
+  coilcap: ['coil'],
+  napalm: ['flame'],
+  deepfreeze: ['cryo', 'cryoball'],
+  cryo_lance: ['cryo', 'cryoball'],
+  ice_capacity: ['cryoball'],
+  missile_count: ['missiles'],
+  missile_cd: ['missiles'],
+  turret_up: ['turret'],
+  rail_damage: ['rail'],
+  orbital_uplink: ['orbital'],
+  cinder_charge: ['cinder'],
+  mine_stock: ['mines'],
+  smoke_belt: ['smoke'],
+  mortar_shells: ['mortar'],
+  mortar_cd: ['mortar'],
+  overdrive_up: ['overdrive'],
+  nova_radius: ['nova'],
+};
+
+const UPGRADE_BY_ID = new Map(UPGRADES.map((upgrade) => [upgrade.id, upgrade]));
+
+/** The sum is a count of installed ranks, not the number of different perks. */
+export function weaponUpgradeInfo(weapon: WeaponId | null, socket: WeaponSocket, taken: ReadonlyMap<string, number>) {
+  const upgrades: { name: string; rank: number; evolution: boolean }[] = [];
+  if (!weapon) return { count: 0, upgrades, evolved: false };
+  for (const [id, rank] of taken) {
+    const upgrade = UPGRADE_BY_ID.get(id);
+    if (!upgrade || rank <= 0) continue;
+    const specialCryo = weapon === 'cryo' && (socket === 'specialQ' || socket === 'specialE');
+    const affects = upgrade.evolution
+      ? upgrade.evolves === weapon
+      : (WEAPON_UPGRADE_EFFECTS[id]?.includes(weapon) ?? false)
+        // The lance only builds heat as a secondary; its special version
+        // instead uses reloadMul for the ability cooldown.
+        || (weapon === 'cryo' && id === 'coolant' && socket === 'secondary')
+        || (specialCryo && id === 'autoloader')
+        // Unevolved stasis is non-damaging, so critical chance cannot affect it.
+        || (weapon === 'nova' && id === 'crit' && (taken.get('evo_nova') ?? 0) > 0);
+    if (affects) upgrades.push({ name: upgrade.name, rank, evolution: !!upgrade.evolution });
+  }
+  return {
+    count: upgrades.reduce((sum, upgrade) => sum + upgrade.rank, 0),
+    upgrades,
+    evolved: upgrades.some((upgrade) => upgrade.evolution),
+  };
+}
 
 const RARITY_WEIGHT: Record<UpgradeDef['rarity'], number> = { common: 10, rare: 5, epic: 1.7 };
 

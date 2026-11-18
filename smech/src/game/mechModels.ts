@@ -140,6 +140,26 @@ const WEAPON_MODELS: Record<string, ModelBuilder> = {
     g.add(emitter);
     return g;
   },
+  emp: (p) => {
+    const g = new THREE.Group();
+    g.name = 'emp-disruptor';
+    const housing = box(0.65, 0.58, 1.35, mat(p.dark, { metalness: 0.75 }));
+    housing.position.z = -0.35;
+    const core = barrel(1.9, 0.15, glow(0x6feaff));
+    core.position.z = -1.1;
+    g.add(housing, core);
+    for (const side of [-1, 1]) {
+      const rail = box(0.1, 0.32, 1.9, mat(p.hull, { metalness: 0.85 }));
+      rail.position.set(side * 0.32, 0, -0.9);
+      g.add(rail);
+    }
+    for (const z of [-0.75, -1.25, -1.75]) {
+      const ring = new THREE.Mesh(new THREE.TorusGeometry(0.32, 0.045, 8, 16), glow(0x6feaff));
+      ring.position.z = z;
+      g.add(ring);
+    }
+    return g;
+  },
   missiles: (p) => {
     const g = new THREE.Group();
     const boxy = box(1.1, 0.62, 0.8, mat(p.dark));

@@ -212,7 +212,7 @@ describe('buildConfig', () => {
 
   it('applies the weapon tuning of the mounted weapon', () => {
     const cfg = buildConfig({ ...STARTER_EQUIPPED, secondary: 's_cannon_90' });
-    expect(cfg.cannonDamage).toBe(52);
+    expect(cfg.cannonDamage).toBe(44);
   });
 
   it('never mounts the same weapon twice', () => {
@@ -254,24 +254,24 @@ describe('buildConfig', () => {
       primary: 'p_bore',
       secondary: 's_cannon_atlas',
     });
-    expect(cfg.scatterDamage).toBe(17);
+    expect(cfg.scatterDamage).toBe(12.1);
     expect(cfg.scatterReload).toBe(1.4);
     expect(cfg.scatterSpeed).toBe(185);
-    expect(cfg.scatterSplash).toBe(2.2);
-    expect(cfg.cannonDamage).toBe(74);
+    expect(cfg.scatterSplash).toBe(2.0);
+    expect(cfg.cannonDamage).toBe(46);
     expect(cfg.cannonReload).toBe(1.7);
     expect(cfg.shellSpeed).toBe(190);
-    expect(cfg.splash).toBe(6.2);
+    expect(cfg.splash).toBe(5.5);
   });
 
   it('uses the secondary-specific beam and grenade tuning', () => {
     const flame = buildConfig({ ...STARTER_EQUIPPED, secondary: 's_flame_vent' });
-    expect(flame.flameDamage).toBe(8.4);
-    expect(flame.beamInterval).toBe(0.1);
+    expect(flame.flameDamage).toBe(5.7);
+    expect(flame.beamInterval).toBe(0.12);
     expect(flame.cannonDamage).toBe(VEHICLES.warden.cannonDamage);
 
     const lance = buildConfig({ ...STARTER_EQUIPPED, secondary: 's_cryo_heavy' });
-    expect(lance.cryoDamage).toBe(6.2);
+    expect(lance.cryoDamage).toBe(4.1);
     expect(lance.beamInterval).toBe(0.16);
     expect(lance.cannonDamage).toBe(VEHICLES.warden.cannonDamage);
 
@@ -279,6 +279,56 @@ describe('buildConfig', () => {
     expect(grenade.cryoGrenadeDamage).toBe(26);
     expect(grenade.cryoGrenadeReload).toBe(2.8);
     expect(grenade.cannonDamage).toBe(VEHICLES.warden.cannonDamage);
+  });
+
+  it('carries the mounted ranges and stability independently through the build', () => {
+    const stock = buildConfig(STARTER_EQUIPPED);
+    const tuned = buildConfig({ ...STARTER_EQUIPPED, primary: 'p_coil_rail', secondary: 's_emp', drive: 'd_atlas' });
+    expect(stock.primaryRange).toBe(125);
+    expect(stock.secondaryRange).toBe(170);
+    expect(stock.primaryStability).toBe(0.3);
+    expect(stock.driveStability).toBe(0);
+    expect(tuned.primaryRange).toBe(225);
+    expect(tuned.secondaryRange).toBe(110);
+    expect(tuned.primaryStability).toBe(0.8);
+    expect(tuned.secondaryStability).toBe(0.6);
+    expect(tuned.driveStability).toBe(0.22);
+    expect(tuned.loadout.secondary).toBe('emp');
+    expect(tuned.empDamage).toBe(12);
+    expect(tuned.empReload).toBe(3.2);
+    expect(tuned.powerCost.secondary).toBe(22);
+    const bare = buildConfig({ ...STARTER_EQUIPPED, primary: undefined, secondary: undefined });
+    expect(bare.primaryRange).toBe(0);
+    expect(bare.secondaryRange).toBe(0);
+  });
+
+  it('prices reach, stability and status effects without large raw-damage jumps', () => {
+    const part = (id: string) => getComponent(id)!;
+    for (const comp of COMPONENTS.filter((c) => c.slot === 'primary' || c.slot === 'secondary')) {
+      expect(comp.range, comp.id).toBeGreaterThan(0);
+    }
+    expect(part('p_autocannon_mk2').cost).toBeGreaterThan(part('p_autocannon').cost);
+    expect(part('p_autocannon_mk2').range).toBeGreaterThan(part('p_autocannon').range!);
+    expect(part('p_autocannon_mk2').stability).toBeGreaterThan(part('p_autocannon').stability!);
+    expect(part('p_coil_rail').cost).toBeGreaterThan(part('p_coil').cost);
+    expect(part('d_atlas').cost).toBeGreaterThan(part('d_standard').cost);
+    expect(part('d_anvil').mods?.driveStability).toBeGreaterThan(part('d_atlas').mods!.driveStability!);
+    expect(part('s_emp').cost).toBeGreaterThan(part('s_cannon').cost);
+    expect(part('s_emp').weaponStats!.empDamage).toBeLessThan(part('s_cannon').weaponStats!.cannonDamage!);
+    const pairs = [
+      ['p_autocannon', 'p_autocannon_mk2', 'mgDamage'],
+      ['p_autocannon', 'p_gatling', 'mgDamage'],
+      ['p_scatter', 'p_scatter_sawed', 'scatterDamage'],
+      ['p_scatter', 'p_bore', 'scatterDamage'],
+      ['p_coil', 'p_coil_rail', 'mgDamage'],
+      ['s_cannon', 's_cannon_90', 'cannonDamage'],
+      ['s_cannon', 's_cannon_atlas', 'cannonDamage'],
+      ['s_flame', 's_flame_vent', 'flameDamage'],
+      ['s_cryo', 's_cryo_heavy', 'cryoDamage'],
+    ] as const;
+    for (const [base, advanced, stat] of pairs) {
+      expect(part(advanced).weaponStats![stat]!, advanced).toBeLessThanOrEqual(part(base).weaponStats![stat]! * 1.15 + 1e-9);
+    }
   });
 
   it('hands the socket-based power costs to the simulation', () => {

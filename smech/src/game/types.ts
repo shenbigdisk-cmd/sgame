@@ -11,6 +11,7 @@ export type WeaponId =
   | 'flame'
   | 'cryo'
   | 'cryoball'
+  | 'emp'
   | 'cinder'
   | 'orbital'
   | 'mines'
@@ -77,6 +78,10 @@ export interface HudWeapon {
   /** active duration remaining 0..1 (shield) */
   active: number;
   detail: string;
+  /** Installed ranks that actually affect this weapon, including its evolution. */
+  upgradeCount: number;
+  upgrades: { name: string; rank: number; evolution: boolean }[];
+  evolved: boolean;
 }
 
 export interface RadarBlip {
@@ -185,6 +190,8 @@ export interface HudState {
   seenBy: number;
   ambushAge: number;
   inWater: boolean;
+  /** The pilot is currently inside a live smoke cloud, not just undetected. */
+  concealed: boolean;
   buffs: HudBuff[];
   drops: HudDrop[];
   /** next supply drop, if one is on its way down */

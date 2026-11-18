@@ -52,6 +52,27 @@ export default function FieldManual() {
         </p>
       </div>
       <div className="manual-key">
+        <small>FORGE / HANDLING</small>
+        <h3>Range, stability and disruption</h3>
+        <p>
+          Trigger weapons show base maximum travel in metres; cover, terrain and gravity can stop shots sooner,
+          while some in-run upgrades extend reach. Stability reduces the extra spread from driving, including strafing. Stabilised legs add to the
+          gun’s rating, up to 95%. Longer reach and steadier mounts cost more and often add weight, heat or
+          power draw. The Volt EMP gun trades damage for a 1.5-second disruption (0.45 seconds on bosses);
+          each target resists another EMP for four seconds. Sniper lock warnings are standard equipment.
+        </p>
+      </div>
+      <div className="manual-key">
+        <small>COCKPIT / FEEDBACK</small>
+        <h3>Read your upgrades and status</h3>
+        <p>
+          A +N badge on a weapon counts its installed upgrade ranks; violet means it has evolved. Active
+          effects and their remaining seconds appear at the upper left. VEILED appears only while you are
+          inside smoke; VEIL SPRINT can outlast your cover. Smoke stops bullets, but heavy fire can still
+          penetrate. Undetected only means enemies have not found you.
+        </p>
+      </div>
+      <div className="manual-key">
         <small>IDENTIFICATION KEY / 09</small>
         <h3>Supply crates</h3>
         <p>

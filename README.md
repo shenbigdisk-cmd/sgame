@@ -64,7 +64,7 @@ https://raw.githubusercontent.com/shenbigdisk-cmd/sgame/main/preview/index.html
 | --- | --- |
 | `Mouse` | Aim the turret / camera |
 | `LMB` / `Space` | Primary weapon (autocannons, scattergun, coil repeater) |
-| `RMB` / `C` | Secondary weapon (60mm cannons, flamethrower, cryo lance, cryo grenade) |
+| `RMB` / `C` | Secondary weapon (cannons, flamethrower, cryo lance, cryo grenade, EMP gun) |
 | `Q` / `E` | Chassis special hardpoints |
 | `W A S D` | Drive (relative to your view in **EASY**, hull-relative in **SIM**) |
 | `Z` / `MMB` | Scope |
@@ -163,7 +163,8 @@ Amber bands mark breachable buildings, warehouses, towers, ruins and blast scree
 Your reactor starts full. The hangar lists each weapon's kJ cost, and the round special controls show charges, cooldown, low power, or rearm status. Shield recovery is automatic. **Induction Loop** refunds 8 kJ per kill per rank; **Breach Charges** adds 50% base structure damage per rank.
 
 ### Rewards
-Repeat picks show their new rank in the name: **Flux Regulator**, then **Flux Regulator 2**. One-time upgrades and instant repairs stay unnumbered.
+Repeat picks show their new rank in the name: **Flux Regulator**, then **Flux Regulator 2**. One-time upgrades and instant repairs stay unnumbered. On the cockpit, a weapon's **+N** badge counts installed ranks that affect it, including shared weapon bonuses and evolutions. An evolved weapon has a violet badge. The Q/E badges stay visible while reloading or empty; upgraded primary and secondary guns get small icon badges above the hull meter. Hull-only perks and instant repairs do not increase a weapon's count.
+
 Upgrades roll as **STANDARD / RARE / EPIC** and cover hull, weapon, system and
 signature categories. Weapons can be **evolved** into stronger forms
 (`STATIC LINK`, `CONCUSSION CORE`, `ABSOLUTE ZERO`, …), and signature upgrades
@@ -193,9 +194,9 @@ empty:
 
 | Slot | What it takes | Example |
 | --- | --- | --- |
-| `FRAME` | The chassis you walk out in — always free | `WARDEN`, `PYRE`, `GLACIER` |
+| `FRAME` | The required chassis; its cost is included when building a custom mech | `WARDEN`, `PYRE`, `GLACIER` |
 | `PRIMARY` | The trigger weapon | Rotary autocannons, scattergun, coil repeater |
-| `SECONDARY` | The heavy weapon | 60mm cannons, cryo grenade, Dragon's Breath, cryo lance |
+| `SECONDARY` | The heavy weapon | 60mm cannons, cryo grenade, Dragon's Breath, cryo lance, Volt EMP |
 | `SPECIAL · Q` | One of the Forge specials | Homing missiles, Skyfall orbital, longbow railgun |
 | `SPECIAL · E` | A second special | Sentry turret, cinder mines, veil smoke |
 | `ARMOUR` | Hull plating | Lattice armour, ablative carapace, reactive skin |
@@ -224,6 +225,24 @@ Two build systems make the catalogue more than a list of parts:
   means the reactor cannot sustain continuous fire; the buffer still absorbs
   bursts until it runs dry.
 
+Trigger weapons list their **base maximum range** in metres: projectiles expire
+after that much travel, and beams stop at their reach. Some in-run upgrades can
+extend that range. Cover, terrain and ballistic drop can stop a shot sooner;
+the cryo grenade is lobbed rather than fired straight. Aim assist cannot acquire
+a target beyond the mounted gun's reach. In the Forge, longer-range or more stable variants cost more, and trade
+weight, power, heat or cycle speed for their advantages rather than greatly
+increasing base damage.
+
+**Stability** is the percentage of additional moving-shot spread absorbed by a
+projectile weapon. It applies while strafing as well as driving forward. Atlas
+and Anvil drives add 22 and 30 percentage points respectively, capped with the
+weapon at 95%; they do not improve a stationary shot or beams. The **Volt EMP
+Disruptor** sacrifices damage and energy for a 1.5-second disable on a direct
+hit (0.45 seconds on bosses). A target resists further EMP stuns for four
+seconds, preventing a permanent lock. Circuit Breaker evolves it to arc to one
+nearby target with a shorter disable. All mechs already have sniper-lock HUD
+and audio warnings; these are not a paid upgrade.
+
 Primary, secondary and special weapon tuning are isolated by socket. A primary
 scattergun has its own damage, reload, muzzle speed and splash fields and cannot
 overwrite the secondary cannons; beams and cryo grenades use their own damage
@@ -245,15 +264,25 @@ volumes, crosshair, performance readout) and the hall-of-fame records are stored
 alongside them.
 
 ### Feedback
+The cockpit lists every active timed effect and its remaining seconds, including
+Aegis, rapid reload, damage boosts, surge and overdrive, on both desktop and
+touch screens. **VEILED IN SMOKE** and a soft edge shimmer appear only while
+the pilot is actually inside a live cloud. Its countdown is the cloud's
+remaining life, not a guarantee if you leave it. The separate **VEIL SPRINT**
+can continue after leaving. **Undetected** merely means no enemies are aware of
+you; it does not mean you are inside smoke or immune to damage.
+
 Procedural audio (weapons, explosions, engines, ambience and an adaptive
 score) is synthesised with the Web Audio API and spatialised with stereo pan,
-distance muffling and speed-of-sound delay. A slim cockpit rim and floating HUD
-instruments keep the combat view open without a solid bottom banner. Hull and
-shield bars sit at the bottom left, two round special-weapon indicators at the
-bottom center, and a larger tactical radar at the bottom right. The circular
-sight turns red over a visible enemy without covering it with text. One notice
-at a time shows threats, objectives or routine updates; small viewports drop
-secondary information rather than crowding the sight.
+distance muffling and speed-of-sound delay. Ballistic, scatter, coil, flame and
+cryo weapons each have distinct layered sounds; dense impacts are coalesced to
+keep the mix clear. Master and music volumes remain separately adjustable. A
+slim cockpit rim and floating HUD instruments keep the combat view open without
+a solid bottom banner. Hull and shield bars sit at the bottom left, two round
+special-weapon indicators at the bottom center, and a larger tactical radar at
+the bottom right. The circular sight turns red over a visible enemy without
+covering it with text. One notice at a time shows threats, objectives or routine
+updates, while status timers retain their own space away from the sight.
 
 Cockpit design references: [Hawken Reborn's HUD update](https://hawkenreborn.com/devblog/update02/) discusses high-contrast health bars and cockpit-integrated UI, while [Titanfall 2's Titan HUD](https://interfaceingame.com/screenshots/titanfall-2-titan-hud-in-combat/) shows how instruments can frame rather than fill the combat view. These informed the layout; no game assets were reused.
 

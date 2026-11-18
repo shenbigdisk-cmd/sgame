@@ -48,7 +48,7 @@ export function cooldownReadiness(remaining: number, cooldownTime: number): numb
 }
 
 /** How the secondary trigger behaves, which decides how its readiness is read. */
-export type SecondaryKind = 'cannon' | 'cryoball' | 'beam';
+export type SecondaryKind = 'cannon' | 'cryoball' | 'emp' | 'beam';
 
 export interface SecondaryReadiness {
   kind: SecondaryKind;
@@ -78,7 +78,7 @@ export function secondaryReadiness(s: SecondaryReadiness): number {
     if (s.reloadTime <= 0) return 1;
     return unit(1 - s.reloadRemaining / s.reloadTime);
   }
-  if (s.kind === 'cryoball') return cooldownReadiness(s.cooldownRemaining, s.cooldownTime);
+  if (s.kind === 'cryoball' || s.kind === 'emp') return cooldownReadiness(s.cooldownRemaining, s.cooldownTime);
   if (s.overheat) return 0;
   return unit(1 - s.heat);
 }

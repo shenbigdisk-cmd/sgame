@@ -3,6 +3,9 @@ import type { VehicleType } from './types';
 const clamp = (v: number, a: number, b: number) => (v < a ? a : v > b ? b : v);
 const rr = (a: number, b: number) => a + Math.random() * (b - a);
 
+type ExplosionChannel = `explosion:${'big' | 'small'}:${'near' | 'mid' | 'far'}:${'left' | 'center' | 'right'}`;
+type LimitedSound = 'autocannon' | 'coil' | 'flame' | 'cryo' | 'hit' | 'crit' | 'shieldHit' | ExplosionChannel;
+
 interface NoiseOpts {
   dur: number;
   type: BiquadFilterType;
@@ -82,7 +85,7 @@ export class AudioManager {
   private music: MusicState | null = null;
   private musicOn = true;
   private musicVolume = 0.6;
-  private lastMg = 0;
+  private lastSound: Partial<Record<LimitedSound, number>> = {};
   private mgCount = 0;
 
   constructor() {
@@ -117,7 +120,7 @@ export class AudioManager {
     conv.buffer = impulse;
     this.reverbIn = ctx.createGain();
     const wet = ctx.createGain();
-    wet.gain.value = 0.55;
+    wet.gain.value = 0.42;
     this.reverbIn.connect(conv);
     conv.connect(wet);
     wet.connect(this.master);
@@ -228,6 +231,14 @@ export class AudioManager {
     osc.stop(t + o.dur + 0.05);
   }
 
+  /** Coalesce extremely dense events without silencing a different weapon. */
+  private allowSound(channel: LimitedSound, interval: number) {
+    const now = this.ctx.currentTime;
+    if (now - (this.lastSound[channel] ?? -Infinity) < interval) return false;
+    this.lastSound[channel] = now;
+    return true;
+  }
+
   private N(dest: AudioNode, o: NoiseOpts) {
     this.noiseAt(dest, this.ctx.currentTime, o);
   }
@@ -239,43 +250,65 @@ export class AudioManager {
   // Player weapons
   // ---------------------------------------------------------------------------
   playCannon() {
-    const d = this.route(0, 0.5);
-    this.N(d, { dur: 0.06, type: 'highpass', f0: 1800, gain: 0.55 });
-    this.N(d, { dur: 0.6, type: 'lowpass', f0: 1600, f1: 70, gain: 0.95 });
-    this.T(d, { type: 'sine', f0: 130, f1: 26, dur: 0.55, gain: 0.95 });
-    this.T(d, { type: 'triangle', f0: 70, f1: 20, dur: 0.85, gain: 0.5, delay: 0.02 });
-    this.N(d, { dur: 1.6, type: 'lowpass', f0: 260, f1: 40, gain: 0.32, attack: 0.08, delay: 0.04 });
-    // breech clack
-    this.T(d, { type: 'square', f0: 520, f1: 180, dur: 0.05, gain: 0.07, delay: 0.17 });
-    this.N(d, { dur: 0.04, type: 'bandpass', f0: 2300, q: 2, gain: 0.12, delay: 0.18 });
+    const d = this.route(0, 0.32);
+    const pitch = rr(0.94, 1.06);
+    // Muzzle crack, low-pressure punch, then a metallic breech and short tail.
+    this.N(d, { dur: 0.045, type: 'highpass', f0: 1900 * pitch, gain: 0.36 });
+    this.N(d, { dur: 0.46, type: 'lowpass', f0: 1300 * pitch, f1: 100, gain: 0.55 });
+    this.T(d, { type: 'sine', f0: 125 * pitch, f1: 28, dur: 0.42, gain: 0.58 });
+    this.N(d, { dur: 0.8, type: 'lowpass', f0: 320, f1: 55, gain: 0.18, attack: 0.07, delay: 0.04 });
+    this.T(d, { type: 'triangle', f0: 780 * pitch, f1: 420, dur: 0.07, gain: 0.09, delay: 0.14 });
+    this.N(d, { dur: 0.055, type: 'bandpass', f0: 2400 * pitch, q: 2.5, gain: 0.13, delay: 0.16 });
+  }
+
+  playScatter() {
+    const d = this.route(0, 0.22);
+    const pitch = rr(0.92, 1.08);
+    // A dry, broad double crack reads as a cluster of barrels, not a cannon.
+    this.N(d, { dur: 0.09, type: 'bandpass', f0: 1700 * pitch, f1: 480, q: 0.55, gain: 0.58 });
+    this.N(d, { dur: 0.12, type: 'highpass', f0: 2400 * pitch, f1: 900, gain: 0.25, delay: 0.012 });
+    this.T(d, { type: 'sine', f0: 190 * pitch, f1: 45, dur: 0.22, gain: 0.42 });
+    this.N(d, { dur: 0.22, type: 'lowpass', f0: 750, f1: 100, gain: 0.28 });
+    this.N(d, { dur: 0.045, type: 'bandpass', f0: 3100 * pitch, q: 3, gain: 0.15, delay: 0.11 });
+    this.T(d, { type: 'triangle', f0: 1100 * pitch, f1: 650, dur: 0.055, gain: 0.065, delay: 0.17 });
   }
 
   playRail() {
-    const d = this.route(0, 0.55);
-    this.T(d, { type: 'sawtooth', f0: 260, f1: 2600, dur: 0.26, gain: 0.12, attack: 0.15 });
-    this.N(d, { dur: 0.14, type: 'highpass', f0: 3200, gain: 0.8, delay: 0.26 });
-    this.T(d, { type: 'sine', f0: 100, f1: 20, dur: 0.6, gain: 0.95, delay: 0.26 });
-    this.T(d, { type: 'triangle', f0: 4600, f1: 900, dur: 0.55, gain: 0.1, delay: 0.26 });
-    this.N(d, { dur: 1.1, type: 'lowpass', f0: 500, f1: 50, gain: 0.3, delay: 0.3 });
+    const d = this.route(0, 0.4);
+    const pitch = rr(0.97, 1.03);
+    // The crack lands with the shot; the descending coil ring follows it.
+    this.N(d, { dur: 0.08, type: 'highpass', f0: 3600, f1: 900, gain: 0.5 });
+    this.T(d, { type: 'sine', f0: 125, f1: 24, dur: 0.46, gain: 0.6 });
+    this.T(d, { type: 'sawtooth', f0: 2400 * pitch, f1: 420, dur: 0.28, gain: 0.075 });
+    this.T(d, { type: 'triangle', f0: 3700 * pitch, f1: 1050, dur: 0.42, gain: 0.07, delay: 0.025 });
+    this.N(d, { dur: 0.65, type: 'lowpass', f0: 600, f1: 70, gain: 0.2, delay: 0.03 });
+    this.N(d, { dur: 0.035, type: 'bandpass', f0: 4700, q: 3, gain: 0.12, delay: 0.09 });
   }
 
-  playMG() {
-    const now = this.ctx.currentTime;
-    if (now - this.lastMg < 0.03) return;
-    this.lastMg = now;
+  playMG(kind: 'autocannon' | 'coil' = 'autocannon') {
+    if (!this.allowSound(kind, 0.035)) return;
     this.mgCount++;
-    const d = this.route(0, 0.12);
-    const f = rr(1400, 1800);
-    this.N(d, { dur: 0.06, type: 'bandpass', f0: f, f1: 420, q: 0.7, gain: 0.26 });
-    this.T(d, { type: 'square', f0: rr(220, 280), f1: 60, dur: 0.045, gain: 0.1 });
-    if (this.mgCount % 5 === 0) this.T(d, { type: 'sine', f0: rr(3300, 4200), dur: 0.07, gain: 0.035, delay: rr(0.1, 0.18) });
+    const d = this.route(0, 0.09);
+    const pitch = rr(0.92, 1.08);
+    if (kind === 'coil') {
+      // A tight electromagnetic snap rather than another ballistic rattle.
+      this.N(d, { dur: 0.045, type: 'bandpass', f0: 3000 * pitch, f1: 900, q: 1.4, gain: 0.2 });
+      this.T(d, { type: 'triangle', f0: 1900 * pitch, f1: 420, dur: 0.065, gain: 0.075 });
+      this.T(d, { type: 'sine', f0: 200 * pitch, f1: 80, dur: 0.06, gain: 0.12 });
+    } else {
+      this.N(d, { dur: 0.075, type: 'bandpass', f0: 1550 * pitch, f1: 330, q: 0.65, gain: 0.31 });
+      this.T(d, { type: 'triangle', f0: 260 * pitch, f1: 65, dur: 0.055, gain: 0.16 });
+      if (this.mgCount % 3 === 0) this.N(d, { dur: 0.035, type: 'highpass', f0: 4200, gain: 0.08, delay: 0.06 });
+    }
   }
 
-  playMissile() {
-    const d = this.route(0, 0.3);
-    this.N(d, { dur: 0.7, type: 'bandpass', f0: 420, f1: 2600, q: 1.1, gain: 0.34, attack: 0.03 });
-    this.T(d, { type: 'sawtooth', f0: 170, f1: 640, dur: 0.4, gain: 0.07 });
-    this.T(d, { type: 'sine', f0: 90, f1: 40, dur: 0.25, gain: 0.5 });
+  playMissile(pan = 0) {
+    const d = this.route(pan, 0.22);
+    const pitch = rr(0.9, 1.1);
+    this.N(d, { dur: 0.055, type: 'highpass', f0: 2400, gain: 0.17 });
+    this.N(d, { dur: 0.48, type: 'bandpass', f0: 420 * pitch, f1: 2200, q: 0.85, gain: 0.3, attack: 0.035 });
+    this.T(d, { type: 'sawtooth', f0: 160 * pitch, f1: 700, dur: 0.3, gain: 0.055 });
+    this.T(d, { type: 'sine', f0: 115 * pitch, f1: 45, dur: 0.2, gain: 0.32 });
   }
 
   playEmp() {
@@ -286,10 +319,13 @@ export class AudioManager {
     for (let i = 0; i < 9; i++) this.N(d, { dur: 0.03, type: 'highpass', f0: rr(3500, 6000), gain: 0.16, delay: 0.05 + i * 0.07 });
   }
 
-  playArc() {
-    const d = this.route(0, 0.3);
-    for (let i = 0; i < 7; i++) this.N(d, { dur: 0.03, type: 'highpass', f0: rr(3000, 6500), gain: 0.18, delay: i * 0.035 });
-    this.T(d, { type: 'square', f0: 1200, f1: 300, dur: 0.18, gain: 0.05 });
+  playArc(dist = 0, pan = 0) {
+    const s = this.spatial(dist);
+    if (s.g < 0.02) return;
+    const d = this.route(pan, 0.24, s.cutoff, s.g);
+    const t = this.ctx.currentTime + s.delay;
+    for (let i = 0; i < 5; i++) this.noiseAt(d, t, { dur: 0.025, type: 'highpass', f0: rr(2800, 6000), gain: 0.14, delay: i * 0.032 });
+    this.toneAt(d, t, { type: 'square', f0: 1200, f1: 300, dur: 0.16, gain: 0.04 });
   }
 
   playShieldUp() {
@@ -306,9 +342,12 @@ export class AudioManager {
   }
 
   playShieldHit() {
-    const d = this.route(0, 0.3);
-    this.T(d, { type: 'sine', f0: rr(1100, 1400), f1: 650, dur: 0.12, gain: 0.14 });
-    this.N(d, { dur: 0.08, type: 'bandpass', f0: 3000, q: 2, gain: 0.1 });
+    if (!this.allowSound('shieldHit', 0.06)) return;
+    const d = this.route(0, 0.2);
+    const pitch = rr(0.94, 1.06);
+    this.T(d, { type: 'sine', f0: 1350 * pitch, f1: 570, dur: 0.16, gain: 0.13 });
+    this.T(d, { type: 'triangle', f0: 2100 * pitch, f1: 1500, dur: 0.12, gain: 0.045, delay: 0.01 });
+    this.N(d, { dur: 0.07, type: 'bandpass', f0: 3000, q: 2, gain: 0.11 });
   }
 
   playStrikeCall() {
@@ -324,31 +363,32 @@ export class AudioManager {
   }
 
   playCrit() {
-    const d = this.route(0, 0.3);
-    this.T(d, { type: 'triangle', f0: 1800, f1: 2600, dur: 0.1, gain: 0.14 });
-    this.T(d, { type: 'sine', f0: 3200, dur: 0.18, gain: 0.05, delay: 0.04 });
+    if (!this.allowSound('crit', 0.09)) return;
+    const d = this.route(0, 0.2);
+    this.T(d, { type: 'triangle', f0: 1250, f1: 2300, dur: 0.09, gain: 0.12 });
+    this.T(d, { type: 'sine', f0: 2800, f1: 2100, dur: 0.16, gain: 0.05, delay: 0.025 });
+    this.N(d, { dur: 0.035, type: 'highpass', f0: 4200, gain: 0.08 });
   }
 
   // ---------------------------------------------------------------------------
   // Enemy & world sounds (positional)
   // ---------------------------------------------------------------------------
   playFlame() {
-    const now = this.ctx.currentTime;
-    if (now - this.lastMg < 0.05) return;
-    this.lastMg = now;
-    const d = this.route(0, 0.15);
-    this.N(d, { dur: 0.16, type: 'lowpass', f0: 900, f1: 200, gain: 0.4, attack: 0.02 });
-    this.N(d, { dur: 0.1, type: 'bandpass', f0: 2400, q: 0.8, gain: 0.1 });
+    if (!this.allowSound('flame', 0.075)) return;
+    const d = this.route(0, 0.12);
+    const pitch = rr(0.88, 1.12);
+    this.N(d, { dur: 0.22, type: 'lowpass', f0: 1100 * pitch, f1: 240, gain: 0.34, attack: 0.025 });
+    this.N(d, { dur: 0.1, type: 'bandpass', f0: 2600 * pitch, f1: 1100, q: 0.8, gain: 0.12 });
+    this.T(d, { type: 'sine', f0: 105 * pitch, f1: 65, dur: 0.13, gain: 0.11 });
   }
 
   playCryo() {
-    const now = this.ctx.currentTime;
-    if (now - this.lastMg < 0.05) return;
-    this.lastMg = now;
-    const d = this.route(0, 0.2);
-    this.T(d, { type: 'sine', f0: 2400, f1: 3600, dur: 0.14, gain: 0.08 });
-    this.N(d, { dur: 0.12, type: 'highpass', f0: 5000, gain: 0.08 });
-    this.T(d, { type: 'triangle', f0: 880, f1: 1320, dur: 0.1, gain: 0.05 });
+    if (!this.allowSound('cryo', 0.075)) return;
+    const d = this.route(0, 0.16);
+    const pitch = rr(0.94, 1.06);
+    this.N(d, { dur: 0.17, type: 'bandpass', f0: 4400 * pitch, f1: 1800, q: 0.9, gain: 0.14, attack: 0.015 });
+    this.T(d, { type: 'sine', f0: 1700 * pitch, f1: 2800, dur: 0.16, gain: 0.07 });
+    this.T(d, { type: 'triangle', f0: 880 * pitch, f1: 1320, dur: 0.11, gain: 0.045 });
   }
 
   playJump() {
@@ -366,10 +406,12 @@ export class AudioManager {
   }
 
   playSmoke() {
-    const d = this.route(0, 0.3);
-    this.N(d, { dur: 0.9, type: 'highpass', f0: 1400, f1: 3200, gain: 0.36, attack: 0.04 });
-    this.N(d, { dur: 2.2, type: 'bandpass', f0: 700, q: 0.5, gain: 0.16, attack: 0.2 });
-    this.T(d, { type: 'sine', f0: 180, f1: 90, dur: 0.18, gain: 0.24 });
+    const d = this.route(0, 0.22);
+    this.N(d, { dur: 0.05, type: 'bandpass', f0: 2300, q: 2, gain: 0.2 });
+    this.T(d, { type: 'triangle', f0: 540, f1: 200, dur: 0.09, gain: 0.11 });
+    this.N(d, { dur: 0.85, type: 'highpass', f0: 1200, f1: 2600, gain: 0.28, attack: 0.035 });
+    this.N(d, { dur: 1.4, type: 'bandpass', f0: 750, f1: 350, q: 0.6, gain: 0.14, attack: 0.12 });
+    this.T(d, { type: 'sine', f0: 190, f1: 80, dur: 0.2, gain: 0.2 });
   }
 
   playTurretDeploy() {
@@ -383,8 +425,12 @@ export class AudioManager {
   playTurretShot(dist: number, pan = 0) {
     const s = this.spatial(dist);
     if (s.g < 0.02) return;
-    const d = this.route(pan, 0.15, s.cutoff, s.g);
-    this.noiseAt(d, this.ctx.currentTime + s.delay, { dur: 0.07, type: 'bandpass', f0: 1500, f1: 500, q: 0.8, gain: 0.3 });
+    const d = this.route(pan, 0.12, s.cutoff, s.g);
+    const t = this.ctx.currentTime + s.delay;
+    const pitch = rr(0.9, 1.1);
+    this.noiseAt(d, t, { dur: 0.075, type: 'bandpass', f0: 1700 * pitch, f1: 480, q: 0.8, gain: 0.3 });
+    this.toneAt(d, t, { type: 'triangle', f0: 310 * pitch, f1: 90, dur: 0.06, gain: 0.13 });
+    this.noiseAt(d, t, { dur: 0.025, type: 'highpass', f0: 3800, gain: 0.09, delay: 0.045 });
   }
 
   playOverdrive() {
@@ -446,21 +492,24 @@ export class AudioManager {
 
   playExplosion(dist: number, big = false, pan = 0) {
     const s = this.spatial(dist);
-    const gain = s.g * (big ? 1.2 : 1);
-    if (gain < 0.015) return;
-    const d = this.route(pan, big ? 0.6 : 0.42, s.cutoff, gain);
+    const gain = s.g * (big ? 1.08 : 1);
+    // Coalesce bursts in the same area, not a nearby blast with a distant one
+    // or a left-hand impact with a right-hand impact.
+    const range = dist < 45 ? 'near' : dist < 140 ? 'mid' : 'far';
+    const side = pan < -0.3 ? 'left' : pan > 0.3 ? 'right' : 'center';
+    if (gain < 0.015 || !this.allowSound(`explosion:${big ? 'big' : 'small'}:${range}:${side}`, 0.065)) return;
+    const d = this.route(pan, big ? 0.42 : 0.3, s.cutoff, gain);
     const t = this.ctx.currentTime + s.delay;
-    this.noiseAt(d, t, { dur: 0.14, type: 'highpass', f0: 1200, f1: 300, gain: 0.7 });
-    this.noiseAt(d, t, { dur: big ? 1.9 : 1.15, type: 'lowpass', f0: 1500, f1: 50, gain: 0.95, attack: 0.01 });
-    this.toneAt(d, t, { type: 'sine', f0: 80, f1: 20, dur: big ? 1.3 : 0.75, gain: 0.9 });
-    const ticks = big ? 11 : 6;
-    for (let i = 0; i < ticks; i++) {
-      this.noiseAt(d, t, { dur: 0.05, type: 'bandpass', f0: rr(800, 3500), q: 1.2, gain: rr(0.06, 0.16), delay: 0.14 + Math.random() * (big ? 1.2 : 0.7) });
+    const pitch = rr(0.88, 1.12);
+    this.noiseAt(d, t, { dur: 0.1, type: 'highpass', f0: 1600 * pitch, f1: 420, gain: 0.4 });
+    this.noiseAt(d, t, { dur: big ? 1.2 : 0.65, type: 'lowpass', f0: 1300 * pitch, f1: 70, gain: 0.64, attack: 0.008 });
+    this.toneAt(d, t, { type: 'sine', f0: 95 * pitch, f1: 24, dur: big ? 0.8 : 0.42, gain: 0.65 });
+    // A few irregular, quiet debris ticks provide variety without hundreds of
+    // simultaneous sources when a scatter blast or chain reaction lands.
+    for (let i = 0; i < (big ? 5 : 3); i++) {
+      this.noiseAt(d, t, { dur: 0.035, type: 'bandpass', f0: rr(900, 3600), q: 1.8, gain: rr(0.05, 0.11), delay: 0.1 + Math.random() * (big ? 0.7 : 0.4) });
     }
-    if (big) {
-      this.toneAt(d, t, { type: 'sine', f0: 60, f1: 22, dur: 1.0, gain: 0.6, delay: 0.18 });
-      this.noiseAt(d, t, { dur: 2.2, type: 'lowpass', f0: 300, f1: 40, gain: 0.35, attack: 0.15, delay: 0.1 });
-    }
+    if (big) this.noiseAt(d, t, { dur: 1.4, type: 'lowpass', f0: 260, f1: 50, gain: 0.2, attack: 0.1, delay: 0.08 });
   }
 
   playWhiz(pan = 0) {
@@ -499,10 +548,12 @@ export class AudioManager {
   // Feedback / UI
   // ---------------------------------------------------------------------------
   playHitEnemy() {
-    const d = this.route(0, 0.15);
-    this.T(d, { type: 'triangle', f0: rr(1200, 1800), f1: 500, dur: 0.08, gain: 0.17 });
-    this.N(d, { dur: 0.05, type: 'highpass', f0: 3000, gain: 0.12 });
-    this.T(d, { type: 'sine', f0: 160, f1: 80, dur: 0.07, gain: 0.12 });
+    if (!this.allowSound('hit', 0.045)) return;
+    const d = this.route(0, 0.1);
+    const pitch = rr(0.9, 1.1);
+    this.N(d, { dur: 0.045, type: 'bandpass', f0: 2700 * pitch, f1: 1100, q: 1.4, gain: 0.18 });
+    this.T(d, { type: 'triangle', f0: 1200 * pitch, f1: 620, dur: 0.07, gain: 0.1 });
+    this.T(d, { type: 'sine', f0: 190 * pitch, f1: 80, dur: 0.065, gain: 0.1 });
   }
 
   playPlayerHit() {

@@ -1244,3 +1244,129 @@
     width: 12px;
   }
 }
+
+/* A compact flight deck: keep the art, selection and launch controls together. */
+.is-hangar .op-bar-inner { height: 60px; }
+.is-hangar .op-path { height: 32px; }
+.is-hangar .op-hero { height: clamp(210px, 26vh, 260px); min-height: 0; }
+.is-hangar .op-hero h1 { font-size: clamp(38px, 4.8vw, 66px); margin: 5px 0 6px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.is-hangar .op-hero h1.op-long-name { font-size: clamp(26px, 3.3vw, 48px); }
+.is-hangar .op-hero-copy p { font-size: 12px; line-height: 1.35; margin: 6px 0 10px; }
+.is-hangar .op-stats strong { font-size: 18px; margin-top: 2px; }
+.is-hangar .op-deck {
+  grid-template-areas: 'bay deploy' 'loadout deploy';
+  gap: 8px 18px;
+  margin-top: 14px;
+}
+.is-hangar .op-bay { grid-area: bay; min-width: 0; }
+.is-hangar .op-loadout { grid-area: loadout; min-width: 0; }
+.is-hangar .op-deploy { grid-area: deploy; }
+.is-hangar .op-heading { margin-bottom: 7px; }
+.is-hangar .op-heading h2 { font-size: 18px; }
+.is-hangar .op-cards { margin-bottom: 0; }
+.is-hangar .op-cards:focus-visible { outline: 1px solid var(--lime); outline-offset: 2px; }
+.is-hangar .op-cards.has-overflow .op-card { flex-basis: calc((100% - 24px) / 3.25); max-width: calc((100% - 24px) / 3.25); }
+.op-more-chassis { color: #b2bdab; font: 9px var(--mono); text-transform: uppercase; white-space: nowrap; }
+.is-hangar .op-thumb { height: clamp(65px, 10vh, 95px); }
+.is-hangar .op-card-label { padding: 7px 10px; }
+.is-hangar .op-card-label b { display: block; font-size: clamp(12px, 1.1vw, 16px); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.is-hangar .op-sockets > div { min-width: 0; padding: 9px 8px; }
+.is-hangar .op-sockets > div > span { min-width: 0; }
+.is-hangar .op-sockets b { overflow-wrap: anywhere; }
+.is-hangar .bus-readout { padding: 6px 10px; flex-wrap: wrap; }
+.is-hangar .op-panel-title { padding: 10px 14px; }
+.is-hangar .op-recon { height: 60px; }
+.is-hangar .op-deploy-inner { padding: 10px 14px 12px; }
+.is-hangar .op-seed, .is-hangar .op-modes { height: 30px; margin-bottom: 9px; }
+.is-hangar .op-launch { height: 42px; }
+.is-hangar .op-foot { margin: 14px 0 10px; padding-top: 8px; }
+.op-loadout-toggle { display: none; }
+
+@media (min-width: 761px) and (max-width: 1000px) {
+  .is-hangar .op-bar-inner { gap: 12px; padding-inline: 16px; }
+  .is-hangar .op-brand { gap: 6px; }
+  .is-hangar .op-brand svg { width: 30px; height: 30px; }
+  .is-hangar .op-brand b { font-size: 14px; }
+  .is-hangar .op-brand small { font-size: 7px; }
+  .is-hangar .op-bar nav { gap: 7px; }
+  .is-hangar .op-bar nav button { font-size: 9px; gap: 4px; }
+  .is-hangar .op-tools { gap: 4px; }
+  .is-hangar .op-credit { margin-right: 0; font-size: 12px; }
+}
+@media (max-width: 760px) {
+  .is-hangar .op-bar-inner { height: auto; padding-top: 9px; }
+  .is-hangar .op-bar nav { margin-top: 5px; }
+  .is-hangar .op-bar nav button { padding-block: 8px; }
+  .is-hangar .op-path { display: none; }
+  .is-hangar .op-main { padding-top: 9px; }
+  .is-hangar .op-deck { grid-template-columns: minmax(0, 1fr); grid-template-areas: 'bay' 'deploy' 'loadout'; gap: 9px; margin-top: 10px; }
+  .is-hangar .op-hero { height: 200px; }
+  .is-hangar .op-hero-copy { max-width: 68%; }
+  .is-hangar .op-heading { margin-bottom: 6px; }
+  .is-hangar .op-thumb { height: 66px; }
+  .is-hangar .op-loadout-toggle { display: block; color: var(--lime); font: 10px var(--mono); text-transform: uppercase; white-space: nowrap; }
+  .is-hangar .op-loadout:not(.is-expanded) .op-loadout-content,
+  .is-hangar .op-loadout:not(.is-expanded) .op-link { display: none; }
+  .is-hangar .op-loadout.is-expanded .op-heading { flex-wrap: wrap; }
+  .is-hangar .op-loadout.is-expanded .op-link { font-size: 10px; }
+  .is-hangar .op-loadout:not(.is-expanded) .op-heading { margin-bottom: 0; }
+  .is-hangar .op-foot { margin: 9px 0 8px; }
+  .is-hangar .manual-jump { display: none; } /* The navigation still opens the manual. */
+}
+@media (max-width: 520px) {
+  .is-hangar .op-hero { height: 180px; }
+  .is-hangar .op-hero-copy { left: 12px; bottom: 10px; max-width: 76%; }
+  .is-hangar .op-hero h1 { font-size: clamp(25px, 7.5vw, 36px); line-height: 1; }
+  .is-hangar .op-hero h1.op-long-name { font-size: clamp(18px, 5.3vw, 27px); }
+  .is-hangar .op-hero-copy p { font-size: 11px; max-width: 215px; margin: 5px 0 7px; }
+  .is-hangar .op-class, .is-hangar .op-kicker { font-size: 8px; }
+  .is-hangar .op-class span { font-size: 8px; padding: 2px 5px; }
+  .is-hangar .op-stats { gap: 8px; }
+  .is-hangar .op-stats > div + div { padding-left: 8px; }
+  .is-hangar .op-stats small { font-size: 9px; }
+  .is-hangar .op-stats strong { font-size: 15px; }
+  .is-hangar .op-cards.has-overflow .op-card { flex-basis: calc((100% - 12px) / 3.25); max-width: calc((100% - 12px) / 3.25); }
+  .is-hangar .op-card-label { padding: 6px; }
+  .is-hangar .op-card-label b { font-size: 10px; }
+  .is-hangar .op-card-label small { font-size: 8px; }
+  .is-hangar .op-thumb { height: 58px; }
+  .is-hangar .op-recon { height: 54px; }
+}
+@media (max-height: 500px) and (min-width: 761px) {
+  .is-hangar .op-bar-inner { height: 48px; }
+  .is-hangar .op-path { display: none; }
+  .is-hangar .op-main { padding-top: 8px; }
+  .is-hangar .op-hero { height: 116px; }
+  .is-hangar .op-hero h1 { font-size: 34px; margin: 2px 0; }
+  .is-hangar .op-hero-copy p { display: none; }
+  .is-hangar .op-stats strong { font-size: 15px; }
+  .is-hangar .op-thumb { height: 50px; }
+  .is-hangar .op-deck { margin-top: 9px; }
+}
+@media (max-width: 320px) {
+  .op-more-chassis { display: none; }
+  .is-hangar .op-hero h1.op-long-name { font-size: clamp(14px, 5vw, 16px); }
+  .op-bar nav { gap: 2px; }
+  .op-bar nav button { gap: 2px; font-size: 8px; letter-spacing: 0; }
+  .op-bar nav button svg { width: 10px; height: 10px; }
+}
+@media (min-width: 521px) and (max-width: 760px) and (max-height: 500px) {
+  .is-hangar .op-bar-inner { height: 48px; flex-wrap: nowrap; padding: 0 12px; gap: 8px; }
+  .is-hangar .op-brand { gap: 5px; }
+  .is-hangar .op-brand svg { width: 24px; height: 24px; }
+  .is-hangar .op-brand b { font-size: 12px; }
+  .is-hangar .op-brand small { display: none; }
+  .is-hangar .op-bar nav { order: 0; width: auto; margin: 0; gap: 5px; }
+  .is-hangar .op-bar nav button { padding: 0; gap: 3px; font-size: 8px; letter-spacing: 0; }
+  .is-hangar .op-bar nav button svg { width: 10px; height: 10px; }
+  .is-hangar .op-tools { order: 0; gap: 3px; }
+  .is-hangar .op-credit { font-size: 10px; margin: 0; }
+  .is-hangar .op-tools > button { padding: 5px; }
+  .is-hangar .op-tools .fullscreen-button { display: none; }
+  .is-hangar .op-hero { height: 116px; }
+  .is-hangar .op-hero h1 { font-size: 34px; margin: 2px 0; }
+  .is-hangar .op-hero-copy p { display: none; }
+  .is-hangar .op-stats strong { font-size: 15px; }
+  .is-hangar .op-thumb { height: 50px; }
+  .is-hangar .op-deck { grid-template-columns: minmax(0, 1.55fr) minmax(195px, 1fr); grid-template-areas: 'bay deploy' 'loadout deploy'; }
+}

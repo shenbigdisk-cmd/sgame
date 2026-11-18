@@ -3,7 +3,7 @@ import Canopy from './Canopy';
 import type { CSSProperties } from 'react';
 import './cockpit.css';
 import { SUPPLIES } from '../game/supplies';
-import type { HudState, HudWeapon, VehicleType, RadarBlip, WeaponId } from '../game/types';
+import type { HudBuff, HudState, HudWeapon, VehicleType, RadarBlip, WeaponId } from '../game/types';
 import { VEHICLES, WEAPON_INFO } from '../game/vehicles';
 import type { Settings } from '../game/settings';
 import { Icon } from './Icons';
@@ -310,6 +310,72 @@ function Notice({
   ) : null;
 }
 
+const SHORT_STATUS: Record<string, string> = {
+  veiled: 'VEILED',
+  aegis: 'IMMUNE',
+  overcharge: 'DMG+',
+  rapid: 'RAPID',
+  haste: 'SURGE',
+  overdrive: 'OVRDRV',
+  smoke: 'SPRINT',
+};
+
+/** Always show every active timer, including on touch / small screens. */
+function StatusEffects({ buffs }: { buffs: HudBuff[] }) {
+  if (!buffs.length) return null;
+  return (
+    <div className="cp-buffs" role="list" aria-label="Active statuses">
+      {buffs.map((buff) => {
+        const seconds = Math.ceil(buff.time);
+        const description = buff.id === 'veiled'
+          ? `${buff.name}: ${seconds} seconds of cloud life remaining while inside. Bullets are blocked; heavy fire can penetrate.`
+          : `${buff.name}: ${seconds} seconds remaining`;
+        return (
+          <div className={`cp-buff cp-buff-${buff.id}`} role="listitem" aria-label={description} title={description} key={buff.id}>
+            <Icon name={buff.icon} size={14} />
+            <span className="cp-buff-name">
+              <span className="cp-buff-full">{buff.name}</span>
+              <span className="cp-buff-short">{SHORT_STATUS[buff.id] ?? buff.name}</span>
+            </span>
+            <b>{seconds}s</b>
+            <i className="cp-buff-progress" style={{ width: `${clamp01(buff.time / Math.max(buff.max, 0.001)) * 100}%` }} />
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+function upgradeDescription(weapon: HudWeapon) {
+  if (!weapon.upgradeCount) return '';
+  const list = weapon.upgrades.map((upgrade) => `${upgrade.name}${upgrade.rank > 1 ? ` ×${upgrade.rank}` : ''}${upgrade.evolution ? ' (evolution)' : ''}`).join(', ');
+  return `${weapon.upgradeCount} upgrade${weapon.upgradeCount === 1 ? '' : 's'}${weapon.evolved ? ', evolved' : ''}${list ? `: ${list}` : ''}`;
+}
+
+/** Trigger weapons normally have no cockpit tile; show a small badge only when upgraded. */
+function MainWeaponUpgrades({ weapons }: { weapons: HudWeapon[] }) {
+  const upgraded = weapons.slice(0, 2).map((weapon, index) => ({ weapon, index }))
+    .filter(({ weapon }) => weapon?.id && weapon.upgradeCount > 0);
+  if (!upgraded.length) return null;
+  return (
+    <div className="cp-main-upgrades" aria-label="Upgraded trigger weapons">
+      {upgraded.map(({ weapon, index }) => (
+        <span
+          key={index}
+          className={`cp-main-weapon${weapon.evolved ? ' is-evolved' : ''}`}
+          role="img"
+          aria-label={`${index === 0 ? 'Primary' : 'Secondary'} ${weapon.name}, ${upgradeDescription(weapon)}`}
+          title={`${index === 0 ? 'PRIMARY' : 'SECONDARY'} · ${weapon.name} · ${upgradeDescription(weapon)}`}
+        >
+          <small>{index === 0 ? 'PRI' : 'SEC'}</small>
+          <Icon name={WEAPON_INFO[weapon.id!].icon} size={15} />
+          <b>+{weapon.upgradeCount}</b>
+        </span>
+      ))}
+    </div>
+  );
+}
+
 function SpecialWeapon({
   weapon,
   slot,
@@ -340,11 +406,11 @@ function SpecialWeapon({
   return (
     <button
       type="button"
-      className={`cp-special${warning ? ' is-warning' : ''}${!id ? ' is-empty' : ''}`}
-      aria-label={`${slot} ${id ? weapon.name : 'empty socket'}: ${status}${id && weapon.charges !== undefined ? `, ${weapon.charges} of ${weapon.capacity} charges` : ''}`}
+      className={`cp-special${warning ? ' is-warning' : ''}${!id ? ' is-empty' : ''}${weapon?.evolved ? ' is-evolved' : ''}`}
+      aria-label={`${slot} ${id ? weapon.name : 'empty socket'}: ${status}${id && weapon.charges !== undefined ? `, ${weapon.charges} of ${weapon.capacity} charges` : ''}${id && weapon.upgradeCount ? `, ${upgradeDescription(weapon)}` : ''}`}
       title={
         id
-          ? `${weapon.name} · ${status}${weapon.cost === undefined ? '' : ` · ${weapon.cost} kJ/use`}`
+          ? `${weapon.name} · ${status}${weapon.cost === undefined ? '' : ` · ${weapon.cost} kJ/use`}${weapon.upgradeCount ? ` · ${upgradeDescription(weapon)}` : ''}`
           : `${slot} · Empty socket`
       }
       disabled={!id || depleted || cooldown > 0 || charging || progress < 1}
@@ -381,6 +447,7 @@ function SpecialWeapon({
         )}
       </span>
       <span className="cp-special-count">{count}</span>
+      {!!id && !!weapon.upgradeCount && <span className="cp-upgrade-badge" aria-hidden="true">+{weapon.upgradeCount}</span>}
     </button>
   );
 }
@@ -396,7 +463,7 @@ export default function HUD({
   settings,
 }: Props) {
   const accent = VEHICLES[vehicle].accent;
-  const visibility = hud.seenBy ? 'Exposed' : hud.detected ? 'Hunted' : 'Concealed';
+  const visibility = hud.seenBy ? 'Exposed' : hud.detected ? 'Hunted' : 'Undetected';
   const alert = hud.seenBy ? '#ff9179' : hud.detected ? '#f2cb7a' : '#9bc8a9';
   const vitals = [
     { label: 'Hull', val: hud.hp, max: hud.maxHp, color: hud.hp / hud.maxHp < 0.3 ? '#ff795f' : '#beea99' },
@@ -417,6 +484,7 @@ export default function HUD({
                 : undefined,
         }}
       />
+      {hud.alive && hud.concealed && <div className="cp-veil-effect" aria-hidden="true" />}
       <Canopy />
       <header className="cp-top">
         <section className="cp-stage">
@@ -443,6 +511,7 @@ export default function HUD({
         <div className="cp-notice">
           <Notice hud={hud} touch={touch} onUnstick={onUnstick} onExtract={onExtract} />
         </div>
+        <StatusEffects buffs={hud.buffs} />
       </header>
       {hud.alive && (
         <div className="cp-aim">
@@ -500,6 +569,7 @@ export default function HUD({
             <b style={{ color: alert }}>● {visibility}</b>
             {settings?.showFps && <small>{Math.round(hud.fps)} FPS</small>}
           </div>
+          <MainWeaponUpgrades weapons={hud.weapons} />
           <div className="cp-vitals">
             {vitals.map((v) => {
               const restarting = v.label === 'Shield' && !hud.shieldActive;
@@ -532,13 +602,6 @@ export default function HUD({
                 </div>
               );
             })}
-          </div>
-          <div className="cp-buffs">
-            {hud.buffs.slice(0, 2).map((b) => (
-              <span key={b.id}>
-                {b.name} · {Math.ceil(b.time)}s
-              </span>
-            ))}
           </div>
         </section>
         <section className="cp-weapons" aria-label="Additional weapons">

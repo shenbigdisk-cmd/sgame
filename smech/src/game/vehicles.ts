@@ -42,6 +42,14 @@ export interface VehicleConfig {
   powerCost: PowerCosts;
   camHeight: number;
   radius: number;
+  /** Trigger-weapon travel limits, in metres from the muzzle (beams from the sight). */
+  primaryRange: number;
+  secondaryRange: number;
+  /** Fraction of movement-induced spread absorbed by each projectile weapon. */
+  primaryStability: number;
+  secondaryStability: number;
+  /** Additional stabilization supplied by the drive. */
+  driveStability: number;
   /** secondary cannon: shell damage, cycle time, muzzle speed, blast radius */
   cannonDamage: number;
   cannonReload: number;
@@ -56,13 +64,18 @@ export interface VehicleConfig {
   scatterReload: number;
   scatterSpeed: number;
   scatterSplash: number;
+  scatterSpread: number;
   /** secondary beam weapons: damage and cycle time per tick */
   flameDamage: number;
   cryoDamage: number;
+  cryoSlowTime: number;
   beamInterval: number;
   /** cryo grenade: blast damage and canister cycle */
   cryoGrenadeDamage: number;
   cryoGrenadeReload: number;
+  /** EMP disruptor: direct damage and seconds between pulses. */
+  empDamage: number;
+  empReload: number;
 }
 
 /** Resolve a weapon id to the socket that actually fires it. */
@@ -101,6 +114,11 @@ export const VEHICLES: Record<VehicleType, VehicleConfig> = {
     powerCost: { primary: 0.9, secondary: 11, specialQ: 16, specialE: 12 },
     camHeight: 4,
     radius: 2.4,
+    primaryRange: 125,
+    secondaryRange: 170,
+    primaryStability: 0.3,
+    secondaryStability: 0.35,
+    driveStability: 0,
     cannonDamage: 40,
     cannonReload: 1.35,
     shellSpeed: 150,
@@ -112,11 +130,15 @@ export const VEHICLES: Record<VehicleType, VehicleConfig> = {
     scatterReload: 1.05,
     scatterSpeed: 175,
     scatterSplash: 1.4,
+    scatterSpread: 0.085,
     flameDamage: 5.4,
     cryoDamage: 3.8,
+    cryoSlowTime: 2.4,
     beamInterval: 0.12,
     cryoGrenadeDamage: 26,
     cryoGrenadeReload: 2.8,
+    empDamage: 12,
+    empReload: 3.2,
   },
   pyre: {
     name: 'PYRE-12 "CROWD-EATER"',
@@ -142,6 +164,11 @@ export const VEHICLES: Record<VehicleType, VehicleConfig> = {
     powerCost: { primary: 6, secondary: 2.4, specialQ: 30, specialE: 8 },
     camHeight: 4.4,
     radius: 2.6,
+    primaryRange: 65,
+    secondaryRange: 30,
+    primaryStability: 0.25,
+    secondaryStability: 0,
+    driveStability: 0,
     cannonDamage: 40,
     cannonReload: 1.35,
     shellSpeed: 150,
@@ -153,11 +180,15 @@ export const VEHICLES: Record<VehicleType, VehicleConfig> = {
     scatterReload: 1.05,
     scatterSpeed: 175,
     scatterSplash: 1.4,
+    scatterSpread: 0.085,
     flameDamage: 5.4,
     cryoDamage: 3.8,
+    cryoSlowTime: 2.4,
     beamInterval: 0.12,
     cryoGrenadeDamage: 26,
     cryoGrenadeReload: 2.8,
+    empDamage: 12,
+    empReload: 3.2,
   },
   glacier: {
     name: 'GLACIER-7 "THE EXILE"',
@@ -183,6 +214,11 @@ export const VEHICLES: Record<VehicleType, VehicleConfig> = {
     powerCost: { primary: 1.2, secondary: 4, specialQ: 55, specialE: 10 },
     camHeight: 4.2,
     radius: 2.3,
+    primaryRange: 185,
+    secondaryRange: 55,
+    primaryStability: 0.6,
+    secondaryStability: 0,
+    driveStability: 0,
     cannonDamage: 40,
     cannonReload: 1.35,
     shellSpeed: 150,
@@ -194,11 +230,15 @@ export const VEHICLES: Record<VehicleType, VehicleConfig> = {
     scatterReload: 1.05,
     scatterSpeed: 175,
     scatterSplash: 1.4,
+    scatterSpread: 0.085,
     flameDamage: 5.4,
     cryoDamage: 3.8,
+    cryoSlowTime: 2.4,
     beamInterval: 0.12,
     cryoGrenadeDamage: 26,
     cryoGrenadeReload: 2.8,
+    empDamage: 12,
+    empReload: 3.2,
   },
 };
 
@@ -213,6 +253,7 @@ export const WEAPON_INFO: Record<
   flame: { name: "DRAGON'S BREATH", short: 'FLAMETHROWER', description: 'A cone of liquid fire. Sets mechs ablaze.', cooldown: 0, icon: 'flame', key: 'RMB' },
   cryo: { name: 'CRYO LANCE', short: 'CRYO LANCE', description: 'A freezing lance that locks a target in frost.', cooldown: 3.5, icon: 'cryo', key: 'RMB' },
   cryoball: { name: 'CRYO GRENADE', short: 'CRYO GRENADE', description: 'Lobbed ice charge that freezes everything in the blast.', cooldown: 2.8, icon: 'cryoball', key: 'RMB' },
+  emp: { name: 'VOLT EMP DISRUPTOR', short: 'EMP GUN', description: 'A low-damage pulse that briefly disables an enemy; targets resist repeat EMP hits.', cooldown: 3.2, icon: 'bolt', key: 'RMB' },
   cinder: { name: 'CINDER CANISTER', short: 'CINDER POD', description: 'Lob a fire canister that bursts on impact and burns the ground for 6 seconds.', cooldown: 7, icon: 'flame', key: 'Q' },
   orbital: { name: 'SKYFALL ORBITAL', short: 'SKYFALL', description: 'Mark a wide area under the sight for a barrage from orbit.', cooldown: 7, icon: 'strike', key: 'Q' },
   mines: { name: 'CINDER MINES', short: 'MINES', description: 'Deploy proximity mines that detonate into fire.', cooldown: 6, icon: 'mines', key: 'E' },

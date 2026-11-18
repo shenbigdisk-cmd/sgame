@@ -1,11 +1,11 @@
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { describe, expect, it, vi } from 'vitest';
-import { EVOLUTIONS, UPGRADES, defaultStats, rollOffer } from './upgrades';
+import { EVOLUTIONS, UPGRADES, defaultStats, rollOffer, weaponUpgradeInfo } from './upgrades';
 import type { WeaponId } from './types';
 
 const ALL: WeaponId[] = [
-  'autocannon', 'cannon', 'scatter', 'coil', 'flame', 'cryo', 'cryoball',
+  'autocannon', 'cannon', 'scatter', 'coil', 'flame', 'cryo', 'cryoball', 'emp',
   'cinder', 'orbital', 'mines', 'smoke', 'missiles', 'turret', 'mortar', 'overdrive', 'rail', 'nova',
 ];
 
@@ -59,6 +59,63 @@ describe('upgrade catalogue', () => {
     for (const weapon of hooked) {
       expect(evoIds.has(`evo_${weapon}`)).toBe(true);
     }
+  });
+});
+
+describe('weapon upgrade indicators', () => {
+  it('counts each installed rank and evolution only on the weapon it affects', () => {
+    const taken = new Map([['turret_up', 2], ['evo_turret', 1], ['armor', 3], ['missile_cd', 1]]);
+    expect(weaponUpgradeInfo('turret', 'specialE', taken)).toEqual({
+      count: 3,
+      upgrades: [
+        { name: 'SENTRY PROTOCOLS', rank: 2, evolution: false },
+        { name: 'ARC SENTRY', rank: 1, evolution: true },
+      ],
+      evolved: true,
+    });
+    expect(weaponUpgradeInfo('missiles', 'specialQ', taken).count).toBe(1);
+    expect(weaponUpgradeInfo('cannon', 'secondary', taken).count).toBe(0);
+    expect(weaponUpgradeInfo(null, 'specialE', taken)).toEqual({ count: 0, upgrades: [], evolved: false });
+  });
+
+  it('marks each evolution only on its own weapon', () => {
+    for (const evolution of EVOLUTIONS) {
+      const taken = new Map([[evolution.id, 1]]);
+      for (const weapon of ALL) {
+        const result = weaponUpgradeInfo(weapon, 'specialE', taken);
+        expect(result.count, `${evolution.id} on ${weapon}`).toBe(weapon === evolution.evolves ? 1 : 0);
+        expect(result.evolved).toBe(weapon === evolution.evolves);
+      }
+    }
+  });
+
+  it('applies generic damage, reload, targeting and structure bonuses where the engine uses them', () => {
+    const taken = new Map([['he', 2], ['autoloader', 1], ['targeting', 1], ['breacher', 1], ['coolant', 1]]);
+    expect(weaponUpgradeInfo('cannon', 'secondary', taken).count).toBe(5);
+    expect(weaponUpgradeInfo('autocannon', 'primary', taken).count).toBe(3);
+    expect(weaponUpgradeInfo('missiles', 'specialQ', taken).count).toBe(4);
+    expect(weaponUpgradeInfo('mortar', 'specialE', taken).count).toBe(4);
+    expect(weaponUpgradeInfo('cinder', 'specialQ', taken).count).toBe(1);
+    expect(weaponUpgradeInfo('turret', 'specialE', taken).count).toBe(0);
+    expect(weaponUpgradeInfo('smoke', 'specialE', taken).count).toBe(0);
+  });
+
+  it('respects the cryo socket and only applies crit to an evolved damaging nova', () => {
+    const taken = new Map([['coolant', 1], ['autoloader', 1], ['deepfreeze', 2], ['crit', 1]]);
+    expect(weaponUpgradeInfo('cryo', 'secondary', taken).count).toBe(4);
+    expect(weaponUpgradeInfo('cryo', 'specialQ', taken).count).toBe(4);
+    expect(weaponUpgradeInfo('nova', 'specialE', taken).count).toBe(0);
+    taken.set('evo_nova', 1);
+    expect(weaponUpgradeInfo('nova', 'specialE', taken).count).toBe(2);
+    expect(weaponUpgradeInfo('smoke', 'specialE', taken).count).toBe(0);
+  });
+
+  it('includes shared signature effects, while ignoring repairs and unknown perks', () => {
+    const taken = new Map([['sig_cluster', 1], ['sig_haste', 1], ['sig_surge', 1], ['medkit', 4], ['unknown', 9]]);
+    expect(weaponUpgradeInfo('scatter', 'primary', taken).count).toBe(2);
+    expect(weaponUpgradeInfo('cinder', 'specialQ', taken).count).toBe(1);
+    expect(weaponUpgradeInfo('mortar', 'specialQ', taken).count).toBe(2);
+    expect(weaponUpgradeInfo('turret', 'specialE', taken).count).toBe(0);
   });
 });
 

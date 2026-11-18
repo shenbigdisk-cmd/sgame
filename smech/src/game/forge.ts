@@ -73,8 +73,8 @@ const SOCKET_OF: Partial<Record<ComponentSlot, Socket>> = {
  * cannons, or a special component quietly changing a trigger weapon.
  */
 const TUNING_KEYS: Record<Socket, readonly (keyof WeaponTuning)[]> = {
-  primary: ['mgDamage', 'mgInterval', 'mgHeatPerShot', 'scatterDamage', 'scatterReload', 'scatterSpeed', 'scatterSplash'],
-  secondary: ['cannonDamage', 'cannonReload', 'shellSpeed', 'splash', 'flameDamage', 'cryoDamage', 'beamInterval', 'cryoGrenadeDamage', 'cryoGrenadeReload'],
+  primary: ['mgDamage', 'mgInterval', 'mgHeatPerShot', 'scatterDamage', 'scatterReload', 'scatterSpeed', 'scatterSplash', 'scatterSpread'],
+  secondary: ['cannonDamage', 'cannonReload', 'shellSpeed', 'splash', 'flameDamage', 'cryoDamage', 'cryoSlowTime', 'beamInterval', 'cryoGrenadeDamage', 'cryoGrenadeReload', 'empDamage', 'empReload'],
   specialQ: [],
   specialE: [],
 };
@@ -98,6 +98,8 @@ export interface ComponentMods {
   maxSpeed?: number;
   accel?: number;
   turnRate?: number;
+  /** Additional share of moving projectile spread absorbed by the drive. */
+  driveStability?: number;
 }
 
 /**
@@ -121,13 +123,18 @@ export interface WeaponTuning {
   scatterReload?: number;
   scatterSpeed?: number;
   scatterSplash?: number;
+  scatterSpread?: number;
   /** secondary beam weapons: damage and cycle time per tick */
   flameDamage?: number;
   cryoDamage?: number;
+  cryoSlowTime?: number;
   beamInterval?: number;
   /** cryo grenade blast and canister cycle */
   cryoGrenadeDamage?: number;
   cryoGrenadeReload?: number;
+  /** EMP disruptor direct damage and cycle time */
+  empDamage?: number;
+  empReload?: number;
 }
 
 export interface ComponentDef {
@@ -150,6 +157,10 @@ export interface ComponentDef {
   powerOutput?: number;
   /** the weapon this component mounts, if any */
   weapon?: WeaponId;
+  /** Maximum projectile travel, or beam reach, in metres for trigger weapons. */
+  range?: number;
+  /** Fraction of movement-induced spread absorbed (projectile weapons only). */
+  stability?: number;
   /** the model the factory view builds for this part; defaults to its weapon */
   model?: string;
   /** frame this component is based on */
@@ -190,239 +201,144 @@ const FRAMES: ComponentDef[] = (['warden', 'pyre', 'glacier'] as VehicleType[]).
  * ------------------------------------------------------------------ */
 
 const WEAPON_COMPONENTS: ComponentDef[] = [
-  // ---- primary ----
+  // Trigger weapons expose their real maximum reach and moving stability.
+  // Expensive variants buy handling, reach, or a useful effect rather than
+  // dramatically more damage. Higher weight, heat, energy and slower cycles
+  // give the upgraded parts meaningful tradeoffs.
   {
-    id: 'p_autocannon',
-    slot: 'primary',
-    name: 'ROTARY AUTOCANNONS',
-    desc: 'Twin rapid-fire guns. Reliable at mid range.',
-    cost: 200,
-    icon: 'autocannon',
-    weight: 1.6,
-    power: 0.9,
-    powerInterval: 0.09,
-    weapon: 'autocannon',
+    id: 'p_autocannon', slot: 'primary', name: 'ROTARY AUTOCANNONS',
+    desc: 'Dependable mid-range bursts. Light and economical, but less steady on the move.',
+    cost: 200, icon: 'autocannon', weight: 1.6, power: 0.9, powerInterval: 0.09,
+    weapon: 'autocannon', range: 125, stability: 0.3,
     weaponStats: { mgDamage: 5, mgInterval: 0.09, mgHeatPerShot: 0.024 },
   },
   {
-    id: 'p_autocannon_mk2',
-    slot: 'primary',
-    name: 'AUTOCANNONS MK II',
-    desc: 'Rebored barrels. Harder hits, slower cadence, meaner heat.',
-    cost: 520,
-    icon: 'autocannon',
-    model: 'mk2',
-    weight: 2.0,
-    power: 1.4,
-    powerInterval: 0.1,
-    weapon: 'autocannon',
-    weaponStats: { mgDamage: 6.6, mgInterval: 0.1, mgHeatPerShot: 0.031 },
+    id: 'p_autocannon_mk2', slot: 'primary', name: 'AUTOCANNONS MK II',
+    desc: 'Longer barrels and stabilised mounts. A little more punch, at greater heat and energy cost.',
+    cost: 520, icon: 'autocannon', model: 'mk2', weight: 2.0, power: 1.4, powerInterval: 0.1,
+    weapon: 'autocannon', range: 155, stability: 0.55,
+    weaponStats: { mgDamage: 5.3, mgInterval: 0.1, mgHeatPerShot: 0.031 },
   },
   {
-    id: 'p_scatter',
-    slot: 'primary',
-    name: 'SCRAP SCATTERGUN',
-    desc: 'Six barrels of close-range persuasion.',
-    cost: 460,
-    icon: 'scatter',
-    weight: 2.2,
-    power: 6,
-    powerInterval: 1.05,
-    weapon: 'scatter',
-    weaponStats: { scatterDamage: 11, scatterReload: 1.05, scatterSpeed: 175, scatterSplash: 1.4 },
+    id: 'p_scatter', slot: 'primary', name: 'SCRAP SCATTERGUN',
+    desc: 'Six pellets with damage falloff. Dangerous close up, but short-ranged.',
+    cost: 460, icon: 'scatter', weight: 2.2, power: 6, powerInterval: 1.05,
+    weapon: 'scatter', range: 65, stability: 0.25,
+    weaponStats: { scatterDamage: 11, scatterReload: 1.05, scatterSpeed: 175, scatterSplash: 1.4, scatterSpread: 0.085 },
   },
   {
-    id: 'p_scatter_sawed',
-    slot: 'primary',
-    name: 'SAWN-OFF SCATTERGUN',
-    desc: 'Chopped short for the pit. Tighter spread, brutal up close.',
-    cost: 640,
-    icon: 'scatter',
-    model: 'sawed',
-    weight: 1.9,
-    power: 7.5,
-    powerInterval: 1.15,
-    weapon: 'scatter',
-    weaponStats: { scatterDamage: 13, scatterReload: 1.15, scatterSpeed: 165, scatterSplash: 1.6 },
+    id: 'p_scatter_sawed', slot: 'primary', name: 'SAWN-OFF SCATTERGUN',
+    desc: 'Tighter grouping in a lighter package; shorter reach, slower reload and more power per shot.',
+    cost: 640, icon: 'scatter', model: 'sawed', weight: 1.9, power: 7.5, powerInterval: 1.15,
+    weapon: 'scatter', range: 48, stability: 0.45,
+    weaponStats: { scatterDamage: 11.7, scatterReload: 1.15, scatterSpeed: 165, scatterSplash: 1.5, scatterSpread: 0.065 },
   },
   {
-    id: 'p_gatling',
-    slot: 'primary',
-    name: 'GATLING ARRAY',
-    desc: 'Six rotating barrels. Eats shells, eats heat, eats everything in front of it.',
-    cost: 880,
-    icon: 'autocannon',
-    model: 'gatling',
-    weight: 3.4,
-    power: 2.2,
-    powerInterval: 0.13,
-    weapon: 'autocannon',
-    weaponStats: { mgDamage: 8.4, mgInterval: 0.13, mgHeatPerShot: 0.026 },
+    id: 'p_gatling', slot: 'primary', name: 'GATLING ARRAY',
+    desc: 'A steady, fast array with slightly stronger rounds; heavy and hungry, with a shorter reach.',
+    cost: 880, icon: 'autocannon', model: 'gatling', weight: 3.4, power: 2.2, powerInterval: 0.08,
+    weapon: 'autocannon', range: 115, stability: 0.65,
+    weaponStats: { mgDamage: 5.5, mgInterval: 0.08, mgHeatPerShot: 0.032 },
   },
   {
-    id: 'p_bore',
-    slot: 'primary',
-    name: 'BORE SCATTERGUN',
-    desc: 'A single bored barrel, reloaded by hand. Devastating, slow, thirsty.',
-    cost: 760,
-    icon: 'scatter',
-    model: 'bore',
-    weight: 3.0,
-    power: 9,
-    powerInterval: 1.4,
-    weapon: 'scatter',
-    weaponStats: { scatterDamage: 17, scatterReload: 1.4, scatterSpeed: 185, scatterSplash: 2.2 },
+    id: 'p_bore', slot: 'primary', name: 'BORE SCATTERGUN',
+    desc: 'Longer reach and tighter pellets, with a wider blast. Heavy, slower to reload, and power-hungry.',
+    cost: 760, icon: 'scatter', model: 'bore', weight: 3.0, power: 9, powerInterval: 1.4,
+    weapon: 'scatter', range: 90, stability: 0.55,
+    weaponStats: { scatterDamage: 12.1, scatterReload: 1.4, scatterSpeed: 185, scatterSplash: 2.0, scatterSpread: 0.055 },
   },
   {
-    id: 'p_coil',
-    slot: 'primary',
-    name: 'COIL REPEATER',
-    desc: 'Hypervelocity needles. Precise and punishing.',
-    cost: 720,
-    icon: 'coil',
-    weight: 1.7,
-    power: 1.2,
-    powerInterval: 0.105,
-    weapon: 'coil',
+    id: 'p_coil', slot: 'primary', name: 'COIL REPEATER',
+    desc: 'Long-range needles with a stabilised mount. Less damage per round than the rotary.',
+    cost: 720, icon: 'coil', weight: 1.7, power: 1.2, powerInterval: 0.105,
+    weapon: 'coil', range: 185, stability: 0.6,
     weaponStats: { mgDamage: 4.5, mgInterval: 0.105, mgHeatPerShot: 0.024 },
   },
   {
-    id: 'p_coil_rail',
-    slot: 'primary',
-    name: 'RAIL COIL',
-    desc: 'A repeater rebuilt around accelerator rails. Hits like a train, drinks like one.',
-    cost: 1180,
-    icon: 'coil',
-    model: 'railcoil',
-    weight: 3.8,
-    power: 3.4,
-    powerInterval: 0.19,
-    weapon: 'coil',
-    weaponStats: { mgDamage: 9.6, mgInterval: 0.19, mgHeatPerShot: 0.04 },
+    id: 'p_coil_rail', slot: 'primary', name: 'RAIL COIL',
+    desc: 'Exceptional reach and stability for sightline duels; very heavy, slower and power-hungry.',
+    cost: 1180, icon: 'coil', model: 'railcoil', weight: 3.8, power: 3.4, powerInterval: 0.19,
+    weapon: 'coil', range: 225, stability: 0.8,
+    weaponStats: { mgDamage: 4.9, mgInterval: 0.19, mgHeatPerShot: 0.04 },
   },
 
   // ---- secondary ----
   {
-    id: 's_cannon',
-    slot: 'secondary',
-    name: 'TWIN 60MM CANNONS',
-    desc: 'Honest high-explosive shells.',
-    cost: 250,
-    icon: 'cannon',
-    weight: 2.8,
-    power: 11,
-    powerInterval: 1.35,
-    weapon: 'cannon',
+    id: 's_cannon', slot: 'secondary', name: 'TWIN 60MM CANNONS',
+    desc: 'Straightforward high-explosive shells. Cover and gravity can shorten their reach.',
+    cost: 250, icon: 'cannon', weight: 2.8, power: 11, powerInterval: 1.35,
+    weapon: 'cannon', range: 170, stability: 0.35,
     weaponStats: { cannonDamage: 40, cannonReload: 1.35, shellSpeed: 150, splash: 4.5 },
   },
   {
-    id: 's_cannon_90',
-    slot: 'secondary',
-    name: 'TWIN 90MM CANNONS',
-    desc: 'Salvage from a siege walker. Slower, louder, far heavier.',
-    cost: 560,
-    icon: 'cannon',
-    model: 'cannon90',
-    weight: 4.2,
-    power: 19,
-    powerInterval: 1.5,
-    weapon: 'cannon',
-    weaponStats: { cannonDamage: 52, cannonReload: 1.5, shellSpeed: 145, splash: 5.4 },
+    id: 's_cannon_90', slot: 'secondary', name: 'TWIN 90MM CANNONS',
+    desc: 'A slightly wider blast and steadier, longer reach. Slower, heavier and less efficient.',
+    cost: 560, icon: 'cannon', model: 'cannon90', weight: 4.2, power: 19, powerInterval: 1.5,
+    weapon: 'cannon', range: 190, stability: 0.5,
+    weaponStats: { cannonDamage: 44, cannonReload: 1.5, shellSpeed: 145, splash: 5.1 },
   },
   {
-    id: 's_cannon_atlas',
-    slot: 'secondary',
-    name: 'ATLAS CANNONS',
-    desc: 'Walker-breakers on a battleship mount. Slow, heavy, and they do not miss.',
-    cost: 820,
-    icon: 'cannon',
-    model: 'atlas',
-    weight: 5.0,
-    power: 27,
-    powerInterval: 1.7,
-    weapon: 'cannon',
-    weaponStats: { cannonDamage: 74, cannonReload: 1.7, shellSpeed: 190, splash: 6.2 },
+    id: 's_cannon_atlas', slot: 'secondary', name: 'ATLAS CANNONS',
+    desc: 'Long-range stabilised shells with a wider blast. Siege weight, long reload and high draw.',
+    cost: 820, icon: 'cannon', model: 'atlas', weight: 5.0, power: 27, powerInterval: 1.7,
+    weapon: 'cannon', range: 225, stability: 0.8,
+    weaponStats: { cannonDamage: 46, cannonReload: 1.7, shellSpeed: 190, splash: 5.5 },
   },
   {
-    id: 's_cryoball',
-    slot: 'secondary',
-    name: 'CRYO GRENADE',
-    desc: 'Lobbed ice charge that freezes everything in the blast.',
-    cost: 380,
-    icon: 'cryoball',
-    weight: 2.4,
-    power: 12,
-    powerInterval: WEAPON_INFO.cryoball.cooldown,
-    weapon: 'cryoball',
+    id: 's_cryoball', slot: 'secondary', name: 'CRYO GRENADE',
+    desc: 'Lobbed ice charge that freezes enemies in the blast. The arc may land before maximum travel.',
+    cost: 380, icon: 'cryoball', weight: 2.4, power: 12, powerInterval: WEAPON_INFO.cryoball.cooldown,
+    weapon: 'cryoball', range: 55,
     weaponStats: { cryoGrenadeDamage: 26, cryoGrenadeReload: WEAPON_INFO.cryoball.cooldown },
   },
   {
-    id: 's_flame',
-    slot: 'secondary',
-    name: "DRAGON'S BREATH",
-    desc: 'A cone of liquid fire. Sets mechs ablaze.',
-    cost: 620,
-    icon: 'flame',
-    weight: 3.0,
-    power: 2.4,
-    powerInterval: 0.12,
-    weapon: 'flame',
+    id: 's_flame', slot: 'secondary', name: "DRAGON'S BREATH",
+    desc: 'A short cone of liquid fire that sets mechs ablaze.',
+    cost: 620, icon: 'flame', weight: 3.0, power: 2.4, powerInterval: 0.12,
+    weapon: 'flame', range: 30,
     weaponStats: { flameDamage: 5.4, beamInterval: 0.12 },
   },
   {
-    id: 's_flame_vent',
-    slot: 'secondary',
-    name: 'VENTED FLAME',
-    desc: 'Pressurised fuel behind a wider nozzle. A longer, angrier cone of fire.',
-    cost: 690,
-    icon: 'flame',
-    model: 'vent',
-    weight: 3.8,
-    power: 4.2,
-    powerInterval: 0.1,
-    weapon: 'flame',
-    weaponStats: { flameDamage: 8.4, beamInterval: 0.1 },
+    id: 's_flame_vent', slot: 'secondary', name: 'VENTED FLAME',
+    desc: 'A longer burning cone with a little more damage. The pressurised system draws more power.',
+    cost: 690, icon: 'flame', model: 'vent', weight: 3.8, power: 4.2, powerInterval: 0.12,
+    weapon: 'flame', range: 42,
+    weaponStats: { flameDamage: 5.7, beamInterval: 0.12 },
   },
   {
-    id: 's_cryo',
-    slot: 'secondary',
-    name: 'CRYO LANCE',
-    desc: 'A freezing lance that locks a target in frost.',
-    cost: 780,
-    icon: 'cryo',
-    weight: 2.6,
-    power: 4,
-    powerInterval: 0.12,
-    weapon: 'cryo',
-    weaponStats: { cryoDamage: 3.8, beamInterval: 0.12 },
+    id: 's_cryo', slot: 'secondary', name: 'CRYO LANCE',
+    desc: 'A freezing lance that slows a target. Heat and power limit sustained fire.',
+    cost: 780, icon: 'cryo', weight: 2.6, power: 4, powerInterval: 0.12,
+    weapon: 'cryo', range: 70,
+    weaponStats: { cryoDamage: 3.8, cryoSlowTime: 2.4, beamInterval: 0.12 },
   },
   {
-    id: 's_cryo_heavy',
-    slot: 'secondary',
-    name: 'DEEP FREEZE LANCE',
-    desc: 'Colder, heavier, slower. Everything it touches stops dead.',
-    cost: 940,
-    icon: 'cryo',
-    model: 'deepfreeze',
-    weight: 3.6,
-    power: 6.4,
-    powerInterval: 0.16,
-    weapon: 'cryo',
-    weaponStats: { cryoDamage: 6.2, beamInterval: 0.16 },
+    id: 's_cryo_heavy', slot: 'secondary', name: 'DEEP FREEZE LANCE',
+    desc: 'Longer reach and a longer slow. Its heavy cooler consumes more power and cycles slower.',
+    cost: 940, icon: 'cryo', model: 'deepfreeze', weight: 3.6, power: 6.4, powerInterval: 0.16,
+    weapon: 'cryo', range: 85,
+    weaponStats: { cryoDamage: 4.1, cryoSlowTime: 3.4, beamInterval: 0.16 },
+  },
+  {
+    id: 's_emp', slot: 'secondary', name: 'VOLT EMP DISRUPTOR',
+    desc: 'Low-damage pulse disables one enemy for 1.5 s (bosses 0.45 s). Each target resists repeat EMP for 4 s.',
+    cost: 880, icon: 'bolt', weight: 3.0, power: 22, powerInterval: 3.2,
+    weapon: 'emp', range: 110, stability: 0.6,
+    weaponStats: { empDamage: 12, empReload: 3.2 },
   },
 
   // ---- specials (usable in either special slot) ----
   { id: 'x_missiles', slot: 'specialQ', name: 'HOMING MISSILES', desc: 'A salvo of guided rockets.', cost: 300, icon: 'missile', weight: 2.2, power: 16, powerInterval: WEAPON_INFO.missiles.cooldown, weapon: 'missiles' },
-  { id: 'x_turret', slot: 'specialQ', name: 'SENTRY TURRET', desc: 'An automated gun turret. Holds a flank for 24s.', cost: 340, icon: 'turret', weight: 2.0, power: 12, powerInterval: WEAPON_INFO.turret.cooldown, weapon: 'turret' },
-  { id: 'x_orbital', slot: 'specialQ', name: 'SKYFALL ORBITAL', desc: 'Mark a wide area under the sight for a barrage from orbit.', cost: 560, icon: 'strike', weight: 2.6, power: 30, powerInterval: WEAPON_INFO.orbital.cooldown, weapon: 'orbital' },
+  { id: 'x_turret', slot: 'specialQ', name: 'SENTRY TURRET', desc: 'Automated gun tracks enemies within 85 m. Holds a flank for 24 s.', cost: 340, icon: 'turret', weight: 2.0, power: 12, powerInterval: WEAPON_INFO.turret.cooldown, weapon: 'turret' },
+  { id: 'x_orbital', slot: 'specialQ', name: 'SKYFALL ORBITAL', desc: 'Mark an area up to 180 m away for a wide barrage from orbit.', cost: 560, icon: 'strike', weight: 2.6, power: 30, powerInterval: WEAPON_INFO.orbital.cooldown, weapon: 'orbital' },
   { id: 'x_jump', slot: 'specialQ', name: 'CINDER CANISTER', desc: 'Lob a fire canister that bursts on impact and burns the ground for 6 seconds.', cost: 420, icon: 'flame', weight: 2.6, power: 30, powerInterval: WEAPON_INFO.cinder.cooldown, weapon: 'cinder' },
   { id: 'x_mines', slot: 'specialQ', name: 'CINDER MINES', desc: 'Deploy proximity mines that detonate into fire.', cost: 380, icon: 'mines', weight: 1.9, power: 8, powerInterval: WEAPON_INFO.mines.cooldown, weapon: 'mines' },
   { id: 'x_smoke', slot: 'specialQ', name: 'VEIL SMOKE', desc: 'Block enemy bullets and break locks. Heavy shots penetrate at 70% damage; move to avoid blind fire.', cost: 260, icon: 'smoke', weight: 1.4, power: 10, powerInterval: WEAPON_INFO.smoke.cooldown, weapon: 'smoke' },
-  { id: 'x_rail', slot: 'specialQ', name: 'LONGBOW RAILGUN', desc: 'An instant lightning beam. Lethal precision.', cost: 640, icon: 'target', weight: 3.2, power: 55, powerInterval: WEAPON_INFO.rail.cooldown, weapon: 'rail' },
+  { id: 'x_rail', slot: 'specialQ', name: 'LONGBOW RAILGUN', desc: 'An instant precision beam reaching up to 260 m in a clear sightline.', cost: 640, icon: 'target', weight: 3.2, power: 55, powerInterval: WEAPON_INFO.rail.cooldown, weapon: 'rail' },
   { id: 'x_mortar', slot: 'specialQ', name: 'INCENDIARY MORTARS', desc: 'Marks an area for burning mortar shells.', cost: 560, icon: 'mortar', weight: 3.4, power: 24, powerInterval: WEAPON_INFO.mortar.cooldown, weapon: 'mortar' },
   { id: 'x_overdrive', slot: 'specialQ', name: 'OVERDRIVE VENT', desc: 'Vent the reactor: speed, reload and a burn nova.', cost: 600, icon: 'overdrive', weight: 2.4, power: 45, powerInterval: WEAPON_INFO.overdrive.cooldown, weapon: 'overdrive' },
   { id: 'x_swarm', slot: 'specialQ', name: 'SWARM POD', desc: 'A wider salvo of cheaper rockets.', cost: 520, icon: 'missile', model: 'swarm', weight: 2.6, power: 20, powerInterval: WEAPON_INFO.missiles.cooldown, weapon: 'missiles' },
-  { id: 'x_nova', slot: 'specialQ', name: 'STASIS NOVA', desc: 'A freezing pulse that locks enemies in place.', cost: 580, icon: 'nova', weight: 2.8, power: 50, powerInterval: WEAPON_INFO.nova.cooldown, weapon: 'nova' },
+  { id: 'x_nova', slot: 'specialQ', name: 'STASIS NOVA', desc: 'A 26 m freezing pulse that locks enemies in place.', cost: 580, icon: 'nova', weight: 2.8, power: 50, powerInterval: WEAPON_INFO.nova.cooldown, weapon: 'nova' },
 ];
 
 /* ------------------------------------------------------------------ *
@@ -447,9 +363,9 @@ const SYSTEMS: ComponentDef[] = [
   // ---- drive ----
   { id: 'd_standard', slot: 'drive', name: 'STANDARD STRUTS', desc: 'Factory legs. Honest and unremarkable.', cost: 180, icon: 'gear', model: 'd_standard', weight: 2.4, mods: {} },
   { id: 'd_sprint', slot: 'drive', name: 'SPRINT SERVOS', desc: 'Light servos. Half a tonne lighter and far quicker to answer.', cost: 420, icon: 'gear', model: 'd_sprint', weight: 1.6, mods: { maxSpeed: 2.4, accel: 3 } },
-  { id: 'd_atlas', slot: 'drive', name: 'ATLAS LEGS', desc: 'Heavy stabilisers. Slower to turn, +30 hull, steadier on the move.', cost: 800, icon: 'gear', model: 'd_atlas', weight: 3.8, mods: { maxSpeed: 1.2, accel: 4, turnRate: 0.2, maxHp: 30 } },
+  { id: 'd_atlas', slot: 'drive', name: 'ATLAS LEGS', desc: 'Heavy stabilisers absorb 22% more movement spread; +30 hull but extra mass.', cost: 800, icon: 'gear', model: 'd_atlas', weight: 3.8, mods: { maxSpeed: 1.2, accel: 4, turnRate: 0.2, maxHp: 30, driveStability: 0.22 } },
   { id: 'd_skimmer', slot: 'drive', name: 'SKIMMER LEGS', desc: 'Ground-effect skids. Fast in a straight line, vague in a turn.', cost: 560, icon: 'gear', model: 'd_skimmer', weight: 2.0, mods: { maxSpeed: 3.6, accel: 5, turnRate: -0.15 } },
-  { id: 'd_anvil', slot: 'drive', name: 'ANVIL DRIVE', desc: 'Anchor legs for a siege build. +55 hull, +25 shield, and it drags.', cost: 960, icon: 'gear', model: 'd_anvil', weight: 4.6, mods: { maxSpeed: -1.6, accel: 2, turnRate: 0.25, maxHp: 55, shield: 25 } },
+  { id: 'd_anvil', slot: 'drive', name: 'ANVIL DRIVE', desc: 'Siege anchors absorb 30% more movement spread, with +55 hull and +25 shield. Heavy and slow.', cost: 960, icon: 'gear', model: 'd_anvil', weight: 4.6, mods: { maxSpeed: -1.6, accel: 2, turnRate: 0.25, maxHp: 55, shield: 25, driveStability: 0.3 } },
 ];
 
 export const COMPONENTS: ComponentDef[] = [...FRAMES, ...WEAPON_COMPONENTS, ...SYSTEMS];
@@ -498,7 +414,7 @@ export const STARTER_EQUIPPED: Record<ComponentSlot, string> = {
 /** Weapons the simulation knows how to fire in each cockpit slot. */
 export const SLOT_WEAPONS: Record<'primary' | 'secondary' | 'special', WeaponId[]> = {
   primary: ['autocannon', 'scatter', 'coil'],
-  secondary: ['cannon', 'cryoball', 'flame', 'cryo'],
+  secondary: ['cannon', 'cryoball', 'flame', 'cryo', 'emp'],
   special: ['missiles', 'turret', 'orbital', 'cinder', 'mines', 'smoke', 'rail', 'mortar', 'overdrive', 'nova'],
 };
 
@@ -586,6 +502,8 @@ export interface BuildStats {
   maxSpeed: number;
   accel: number;
   turnRate: number;
+  /** Extra share of movement-induced spread absorbed by the drive. */
+  driveStability: number;
   /** stored energy in kilojoules */
   powerCapacity: number;
   /** recharge rate in kilojoules per second */
@@ -662,7 +580,7 @@ export function buildStats(equipped: Partial<Record<ComponentSlot, string>>): Bu
   const base = VEHICLES[vehicle];
 
   const entries = equippedEntries(equipped);
-  const mods = { maxHp: 0, shield: 0, maxSpeed: 0, accel: 0, turnRate: 0 };
+  const mods = { maxHp: 0, shield: 0, maxSpeed: 0, accel: 0, turnRate: 0, driveStability: 0 };
   const powerCost: PowerCosts = {
     primary: 0,
     secondary: 0,
@@ -680,6 +598,7 @@ export function buildStats(equipped: Partial<Record<ComponentSlot, string>>): Bu
       mods.maxSpeed += comp.mods.maxSpeed ?? 0;
       mods.accel += comp.mods.accel ?? 0;
       mods.turnRate += comp.mods.turnRate ?? 0;
+      mods.driveStability += comp.mods.driveStability ?? 0;
     }
     if (comp.weapon && comp.power) {
       const socket = SOCKET_OF[slot];
@@ -701,6 +620,7 @@ export function buildStats(equipped: Partial<Record<ComponentSlot, string>>): Bu
     maxSpeed: Math.max(6, base.maxSpeed * factor + mods.maxSpeed),
     accel: Math.max(4, base.accel * (0.72 + 0.28 * factor) + mods.accel),
     turnRate: Math.max(0.5, base.turnRate * (0.76 + 0.24 * factor) + mods.turnRate),
+    driveStability: Math.min(0.95, Math.max(0, mods.driveStability)),
     powerCapacity,
     powerOutput,
     powerDraw: draw,
@@ -763,6 +683,13 @@ export function buildConfig(equipped: Partial<Record<ComponentSlot, string>>): V
   cfg.powerOutput = stats.powerOutput;
   cfg.powerDraw = stats.powerDraw;
   cfg.powerCost = { ...stats.powerCost };
+  cfg.driveStability = stats.driveStability;
+  const primary = getComponent(equipped.primary ?? '');
+  const secondary = getComponent(equipped.secondary ?? '');
+  cfg.primaryRange = cfg.loadout.primary ? primary?.range ?? 0 : 0;
+  cfg.secondaryRange = cfg.loadout.secondary ? secondary?.range ?? 0 : 0;
+  cfg.primaryStability = cfg.loadout.primary ? primary?.stability ?? 0 : 0;
+  cfg.secondaryStability = cfg.loadout.secondary ? secondary?.stability ?? 0 : 0;
   Object.assign(cfg, tuning);
 
   return cfg;

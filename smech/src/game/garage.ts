@@ -514,7 +514,10 @@ const COOL_SUFFIXES = [
 /** Generate a cool sci-fi mech designation automatically. */
 export function generateCoolMechName(): string {
   const p = COOL_PREFIXES[Math.floor(Math.random() * COOL_PREFIXES.length)];
-  const s = COOL_SUFFIXES[Math.floor(Math.random() * COOL_SUFFIXES.length)];
+  // Include the separating space and the final hyphen/digit in the limit, so
+  // a generated designation remains unchanged when it is built and saved.
+  const suffixes = COOL_SUFFIXES.filter((suffix) => p.length + suffix.length + 3 <= MAX_MECH_NAME);
+  const s = suffixes[Math.floor(Math.random() * suffixes.length)];
   const num = Math.floor(Math.random() * 9) + 1;
   return `${p} ${s}-${num}`;
 }

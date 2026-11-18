@@ -2,7 +2,7 @@ import FieldManual from './FieldManual';
 import { useMemo, useState } from 'react';
 import type { ControlMode, VehicleType } from '../game/types';
 import { VEHICLE_ORDER, VEHICLES, WEAPON_INFO } from '../game/vehicles';
-import { buildConfig, frameOf, reserveRecharge } from '../game/forge';
+import { buildConfig, frameOf, getComponent, reserveRecharge } from '../game/forge';
 import { RACK_CAPACITIES } from '../game/ordnance';
 import { getAllMechs, selectMech, sellCustomMech, type GarageState } from '../game/garage';
 import { randomSeedCode } from '../game/rng';
@@ -63,6 +63,7 @@ export default function Menu({ onStart, settings, onSettings, records, garage, o
   const [controls, setControls] = useState<ControlMode>('arcade');
   const [seed, setSeed] = useState(randomSeedCode);
   const [legend, setLegend] = useState(false);
+  const [loadoutExpanded, setLoadoutExpanded] = useState(false);
   const sector = useMemo(() => generateLayout(seed || 'UNASSIGNED'), [seed]);
   const mechs = getAllMechs(garage),
     frame = frameOf(garage.equipped),
@@ -71,7 +72,11 @@ export default function Menu({ onStart, settings, onSettings, records, garage, o
   const condition = conditionFor(seed || 'UNASSIGNED');
   const index = VEHICLE_ORDER.indexOf(frame) + 1;
   const active = mechs.find((m) => m.id === garage.activeMechId);
-  const name = active?.isPrebuilt === false ? garage.mechName : v.name.split(' ')[0];
+  // CustomMech entries do not have an isPrebuilt property; only factory mechs
+  // explicitly set it to true. Do not mistake the missing flag for a factory.
+  const name = active && !active.isPrebuilt ? garage.mechName : v.name.split(' ')[0];
+  const socketParts = [garage.equipped.primary, garage.equipped.secondary, garage.equipped.specialQ, garage.equipped.specialE]
+    .map((id) => id ? getComponent(id) : undefined);
   if (building)
     return (
       <MechBuilder
@@ -85,7 +90,7 @@ export default function Menu({ onStart, settings, onSettings, records, garage, o
       />
     );
   return (
-    <div className="op-console">
+    <div className={`op-console${page === 'Hangar' ? ' is-hangar' : ''}`}>
       <header className="op-bar">
         <div className="op-bar-inner">
           <div className="op-brand">
@@ -140,7 +145,7 @@ export default function Menu({ onStart, settings, onSettings, records, garage, o
                 <div className="op-kicker">
                   <i /> ACTIVE CHASSIS <span>//</span> 0{index}
                 </div>
-                <h1>{name}</h1>
+                <h1 title={name} className={name.length > 10 ? 'op-long-name' : undefined}>{name}</h1>
                 <div className="op-class">
                   <span>{roles[frame]} class</span>
                   <b>/</b> {v.epithet}
@@ -179,14 +184,18 @@ export default function Menu({ onStart, settings, onSettings, records, garage, o
                 <Section
                   n="01"
                   aside={
-                    <button className="op-build" onClick={() => setBuilding(true)}>
-                      <b>+</b> Build mech
-                    </button>
+                    <>
+                      {mechs.length > 3 && <span className="op-more-chassis">Scroll →</span>}
+                      <button className="op-build" onClick={() => setBuilding(true)}>
+                        <b>+</b> Build mech
+                      </button>
+                    </>
                   }
                 >
                   Chassis bay
                 </Section>
-                <div className="op-cards">
+                <div className={`op-cards${mechs.length > 3 ? ' has-overflow' : ''}`} role="region"
+                  aria-label="Chassis selection" tabIndex={mechs.length > 3 ? 0 : undefined}>
                   {mechs.map((m, i) => {
                     const chosen = m.id === garage.activeMechId;
                     return (
@@ -204,7 +213,9 @@ export default function Menu({ onStart, settings, onSettings, records, garage, o
                             {chosen && <span aria-label="Selected">✓</span>}
                           </div>
                           <div className="op-card-label">
-                            <b>{m.isPrebuilt ? VEHICLES[m.frame].name.split(' ')[0] : m.name}</b>
+                            <b title={m.isPrebuilt ? VEHICLES[m.frame].name.split(' ')[0] : m.name}>
+                              {m.isPrebuilt ? VEHICLES[m.frame].name.split(' ')[0] : m.name}
+                            </b>
                             <small>
                               <i /> {m.isPrebuilt ? roles[m.frame] + ' class' : 'Custom build'}
                             </small>
@@ -225,57 +236,68 @@ export default function Menu({ onStart, settings, onSettings, records, garage, o
                     );
                   })}
                 </div>
+              </section>
+              <section className={`op-loadout${loadoutExpanded ? ' is-expanded' : ''}`}>
                 <Section
                   n="02"
                   aside={
-                    <button className="op-link" onClick={() => setLegend(!legend)}>
-                      {legend ? 'Loadout' : 'Pilot dossier'} ↗
-                    </button>
+                    <>
+                      <button className="op-loadout-toggle" aria-expanded={loadoutExpanded} aria-controls="hangar-loadout" onClick={() => setLoadoutExpanded(!loadoutExpanded)}>
+                        {loadoutExpanded ? 'Hide details ↑' : 'View details ↓'}
+                      </button>
+                      <button className="op-link" onClick={() => setLegend(!legend)}>
+                        {legend ? 'Loadout' : 'Pilot dossier'} ↗
+                      </button>
+                    </>
                   }
                 >
                   {legend ? 'Pilot dossier' : 'Weapon loadout'}
                 </Section>
-                {legend ? (
-                  <p className="op-story">
-                    {v.backstory} {v.style}
-                  </p>
-                ) : (
-                  <div className="op-sockets">
-                    {Object.values(build.loadout).map((id, i) => (
-                      <div key={i} title={id ? WEAPON_INFO[id].description : 'Empty socket'}>
-                        <Icon name={id ? WEAPON_INFO[id].icon : 'lock'} size={23} />
-                        <span>
-                          <small>{['PRIMARY', 'SECONDARY', 'SPECIAL Q', 'SPECIAL E'][i]}</small>
-                          <b>{id ? WEAPON_INFO[id].short : 'EMPTY'}</b>
-                          {id && (
-                            <em className="socket-cost">
-                              {
-                                [
-                                  build.powerCost.primary,
-                                  build.powerCost.secondary,
-                                  build.powerCost.specialQ,
-                                  build.powerCost.specialE,
-                                ][i]
-                              }{' '}
-                              kJ / use{i >= 2 && ` · ${RACK_CAPACITIES[i === 2 ? 'Q' : 'E']} charges`}
-                            </em>
-                          )}
-                        </span>
-                        <kbd>{['LMB', 'RMB', 'Q', 'E'][i]}</kbd>
-                      </div>
-                    ))}
+                <div id="hangar-loadout" className="op-loadout-content">
+                  {legend ? (
+                    <p className="op-story">
+                      {v.backstory} {v.style}
+                    </p>
+                  ) : (
+                    <div className="op-sockets">
+                      {Object.values(build.loadout).map((id, i) => {
+                        const part = socketParts[i]?.weapon === id ? socketParts[i] : undefined;
+                        const range = i === 0 ? build.primaryRange : i === 1 ? build.secondaryRange : 0;
+                        return (
+                          <div key={i} title={id ? part?.desc ?? WEAPON_INFO[id].description : 'Empty socket'}>
+                            <Icon name={id ? WEAPON_INFO[id].icon : 'lock'} size={23} />
+                            <span>
+                              <small>{['PRIMARY', 'SECONDARY', 'SPECIAL Q', 'SPECIAL E'][i]}</small>
+                              <b>{id ? part?.name ?? WEAPON_INFO[id].short : 'EMPTY'}</b>
+                              {id && (
+                                <em className="socket-cost">
+                                  {range > 0 && `${range} m max · `}
+                                  {[
+                                    build.powerCost.primary,
+                                    build.powerCost.secondary,
+                                    build.powerCost.specialQ,
+                                    build.powerCost.specialE,
+                                  ][i]} kJ / use{i >= 2 && ` · ${RACK_CAPACITIES[i === 2 ? 'Q' : 'E']} charges`}
+                                </em>
+                              )}
+                            </span>
+                            <kbd>{['LMB', 'RMB', 'Q', 'E'][i]}</kbd>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                  <div className="bus-readout">
+                    <span>
+                      <Icon name="battery" size={15} /> REACTOR BUS
+                    </span>
+                    <b>
+                      {build.powerCapacity} kJ <i>reserve</i>
+                    </b>
+                    <b>
+                      +{Math.round(reserveRecharge(build.powerOutput, condition.energy))} kJ/s <i>recharge</i>
+                    </b>
                   </div>
-                )}
-                <div className="bus-readout">
-                  <span>
-                    <Icon name="battery" size={15} /> REACTOR BUS
-                  </span>
-                  <b>
-                    {build.powerCapacity} kJ <i>reserve</i>
-                  </b>
-                  <b>
-                    +{Math.round(reserveRecharge(build.powerOutput, condition.energy))} kJ/s <i>recharge</i>
-                  </b>
                 </div>
               </section>
               <aside id="deploy-panel" className="op-deploy">
