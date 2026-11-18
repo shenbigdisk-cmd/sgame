@@ -1,4 +1,14 @@
 import type { UpgradeDef, WeaponId } from './types';
+import type { WeaponSocket } from './vehicles';
+
+/** The first installation has no suffix; only installed stacks advance the name. */
+export function upgradeName(name: string, rank: number): string {
+  return rank > 1 ? `${name} ${rank}` : name;
+}
+
+export function offerName(upgrade: UpgradeDef, installed: number): string {
+  return upgradeName(upgrade.name, upgrade.max === 1 || upgrade.id === 'medkit' ? 1 : installed + 1);
+}
 
 /** Multipliers and flat bonuses accumulated from picked upgrades. */
 export interface PlayerStats {
@@ -91,12 +101,14 @@ export const EVOLUTIONS: UpgradeDef[] = [
   { id: 'evo_turret', name: 'ARC SENTRY', desc: 'Your sentry becomes a lightning turret. Each shot jumps to a second target.', rarity: 'epic', icon: 'turret', tag: 'SIGNATURE', signature: true, evolution: true, evolves: 'turret', max: 1 },
   { id: 'evo_scatter', name: 'SLAG SHOT', desc: 'Scattergun pellets ignite targets, adding 8 burn damage per second for 3 seconds.', rarity: 'epic', icon: 'scatter', tag: 'SIGNATURE', signature: true, evolution: true, evolves: 'scatter', max: 1 },
   { id: 'evo_flame', name: 'FIRESTORM', desc: 'Burning enemies explode on death, damaging and igniting nearby challengers.', rarity: 'epic', icon: 'flame', tag: 'SIGNATURE', signature: true, evolution: true, evolves: 'flame', max: 1 },
-  { id: 'evo_jump', name: 'METEOR SLAM', desc: 'Jump slam radius +35% and leaves a burning crater where you land.', rarity: 'epic', icon: 'jump', tag: 'SIGNATURE', signature: true, evolution: true, evolves: 'jump', max: 1 },
+  { id: 'evo_orbital', name: 'ZENITH PROTOCOL', desc: 'Skyfall strikes are 25% wider and deal 20% more damage.', rarity: 'epic', icon: 'strike', tag: 'SIGNATURE', signature: true, evolution: true, evolves: 'orbital', max: 1 },
+  { id: 'evo_cinder', name: 'FOUNDRY SPILL', desc: 'Canister blasts and their fire patches spread 35% wider. Ground fire lasts 10 seconds instead of 6.', rarity: 'epic', icon: 'flame', tag: 'SIGNATURE', signature: true, evolution: true, evolves: 'cinder', max: 1 },
   { id: 'evo_mines', name: 'CLUSTER MINES', desc: 'Deploy three mines at once. Mine blasts are 50% larger and ignite enemies.', rarity: 'epic', icon: 'mines', tag: 'SIGNATURE', signature: true, evolution: true, evolves: 'mines', max: 1 },
   { id: 'evo_coil', name: 'SPLINTER NEEDLES', desc: 'Coil rounds deal 45% more damage against chilled or frozen enemies.', rarity: 'epic', icon: 'coil', tag: 'SIGNATURE', signature: true, evolution: true, evolves: 'coil', max: 1 },
   { id: 'evo_cryoball', name: 'ABSOLUTE ZERO', desc: 'Ice grenades freeze for 2 extra seconds and leave targets brittle: +25% damage taken for 5s.', rarity: 'epic', icon: 'cryoball', tag: 'SIGNATURE', signature: true, evolution: true, evolves: 'cryoball', max: 1 },
+  { id: 'evo_emp', name: 'CIRCUIT BREAKER', desc: 'EMP pulses arc to one nearby enemy for half damage and a shorter disruption. Both targets resist repeat EMP for 4s.', rarity: 'epic', icon: 'bolt', tag: 'SIGNATURE', signature: true, evolution: true, evolves: 'emp', max: 1 },
   { id: 'evo_rail', name: 'CHAIN REACTION', desc: 'Your railgun lightning jumps to two more targets for 55% and 35% damage.', rarity: 'epic', icon: 'target', tag: 'SIGNATURE', signature: true, evolution: true, evolves: 'rail', max: 1 },
-  { id: 'evo_smoke', name: 'CHOKE SCREEN', desc: 'Smoke is wider, lasts 5s longer, and recharges 30 shield points while you stand in it.', rarity: 'epic', icon: 'smoke', tag: 'SIGNATURE', signature: true, evolution: true, evolves: 'smoke', max: 1 },
+  { id: 'evo_smoke', name: 'CHOKE SCREEN', desc: 'Smoke is wider, lasts 2s longer, and restores up to 30 shield points inside the cloud.', rarity: 'epic', icon: 'smoke', tag: 'SIGNATURE', signature: true, evolution: true, evolves: 'smoke', max: 1 },
   { id: 'evo_mortar', name: 'THERMAL DRUMS', desc: 'Mortar pools burn 55% hotter and 65% longer, and your own fire never scorches you.', rarity: 'epic', icon: 'mortar', tag: 'SIGNATURE', signature: true, evolution: true, evolves: 'mortar', max: 1 },
   { id: 'evo_nova', name: 'GLACIAL SHATTER', desc: 'The stasis nova deals 20 damage and leaves enemies brittle for 6s: they take 25% more damage.', rarity: 'epic', icon: 'nova', tag: 'SIGNATURE', signature: true, evolution: true, evolves: 'nova', max: 1 },
   { id: 'evo_overdrive', name: 'REACTOR PURGE', desc: 'Venting overdrive restores 50 shield, breaks the shield lock, and purges all weapon heat.', rarity: 'epic', icon: 'overdrive', tag: 'SIGNATURE', signature: true, evolution: true, evolves: 'overdrive', max: 1 },
@@ -116,6 +128,8 @@ export const UPGRADES: UpgradeDef[] = [
   { id: 'sig_surge', name: 'SATURATION BARRAGE', desc: 'Missile salvos fire +2 warheads and their blasts are 40% wider.', rarity: 'epic', icon: 'missile', tag: 'SIGNATURE', signature: true, max: 1 },
   { id: 'sig_scavenger', name: 'SUPPLY NETWORK', desc: 'Supply drops arrive 35% more often and land closer to you.', rarity: 'epic', icon: 'magnet', tag: 'SIGNATURE', signature: true, max: 1 },
 
+  { id:'breacher', name:'BREACH CHARGES', desc:'Explosive impacts deal +50% base damage to structures per rank. Open a flank without spending a full salvo.', rarity:'common', icon:'blast', tag:'WEAPON', max:3 },
+  { id:'induction', name:'INDUCTION LOOP', desc:'Recover 8 kJ on each kill per rank, up to your reactor capacity. Keeps weapons supplied during sustained fire.', rarity:'rare', icon:'bolt', tag:'SYSTEM', max:3 },
   // ---- hull ----
   { id: 'armor', name: 'COMPOSITE PLATING', desc: '+25% max armor and repair 25% now.', rarity: 'common', icon: 'armor', tag: 'HULL' },
   { id: 'regen', name: 'REPAIR CREW', desc: 'Regenerate 2 armor per second.', rarity: 'rare', icon: 'wrench', tag: 'HULL', max: 3 },
@@ -141,12 +155,13 @@ export const UPGRADES: UpgradeDef[] = [
   { id: 'missile_cd', name: 'RAPID RELOAD RACKS', desc: 'Missile pod recharges 25% faster. +15% missile damage.', rarity: 'common', icon: 'clock', tag: 'WEAPON', max: 3 },
   { id: 'turret_up', name: 'SENTRY PROTOCOLS', desc: 'Sentry turret: +40% damage, +50% lifetime.', rarity: 'rare', icon: 'turret', tag: 'WEAPON', max: 3 },
   { id: 'rail_damage', name: 'RAIL CAPACITORS', desc: 'Railgun damage increased by 35%.', rarity: 'rare', icon: 'target', tag: 'WEAPON', max: 3 },
-  { id: 'jump_charge', name: 'SLAM THRUSTERS', desc: 'Jump slam recharges 20% faster and hits a 15% wider area.', rarity: 'rare', icon: 'jump', tag: 'WEAPON', max: 2 },
+  { id: 'orbital_uplink', name: 'TARGETING UPLINK', desc: 'Each rank makes Skyfall 10% wider and reduces its base cooldown by 12%.', rarity: 'rare', icon: 'strike', tag: 'WEAPON', max: 2 },
+  { id: 'cinder_charge', name: 'WIDE-MOUTH CANISTERS', desc: 'Each rank cuts base launcher cooldown by 18% and adds 1.8 m to the impact radius.', rarity: 'rare', icon: 'flame', tag: 'WEAPON', max: 2 },
   { id: 'mine_stock', name: 'EXTRA CHARGES', desc: 'Carry +2 mines and deploy one extra per use.', rarity: 'rare', icon: 'mines', tag: 'WEAPON', max: 2 },
-  { id: 'smoke_belt', name: 'CANISTER BELT', desc: 'Smoke recharges 25% faster and lingers longer.', rarity: 'common', icon: 'smoke', tag: 'WEAPON', max: 2 },
+  { id: 'smoke_belt', name: 'CANISTER BELT', desc: 'Smoke cooldown up to 12% shorter. The cloud lingers 0.5s longer; a brief gap remains between screens.', rarity: 'common', icon: 'smoke', tag: 'WEAPON', max: 2 },
   { id: 'ice_capacity', name: 'CRYO CANISTER', desc: 'Ice grenade blast +20% wider and recharges faster.', rarity: 'rare', icon: 'cryoball', tag: 'WEAPON', max: 2 },
   { id: 'mortar_shells', name: 'HEAP SHELLS', desc: '+1 incendiary shell in every mortar strike.', rarity: 'rare', icon: 'mortar', tag: 'WEAPON', max: 3 },
-  { id: 'mortar_cd', name: 'QUICK LAUNCH', desc: 'Mortar pod recharges 30% faster.', rarity: 'common', icon: 'clock', tag: 'WEAPON', max: 3 },
+  { id: 'mortar_cd', name: 'QUICK LAUNCH', desc: 'Mortar cooldown is 25% shorter than its current value.', rarity: 'common', icon: 'clock', tag: 'WEAPON', max: 3 },
   { id: 'overdrive_up', name: 'REACTOR TUNING', desc: 'Overdrive lasts 4s longer and burns 40% hotter.', rarity: 'rare', icon: 'overdrive', tag: 'WEAPON', max: 3 },
   { id: 'nova_radius', name: 'FIELD EXPANSION', desc: 'Stasis nova reaches 30% further and freezes for longer.', rarity: 'rare', icon: 'nova', tag: 'WEAPON', max: 3 },
   { id: 'cryo_lance', name: 'DEEP CRYO LANCE', desc: '+40% cryo lance damage and a much stronger slow.', rarity: 'rare', icon: 'cryo', tag: 'WEAPON', max: 3 },
@@ -160,6 +175,72 @@ export const UPGRADES: UpgradeDef[] = [
   { id: 'laurels', name: 'CHAMPION\'S RESOLVE', desc: '+30 shield capacity. Fully recharge your shield.', rarity: 'epic', icon: 'shield', tag: 'SYSTEM', signature: true },
 ];
 
+/**
+ * Which weapons use each installed upgrade in the simulation. Keep this based
+ * on effects rather than reward tags: some system/signature upgrades change a
+ * weapon, while many perks have no bearing on one at all. Evolutions use the
+ * catalogue's `evolves` field instead of a second hand-maintained list.
+ */
+const WEAPON_UPGRADE_EFFECTS: Readonly<Record<string, readonly WeaponId[]>> = {
+  autoloader: ['autocannon', 'coil', 'scatter', 'cannon', 'cryoball', 'emp'],
+  he: ['cannon', 'scatter', 'missiles', 'mortar'],
+  crit: ['autocannon', 'cannon', 'scatter', 'coil', 'flame', 'cryo', 'cryoball', 'emp', 'cinder', 'orbital', 'mines', 'missiles', 'turret', 'mortar', 'overdrive', 'rail'],
+  coolant: ['autocannon', 'coil', 'flame'],
+  ap: ['autocannon', 'coil'],
+  breacher: ['cannon', 'scatter', 'missiles', 'mortar', 'cinder', 'orbital'],
+  targeting: ['autocannon', 'coil', 'cannon', 'emp', 'missiles', 'mortar', 'rail'],
+  sig_cluster: ['cannon', 'scatter', 'cinder', 'mortar'],
+  sig_overcharge: ['cannon', 'scatter'],
+  sig_haste: ['autocannon', 'coil', 'scatter', 'cannon'],
+  sig_surge: ['missiles', 'mortar'],
+  belt: ['autocannon'],
+  coilcap: ['coil'],
+  napalm: ['flame'],
+  deepfreeze: ['cryo', 'cryoball'],
+  cryo_lance: ['cryo', 'cryoball'],
+  ice_capacity: ['cryoball'],
+  missile_count: ['missiles'],
+  missile_cd: ['missiles'],
+  turret_up: ['turret'],
+  rail_damage: ['rail'],
+  orbital_uplink: ['orbital'],
+  cinder_charge: ['cinder'],
+  mine_stock: ['mines'],
+  smoke_belt: ['smoke'],
+  mortar_shells: ['mortar'],
+  mortar_cd: ['mortar'],
+  overdrive_up: ['overdrive'],
+  nova_radius: ['nova'],
+};
+
+const UPGRADE_BY_ID = new Map(UPGRADES.map((upgrade) => [upgrade.id, upgrade]));
+
+/** The sum is a count of installed ranks, not the number of different perks. */
+export function weaponUpgradeInfo(weapon: WeaponId | null, socket: WeaponSocket, taken: ReadonlyMap<string, number>) {
+  const upgrades: { name: string; rank: number; evolution: boolean }[] = [];
+  if (!weapon) return { count: 0, upgrades, evolved: false };
+  for (const [id, rank] of taken) {
+    const upgrade = UPGRADE_BY_ID.get(id);
+    if (!upgrade || rank <= 0) continue;
+    const specialCryo = weapon === 'cryo' && (socket === 'specialQ' || socket === 'specialE');
+    const affects = upgrade.evolution
+      ? upgrade.evolves === weapon
+      : (WEAPON_UPGRADE_EFFECTS[id]?.includes(weapon) ?? false)
+        // The lance only builds heat as a secondary; its special version
+        // instead uses reloadMul for the ability cooldown.
+        || (weapon === 'cryo' && id === 'coolant' && socket === 'secondary')
+        || (specialCryo && id === 'autoloader')
+        // Unevolved stasis is non-damaging, so critical chance cannot affect it.
+        || (weapon === 'nova' && id === 'crit' && (taken.get('evo_nova') ?? 0) > 0);
+    if (affects) upgrades.push({ name: upgrade.name, rank, evolution: !!upgrade.evolution });
+  }
+  return {
+    count: upgrades.reduce((sum, upgrade) => sum + upgrade.rank, 0),
+    upgrades,
+    evolved: upgrades.some((upgrade) => upgrade.evolution),
+  };
+}
+
 const RARITY_WEIGHT: Record<UpgradeDef['rarity'], number> = { common: 10, rare: 5, epic: 1.7 };
 
 function hasAny(owned: Set<WeaponId>, ids: WeaponId[]) {
@@ -167,8 +248,9 @@ function hasAny(owned: Set<WeaponId>, ids: WeaponId[]) {
 }
 
 /** One STANDARD, one RARE and one UNIQ bonus per victory — always useful to this mech. */
-export function rollOffer(taken: Map<string, number>, owned: Set<WeaponId>): UpgradeDef[] {
+export function rollOffer(taken: Map<string, number>, owned: Set<WeaponId>, fullHull=false): UpgradeDef[] {
   const available = UPGRADES.filter((u) => {
+    if(u.id==='medkit' && fullHull) return false;
     if (u.max !== undefined && (taken.get(u.id) ?? 0) >= u.max) return false;
     if (u.evolution) return !!u.evolves && owned.has(u.evolves);
     switch (u.id) {
@@ -180,9 +262,11 @@ export function rollOffer(taken: Map<string, number>, owned: Set<WeaponId>): Upg
         return owned.has('mortar');
       case 'turret_up':
         return owned.has('turret');
-      case 'evo_jump':
-      case 'jump_charge':
-        return owned.has('jump');
+      case 'orbital_uplink':
+        return owned.has('orbital');
+      case 'evo_cinder':
+      case 'cinder_charge':
+        return owned.has('cinder');
       case 'evo_mines':
       case 'mine_stock':
         return owned.has('mines');
@@ -208,6 +292,7 @@ export function rollOffer(taken: Map<string, number>, owned: Set<WeaponId>): Upg
         return owned.has('cryo');
       case 'deepfreeze':
         return owned.has('cryo') || owned.has('cryoball');
+      case 'breacher': return hasAny(owned,['cannon','missiles','scatter','mortar','orbital']);
       case 'sig_cluster':
       case 'sig_overcharge':
         return hasAny(owned, ['cannon', 'scatter']);
@@ -216,7 +301,8 @@ export function rollOffer(taken: Map<string, number>, owned: Set<WeaponId>): Upg
       case 'ap':
         return hasAny(owned, ['autocannon', 'coil']);
       case 'he':
-        return hasAny(owned, ['cannon', 'scatter', 'mortar']);
+        return hasAny(owned, ['cannon', 'scatter']);
+      case 'coolant': return hasAny(owned,['autocannon','coil','flame','cryo']);
       default:
         return true;
     }

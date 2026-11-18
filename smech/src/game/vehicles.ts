@@ -42,6 +42,14 @@ export interface VehicleConfig {
   powerCost: PowerCosts;
   camHeight: number;
   radius: number;
+  /** Trigger-weapon travel limits, in metres from the muzzle (beams from the sight). */
+  primaryRange: number;
+  secondaryRange: number;
+  /** Fraction of movement-induced spread absorbed by each projectile weapon. */
+  primaryStability: number;
+  secondaryStability: number;
+  /** Additional stabilization supplied by the drive. */
+  driveStability: number;
   /** secondary cannon: shell damage, cycle time, muzzle speed, blast radius */
   cannonDamage: number;
   cannonReload: number;
@@ -56,13 +64,18 @@ export interface VehicleConfig {
   scatterReload: number;
   scatterSpeed: number;
   scatterSplash: number;
+  scatterSpread: number;
   /** secondary beam weapons: damage and cycle time per tick */
   flameDamage: number;
   cryoDamage: number;
+  cryoSlowTime: number;
   beamInterval: number;
   /** cryo grenade: blast damage and canister cycle */
   cryoGrenadeDamage: number;
   cryoGrenadeReload: number;
+  /** EMP disruptor: direct damage and seconds between pulses. */
+  empDamage: number;
+  empReload: number;
 }
 
 /** Resolve a weapon id to the socket that actually fires it. */
@@ -97,10 +110,15 @@ export const VEHICLES: Record<VehicleType, VehicleConfig> = {
     mass: 9.4,
     powerCapacity: 90,
     powerOutput: 26,
-    powerDraw: 24.7,
+    powerDraw: 25.7,
     powerCost: { primary: 0.9, secondary: 11, specialQ: 16, specialE: 12 },
     camHeight: 4,
     radius: 2.4,
+    primaryRange: 125,
+    secondaryRange: 170,
+    primaryStability: 0.3,
+    secondaryStability: 0.35,
+    driveStability: 0,
     cannonDamage: 40,
     cannonReload: 1.35,
     shellSpeed: 150,
@@ -112,24 +130,28 @@ export const VEHICLES: Record<VehicleType, VehicleConfig> = {
     scatterReload: 1.05,
     scatterSpeed: 175,
     scatterSplash: 1.4,
+    scatterSpread: 0.085,
     flameDamage: 5.4,
     cryoDamage: 3.8,
+    cryoSlowTime: 2.4,
     beamInterval: 0.12,
     cryoGrenadeDamage: 26,
     cryoGrenadeReload: 2.8,
+    empDamage: 12,
+    empReload: 3.2,
   },
   pyre: {
     name: 'PYRE-12 "CROWD-EATER"',
     shortName: 'PYRE',
     role: 'FIRE BRAWLER',
     epithet: 'THE CROWD-EATER',
-    description: 'A close-quarters brawler: scattergun, flamethrower, a rocket-powered jump slam, and proximity mines.',
+    description: 'A close-quarters brawler: scattergun, flamethrower, Skyfall orbital gun, and proximity mines.',
     backstory:
-      'Nobody knows his real name — the foundry worker who walked into the pits with a welding rig and walked out a legend. PYRE fights for spectacle, not score: the louder the crowd, the hotter he burns. He closes the distance with a jet-assisted leap, seeds the sand with mines, and refuses to let anyone walk away clean.',
-    style: 'Close the gap. Scorch them at point blank, leap onto clustered enemies, and mine your escape route.',
+      'Nobody knows his real name — the foundry worker who walked into the pits with a welding rig and walked out a legend. PYRE fights for spectacle, not score: the louder the crowd, the hotter he burns. He calls down a Skyfall orbital barrage, seeds the sand with mines, and refuses to let anyone walk away clean.',
+    style: 'Close the gap. Scorch them at point blank, aim Skyfall at a crowd, and mine your escape route.',
     accent: '#e8915a',
     armorColor: 0x7a4a33,
-    loadout: { primary: 'scatter', secondary: 'flame', abilityQ: 'jump', abilityE: 'mines' },
+    loadout: { primary: 'scatter', secondary: 'flame', abilityQ: 'orbital', abilityE: 'mines' },
     maxHp: 185,
     shield: 70,
     maxSpeed: 16.5,
@@ -138,10 +160,15 @@ export const VEHICLES: Record<VehicleType, VehicleConfig> = {
     mass: 10.8,
     powerCapacity: 140,
     powerOutput: 38,
-    powerDraw: 33.6,
+    powerDraw: 35.3,
     powerCost: { primary: 6, secondary: 2.4, specialQ: 30, specialE: 8 },
     camHeight: 4.4,
     radius: 2.6,
+    primaryRange: 65,
+    secondaryRange: 30,
+    primaryStability: 0.25,
+    secondaryStability: 0,
+    driveStability: 0,
     cannonDamage: 40,
     cannonReload: 1.35,
     shellSpeed: 150,
@@ -153,11 +180,15 @@ export const VEHICLES: Record<VehicleType, VehicleConfig> = {
     scatterReload: 1.05,
     scatterSpeed: 175,
     scatterSplash: 1.4,
+    scatterSpread: 0.085,
     flameDamage: 5.4,
     cryoDamage: 3.8,
+    cryoSlowTime: 2.4,
     beamInterval: 0.12,
     cryoGrenadeDamage: 26,
     cryoGrenadeReload: 2.8,
+    empDamage: 12,
+    empReload: 3.2,
   },
   glacier: {
     name: 'GLACIER-7 "THE EXILE"',
@@ -183,6 +214,11 @@ export const VEHICLES: Record<VehicleType, VehicleConfig> = {
     powerCost: { primary: 1.2, secondary: 4, specialQ: 55, specialE: 10 },
     camHeight: 4.2,
     radius: 2.3,
+    primaryRange: 185,
+    secondaryRange: 55,
+    primaryStability: 0.6,
+    secondaryStability: 0,
+    driveStability: 0,
     cannonDamage: 40,
     cannonReload: 1.35,
     shellSpeed: 150,
@@ -194,11 +230,15 @@ export const VEHICLES: Record<VehicleType, VehicleConfig> = {
     scatterReload: 1.05,
     scatterSpeed: 175,
     scatterSplash: 1.4,
+    scatterSpread: 0.085,
     flameDamage: 5.4,
     cryoDamage: 3.8,
+    cryoSlowTime: 2.4,
     beamInterval: 0.12,
     cryoGrenadeDamage: 26,
     cryoGrenadeReload: 2.8,
+    empDamage: 12,
+    empReload: 3.2,
   },
 };
 
@@ -213,15 +253,17 @@ export const WEAPON_INFO: Record<
   flame: { name: "DRAGON'S BREATH", short: 'FLAMETHROWER', description: 'A cone of liquid fire. Sets mechs ablaze.', cooldown: 0, icon: 'flame', key: 'RMB' },
   cryo: { name: 'CRYO LANCE', short: 'CRYO LANCE', description: 'A freezing lance that locks a target in frost.', cooldown: 3.5, icon: 'cryo', key: 'RMB' },
   cryoball: { name: 'CRYO GRENADE', short: 'CRYO GRENADE', description: 'Lobbed ice charge that freezes everything in the blast.', cooldown: 2.8, icon: 'cryoball', key: 'RMB' },
-  jump: { name: 'SKYFALL SLAM', short: 'JUMP SLAM', description: 'Rocket-jump forward and crash down with a fiery shockwave.', cooldown: 10, icon: 'jump', key: 'Q' },
-  mines: { name: 'CINDER MINES', short: 'MINES', description: 'Deploy proximity mines that detonate into fire.', cooldown: 9, icon: 'mines', key: 'E' },
-  smoke: { name: 'VEIL SMOKE', short: 'SMOKE', description: 'Pop a dense smoke screen to break line of sight and escape.', cooldown: 14, icon: 'smoke', key: 'E' },
-  missiles: { name: 'HOMING MISSILES', short: 'MISSILE POD', description: 'A salvo of guided rockets.', cooldown: 8, icon: 'missile', key: 'Q' },
-  turret: { name: 'SENTRY TURRET', short: 'SENTRY', description: 'An automated gun turret. Holds a flank for 24s.', cooldown: 22, icon: 'turret', key: 'E' },
-  mortar: { name: 'INCENDIARY MORTARS', short: 'MORTARS', description: 'Marks an area for burning mortar shells.', cooldown: 20, icon: 'mortar', key: 'Q' },
-  overdrive: { name: 'OVERDRIVE VENT', short: 'OVERDRIVE', description: 'Vent the reactor: speed, reload and a burn nova.', cooldown: 22, icon: 'overdrive', key: 'E' },
-  rail: { name: 'LONGBOW RAILGUN', short: 'RAILGUN', description: 'An instant lightning beam. Lethal precision.', cooldown: 8, icon: 'target', key: 'Q' },
-  nova: { name: 'STASIS NOVA', short: 'STASIS NOVA', description: 'A freezing pulse that locks enemies in place.', cooldown: 15, icon: 'nova', key: 'E' },
+  emp: { name: 'VOLT EMP DISRUPTOR', short: 'EMP GUN', description: 'A low-damage pulse that briefly disables an enemy; targets resist repeat EMP hits.', cooldown: 3.2, icon: 'bolt', key: 'RMB' },
+  cinder: { name: 'CINDER CANISTER', short: 'CINDER POD', description: 'Lob a fire canister that bursts on impact and burns the ground for 6 seconds.', cooldown: 7, icon: 'flame', key: 'Q' },
+  orbital: { name: 'SKYFALL ORBITAL', short: 'SKYFALL', description: 'Mark a wide area under the sight for a barrage from orbit.', cooldown: 7, icon: 'strike', key: 'Q' },
+  mines: { name: 'CINDER MINES', short: 'MINES', description: 'Deploy proximity mines that detonate into fire.', cooldown: 6, icon: 'mines', key: 'E' },
+  smoke: { name: 'VEIL SMOKE', short: 'SMOKE', description: 'Block enemy bullets and break locks. Heavy shots penetrate at 70% damage; move to avoid blind fire.', cooldown: 11, icon: 'smoke', key: 'E' },
+  missiles: { name: 'HOMING MISSILES', short: 'MISSILE POD', description: 'A salvo of guided rockets.', cooldown: 6, icon: 'missile', key: 'Q' },
+  turret: { name: 'SENTRY TURRET', short: 'SENTRY', description: 'An automated gun turret. Holds a flank for 24s.', cooldown: 14, icon: 'turret', key: 'E' },
+  mortar: { name: 'INCENDIARY MORTARS', short: 'MORTARS', description: 'Marks an area for burning mortar shells.', cooldown: 13, icon: 'mortar', key: 'Q' },
+  overdrive: { name: 'OVERDRIVE VENT', short: 'OVERDRIVE', description: 'Vent the reactor: speed, reload and a burn nova.', cooldown: 14, icon: 'overdrive', key: 'E' },
+  rail: { name: 'LONGBOW RAILGUN', short: 'RAILGUN', description: 'An instant lightning beam. Lethal precision.', cooldown: 6, icon: 'target', key: 'Q' },
+  nova: { name: 'STASIS NOVA', short: 'STASIS NOVA', description: 'A freezing pulse that locks enemies in place.', cooldown: 10, icon: 'nova', key: 'E' },
 };
 
 /** Total number of distinct weapons in the arsenal. */

@@ -23,6 +23,7 @@ interface Props {
   audio: AudioManager;
   settings: Settings;
   onSettings: (settings: Settings) => void;
+  onLoot: (amount: number) => void;
   onGameOver: (s: GameStats) => void;
   onAbort: () => void;
 }
@@ -33,7 +34,7 @@ const MONO = "'Share Tech Mono', 'Courier New', monospace";
 const isTouchDevice = () =>
   typeof window !== 'undefined' && ('ontouchstart' in window || (navigator.maxTouchPoints ?? 0) > 0) && window.matchMedia('(pointer: coarse)').matches;
 
-export default function GameView({ vehicle, config, stepWeight, mechName, controls, seed, audio, settings, onSettings, onGameOver, onAbort }: Props) {
+export default function GameView({ vehicle, config, stepWeight, mechName, controls, seed, audio, settings, onSettings, onLoot, onGameOver, onAbort }: Props) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const gameRef = useRef<Game | null>(null);
   const [game, setGame] = useState<Game | null>(null);
@@ -75,6 +76,7 @@ export default function GameView({ vehicle, config, stepWeight, mechName, contro
           audio,
           settings: settingsRef.current,
           onHud: setHud,
+          onLoot,
           onGameOver: (st) => onGameOverRef.current(st),
           onPause: (p) => {
             setPaused(p);
@@ -99,7 +101,7 @@ export default function GameView({ vehicle, config, stepWeight, mechName, contro
       gameRef.current = null;
       setGame(null);
     };
-  }, [vehicle, config, stepWeight, mechName, controls, seed, audio, touch]);
+  }, [vehicle, config, stepWeight, mechName, controls, seed, audio, touch, onLoot]);
 
   // live cockpit preferences are pushed into the running simulation
   useEffect(() => {
@@ -121,9 +123,20 @@ export default function GameView({ vehicle, config, stepWeight, mechName, contro
 
   return (
     <div className="app-viewport relative w-full bg-black overflow-hidden" style={{ touchAction: 'none' }}>
-      <canvas ref={canvasRef} className="absolute inset-0 w-full h-full block" />
-      {hud && <HUD hud={hud} vehicle={vehicle} settings={settings} onWeapon={(id) => gameRef.current?.useWeapon(id)} />}
-      {touch && <TouchControls game={game} accent={accent} weapons={hud?.weapons ?? []} />}
+      <canvas tabIndex={-1} aria-label="Arena cockpit" ref={canvasRef} className="absolute inset-0 w-full h-full block" />
+      {hud && (
+        <HUD
+          onUnstick={() => gameRef.current?.unstick()}
+          touch={touch}
+          onZoom={() => gameRef.current?.toggleZoom()}
+          hud={hud}
+          vehicle={vehicle}
+          settings={settings}
+          onExtract={() => gameRef.current?.extractNow()}
+          onWeapon={(id) => gameRef.current?.useWeapon(id)}
+        />
+      )}
+      {touch && <TouchControls game={game} accent={accent} enabled={!!hud?.alive && !hud.offer && !loading} />}
       {hud?.offer && <UpgradeScreen hud={hud} accent={accent} onPick={(i) => gameRef.current?.pickUpgrade(i)} onHover={() => audio.playUiHover()} />}
       {loading && (
         <div className="absolute inset-0 z-40 flex flex-col items-center justify-center gap-5 bg-[#070d0f] text-center" role="status" aria-live="polite">
@@ -185,10 +198,10 @@ export default function GameView({ vehicle, config, stepWeight, mechName, contro
                 <span><b className="text-zinc-200">LMB</b> primary weapon</span>
                 <span><b className="text-zinc-200">RMB</b> secondary weapon</span>
                 <span><b className="text-zinc-200">Q / E</b> special weapons</span>
-                <span><b className="text-zinc-200">SHIELD</b> automatic</span>
                 <span><b className="text-zinc-200">Z</b> scope</span>
                 <span><b className="text-zinc-200">M</b> music on / off</span>
                 <span><b className="text-zinc-200">ESC</b> pause</span>
+                <span><b className="text-zinc-200">U</b> unstick when drive is blocked</span>
               </div>
             ) : (
               <div className="mt-5 text-left">

@@ -1,3 +1,4 @@
+import { offerName } from '../game/upgrades';
 import type { CSSProperties } from 'react';
 import type { HudState, UpgradeDef } from '../game/types';
 import { VEHICLES, WEAPON_INFO } from '../game/vehicles';
@@ -13,7 +14,7 @@ interface Props {
 const RARITY: Record<UpgradeDef['rarity'], { label: string; color: string }> = {
   common: { label: 'STANDARD', color: '#a6c8c4' },
   rare: { label: 'RARE', color: '#b4b5f0' },
-  epic: { label: 'UNIQ', color: '#e8c37c' },
+  epic: { label: 'EPIC', color: '#e8c37c' },
 };
 
 export default function UpgradeScreen({ hud, accent, onPick, onHover }: Props) {
@@ -27,7 +28,7 @@ export default function UpgradeScreen({ hud, accent, onPick, onHover }: Props) {
           <div>
             <p className="victory-eyebrow">STAGE {String(hud.wave).padStart(2, '0')} / VICTORY</p>
             <h2 id="upgrade-heading"><span>{champion?.shortName ?? 'CHAMPION'}</span> PREVAILS.</h2>
-            <p className="victory-copy">The arena is yours. Claim one reward to shape your next fight.</p>
+            <p className="victory-copy">Choose one upgrade.</p>
           </div>
           <div className="victory-score"><span>GLORY EARNED</span><strong style={{ color: accent }}>{hud.score.toLocaleString()}</strong><small>HULL {Math.ceil(hud.hp)}/{hud.maxHp} &nbsp; SHIELD {Math.ceil(hud.shield)}/{hud.shieldMax}</small></div>
         </div>
@@ -41,10 +42,10 @@ export default function UpgradeScreen({ hud, accent, onPick, onHover }: Props) {
                 <div className="reward-top"><span className="reward-rarity">{rarity.label}</span><span className="reward-number">0{index + 1}</span></div>
                 <div className="reward-art"><Icon name={upgrade.icon} size={44} /><div className="reward-orbit" /></div>
                 <div className="reward-category">{upgrade.evolution ? 'WEAPON EVOLUTION' : upgrade.tag === 'SIGNATURE' ? 'SPECIAL POWER' : `${upgrade.tag} UPGRADE`}</div>
-                <h3>{upgrade.name}</h3>
+                <h3>{offerName(upgrade, installed)}</h3>
                 {upgrade.evolves && <p className="reward-weapon">{WEAPON_INFO[upgrade.evolves].short}</p>}
                 <p className="reward-description">{upgrade.desc}</p>
-                <div className="reward-claim"><span>{installed > 0 ? `UPGRADE LEVEL ${installed + 1}` : upgrade.evolution ? 'EVOLVE WEAPON' : 'CLAIM REWARD'}</span><span>-&gt;</span></div>
+                <div className="reward-claim"><span>{upgrade.evolution ? 'EVOLVE WEAPON' : 'CLAIM REWARD'}</span><span>-&gt;</span></div>
               </button>
             );
           })}

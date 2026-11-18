@@ -140,6 +140,26 @@ const WEAPON_MODELS: Record<string, ModelBuilder> = {
     g.add(emitter);
     return g;
   },
+  emp: (p) => {
+    const g = new THREE.Group();
+    g.name = 'emp-disruptor';
+    const housing = box(0.65, 0.58, 1.35, mat(p.dark, { metalness: 0.75 }));
+    housing.position.z = -0.35;
+    const core = barrel(1.9, 0.15, glow(0x6feaff));
+    core.position.z = -1.1;
+    g.add(housing, core);
+    for (const side of [-1, 1]) {
+      const rail = box(0.1, 0.32, 1.9, mat(p.hull, { metalness: 0.85 }));
+      rail.position.set(side * 0.32, 0, -0.9);
+      g.add(rail);
+    }
+    for (const z of [-0.75, -1.25, -1.75]) {
+      const ring = new THREE.Mesh(new THREE.TorusGeometry(0.32, 0.045, 8, 16), glow(0x6feaff));
+      ring.position.z = z;
+      g.add(ring);
+    }
+    return g;
+  },
   missiles: (p) => {
     const g = new THREE.Group();
     const boxy = box(1.1, 0.62, 0.8, mat(p.dark));
@@ -165,17 +185,37 @@ const WEAPON_MODELS: Record<string, ModelBuilder> = {
     g.add(base, head, gun, eye);
     return g;
   },
-  jump: (p) => {
+  orbital: (p) => {
     const g = new THREE.Group();
-    for (const side of [-1, 1]) {
-      const pack = box(0.42, 0.72, 0.5, mat(p.dark));
-      pack.position.set(side * 0.32, 0.12, 0.16);
-      const bell = cyl(0.2, 0.28, 0.4, mat(p.hull, { metalness: 0.7 }), 10);
-      bell.position.set(side * 0.32, -0.32, 0.16);
-      const flame = new THREE.Mesh(new THREE.ConeGeometry(0.17, 0.5, 10), glow(0xffa04a));
-      flame.position.set(side * 0.32, -0.66, 0.16);
-      flame.rotation.x = Math.PI;
-      g.add(pack, bell, flame);
+    g.name = 'orbital-uplink';
+    const base = box(0.9, 0.24, 0.8, mat(p.dark, { metalness: 0.75 }));
+    const pedestal = cyl(0.13, 0.19, 0.4, mat(p.hull, { metalness: 0.8 }), 12);
+    pedestal.position.y = 0.28;
+    const dish = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.58, 0.26, 0.24, 20, 1, true),
+      mat(p.hull, { metalness: 0.85, side: THREE.DoubleSide }),
+    );
+    dish.position.y = 0.57;
+    const rim = new THREE.Mesh(new THREE.TorusGeometry(0.58, 0.035, 8, 24), glow(0x80ddff));
+    rim.rotation.x = Math.PI / 2;
+    rim.position.y = 0.69;
+    const antenna = cyl(0.035, 0.05, 0.45, mat(p.dark, { metalness: 0.8 }), 8);
+    antenna.position.y = 0.82;
+    const signal = new THREE.Mesh(new THREE.SphereGeometry(0.09, 10, 10), glow(0xb9efff));
+    signal.position.y = 1.08;
+    g.add(base, pedestal, dish, rim, antenna, signal);
+    return g;
+  },
+  cinder: (p) => {
+    const g = new THREE.Group();
+    const cradle = box(0.94, 0.28, 0.86, mat(p.dark));
+    g.add(cradle);
+    for (const x of [-0.3, 0, 0.3]) {
+      const tube = cyl(0.16, 0.16, 0.88, mat(p.hull), 10);
+      tube.rotation.x = Math.PI / 2; tube.position.set(x, 0.25, -0.1);
+      const cap = cyl(0.12, 0.12, 0.05, glow(0xff8743), 10);
+      cap.rotation.x = tube.rotation.x; cap.position.set(x, 0.25, -0.56);
+      g.add(tube, cap);
     }
     return g;
   },

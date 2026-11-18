@@ -1,5 +1,5 @@
 export type VehicleType = 'warden' | 'pyre' | 'glacier';
-export type EnemyKind = 'tank' | 'mech' | 'heavy' | 'sniper';
+export type EnemyKind = 'tank' | 'mech' | 'heavy' | 'sniper' | 'mender' | 'bastion' | 'jackal' | 'skimmer';
 /** 'arcade' = hull auto-follows the aim, WASD moves relative to where you look. */
 export type ControlMode = 'arcade' | 'realistic';
 
@@ -11,7 +11,9 @@ export type WeaponId =
   | 'flame'
   | 'cryo'
   | 'cryoball'
-  | 'jump'
+  | 'emp'
+  | 'cinder'
+  | 'orbital'
   | 'mines'
   | 'smoke'
   | 'missiles'
@@ -39,7 +41,7 @@ export interface UpgradeDef {
   max?: number;
 }
 
-export type DropKind = 'repair' | 'shield' | 'overcharge' | 'rapid' | 'emp' | 'score';
+export type DropKind = 'repair' | 'shield' | 'overcharge' | 'rapid' | 'emp' | 'score' | 'coins' | 'aegis' | 'ammo';
 
 export interface HudBuff {
   id: string;
@@ -50,6 +52,7 @@ export interface HudBuff {
 }
 
 export interface HudDrop {
+  bearing: number;
   kind: DropKind;
   label: string;
   /** seconds until the pod lands (0 = on the ground) */
@@ -58,6 +61,11 @@ export interface HudDrop {
 }
 
 export interface HudWeapon {
+  cooldownLeft?: number;
+  charges?: number;
+  capacity?: number;
+  cost?: number;
+  underpowered?: boolean;
   /** null when the socket is empty — the player removed the weapon */
   id: WeaponId | null;
   name: string;
@@ -70,13 +78,18 @@ export interface HudWeapon {
   /** active duration remaining 0..1 (shield) */
   active: number;
   detail: string;
+  /** Installed ranks that actually affect this weapon, including its evolution. */
+  upgradeCount: number;
+  upgrades: { name: string; rank: number; evolution: boolean }[];
+  evolved: boolean;
 }
 
 export interface RadarBlip {
   x: number; // right component (relative to turret facing)
   y: number; // forward component
-  kind: EnemyKind | 'pickup' | 'obstacle' | 'boss' | 'drop';
+  kind: EnemyKind | 'relay' | 'pickup' | 'obstacle' | 'boss' | 'drop';
   size?: number;
+  dropKind?: DropKind;
   /** box footprint corners in radar space (x,y pairs) */
   poly?: number[];
   tall?: boolean;
@@ -86,13 +99,6 @@ export interface RadarBlip {
   edge?: boolean;
   /** actual distance in meters to target */
   dist?: number;
-}
-
-export interface HudTarget {
-  name: string;
-  hp: number; // 0..1
-  dist: number;
-  status?: 'FROZEN' | 'BRITTLE' | 'CHILLED' | 'BURNING';
 }
 
 export interface FeedEntry {
@@ -106,6 +112,8 @@ export interface DamageDir {
 }
 
 export interface HudState {
+  driveBlocked: boolean;
+  lootCredits: number;
   hp: number;
   maxHp: number;
   shield: number;
@@ -137,6 +145,7 @@ export interface HudState {
   blips: RadarBlip[];
   message: string;
   messageAge: number;
+  relay?: {progress: number; name: string};
   feed: FeedEntry[];
   hitMarkerAge: number;
   critAge: number;
@@ -153,10 +162,11 @@ export interface HudState {
   powerDraw: number;
   /** seconds until the reward draft appears after a stage is cleared (0 = none) */
   victoryCountdown: number;
+  salvageWindow: boolean;
   alive: boolean;
   time: number;
   zoom: boolean;
-  target?: HudTarget;
+  aimedEnemy: boolean;
   vehicleName: string;
   controls: ControlMode;
   /** true while the hull is auto-aligning to the aim direction (arcade mode) */
@@ -168,8 +178,9 @@ export interface HudState {
   offer: UpgradeDef[] | null;
   perks: { name: string; icon: string; count: number }[];
   boss?: { name: string; hp: number };
-  /** strike marker is placed and shells are inbound */
+  /** strike marker is placed and impacts are inbound */
   strikeInbound: number;
+  strikeKind?: 'mortar' | 'orbital';
   /** sniper is locking on to the player (0..1 charge) */
   lockWarning: number;
   streak: number;
@@ -179,6 +190,8 @@ export interface HudState {
   seenBy: number;
   ambushAge: number;
   inWater: boolean;
+  /** The pilot is currently inside a live smoke cloud, not just undetected. */
+  concealed: boolean;
   buffs: HudBuff[];
   drops: HudDrop[];
   /** next supply drop, if one is on its way down */
@@ -189,6 +202,7 @@ export interface HudState {
   district: string;
   seed: string;
   themeName: string;
+  condition: string;
   zone: number;
   maxZone: number;
   arenaRadius: number;
@@ -203,6 +217,8 @@ export interface HudState {
 }
 
 export interface GameStats {
+  /** Credits already banked on pickup, not part of the end-of-run bonus. */
+  lootCredits?: number;
   score: number;
   wave: number;
   kills: number;

@@ -1,23 +1,25 @@
-import { useState } from 'react';
-import type { ControlMode, VehicleType, WeaponId } from '../game/types';
+import FieldManual from './FieldManual';
+import { useMemo, useState } from 'react';
+import type { ControlMode, VehicleType } from '../game/types';
 import { VEHICLE_ORDER, VEHICLES, WEAPON_INFO } from '../game/vehicles';
-import { buildConfig, frameOf } from '../game/forge';
-import {
-  getAllMechs,
-  selectMech,
-  sellCustomMech,
-  type GarageState,
-} from '../game/garage';
-import { randomSeedCode } from '../game/world';
+import { buildConfig, frameOf, getComponent, reserveRecharge } from '../game/forge';
+import { RACK_CAPACITIES } from '../game/ordnance';
+import { getAllMechs, selectMech, sellCustomMech, type GarageState } from '../game/garage';
+import { randomSeedCode } from '../game/rng';
+import { generateLayout } from '../game/layout';
+import { conditionFor } from '../game/sectorRules';
+import { DOSSIERS } from '../game/threats';
 import type { Settings } from '../game/settings';
 import type { RunRecord } from '../game/records';
-import wardenImage from '../assets/mech.jpg';
-import pyreImage from '../assets/cinder.jpg';
-import glacierImage from '../assets/phantom.jpg';
+import hero from '../assets/warden-ruins.jpg';
+import warden from '../assets/mech.jpg';
+import pyre from '../assets/cinder.jpg';
+import glacier from '../assets/phantom.jpg';
 import { Icon } from './Icons';
 import SettingsPanel from './SettingsPanel';
 import MechBuilder from './MechBuilder';
 import FullscreenButton from './FullscreenButton';
+import './console.css';
 
 interface Props {
   onStart: (vehicle: VehicleType, controls: ControlMode, seed: string) => void;
@@ -27,242 +29,429 @@ interface Props {
   garage: GarageState;
   onGarage: (garage: GarageState) => void;
 }
-
-const IMAGES: Record<VehicleType, string> = {
-  warden: wardenImage,
-  pyre: pyreImage,
-  glacier: glacierImage,
+const photos = { warden, pyre, glacier };
+const roles = { warden: 'Assault', pyre: 'Brawler', glacier: 'Precision' };
+const desc = {
+  warden: 'A versatile frontline chassis built to hold ground and control the middle distance.',
+  pyre: 'A close-range bruiser built to break formations and turn bottlenecks into kill zones.',
+  glacier: 'A precision duelist built to freeze advancing targets and control long sightlines.',
 };
-
-const SLOT_KEYS: Record<string, string> = { primary: 'LMB', secondary: 'RMB', abilityQ: 'Q', abilityE: 'E' };
-const SLOT_LABELS: Record<string, string> = { primary: 'PRIMARY', secondary: 'SECONDARY', abilityQ: 'SPECIAL · Q', abilityE: 'SPECIAL · E' };
-
-type Tab = 'arsenal' | 'legend' | 'config' | 'records';
-
-const pad = (n: number, w = 2) => String(Math.max(0, Math.floor(n))).padStart(w, '0');
-const credits = (n: number) => n.toLocaleString('en-US');
+const tabs = ['Hangar', 'Enemy intel', 'Field manual', 'Combat log'] as const;
+type Page = (typeof tabs)[number] | 'Settings';
+const pad = (n: number) => String(n).padStart(2, '0');
+function Crest() {
+  return (
+    <svg viewBox="0 0 44 40" width="43" height="40" fill="currentColor" aria-hidden="true">
+      <path d="M1 4h9l11 12v9L1 10zm42 0h-9L23 16v9l20-15zM4 16l17 14v8L4 24zm36 0L23 30v8l17-14zM15 3h14l-7 9z" />
+    </svg>
+  );
+}
+function Section({ n, children, aside }: { n: string; children: React.ReactNode; aside?: React.ReactNode }) {
+  return (
+    <div className="op-heading">
+      <small>{n}</small>
+      <h2>{children}</h2>
+      <i />
+      {aside}
+    </div>
+  );
+}
 
 export default function Menu({ onStart, settings, onSettings, records, garage, onGarage }: Props) {
+  const [page, setPage] = useState<Page>('Hangar');
+  const [building, setBuilding] = useState(false);
   const [controls, setControls] = useState<ControlMode>('arcade');
-  const [seed, setSeed] = useState(() => randomSeedCode());
-  const [tab, setTab] = useState<Tab>('arsenal');
-  const [isBuilding, setIsBuilding] = useState(false);
-
-  // All mechs: custom mechs at the start, followed by the factory mechs
-  const allMechs = getAllMechs(garage);
-  const frame = frameOf(garage.equipped);
-  const vehicle = VEHICLES[frame];
-  const build = buildConfig(garage.equipped);
-  const loadout = (Object.keys(build.loadout) as (keyof typeof build.loadout)[]).map((slot) => ({
-    slot,
-    id: build.loadout[slot] as WeaponId | null,
-  }));
-
-  if (isBuilding) {
+  const [seed, setSeed] = useState(randomSeedCode);
+  const [legend, setLegend] = useState(false);
+  const [loadoutExpanded, setLoadoutExpanded] = useState(false);
+  const sector = useMemo(() => generateLayout(seed || 'UNASSIGNED'), [seed]);
+  const mechs = getAllMechs(garage),
+    frame = frameOf(garage.equipped),
+    v = VEHICLES[frame],
+    build = buildConfig(garage.equipped);
+  const condition = conditionFor(seed || 'UNASSIGNED');
+  const index = VEHICLE_ORDER.indexOf(frame) + 1;
+  const active = mechs.find((m) => m.id === garage.activeMechId);
+  // CustomMech entries do not have an isPrebuilt property; only factory mechs
+  // explicitly set it to true. Do not mistake the missing flag for a factory.
+  const name = active && !active.isPrebuilt ? garage.mechName : v.name.split(' ')[0];
+  const socketParts = [garage.equipped.primary, garage.equipped.secondary, garage.equipped.specialQ, garage.equipped.specialE]
+    .map((id) => id ? getComponent(id) : undefined);
+  if (building)
     return (
       <MechBuilder
         garage={garage}
-        onBuild={(newGarage) => {
-          onGarage(newGarage);
-          setIsBuilding(false);
+        onBuild={(g) => {
+          onGarage(g);
+          setBuilding(false);
         }}
-        onCancel={() => setIsBuilding(false)}
-        accent={vehicle.accent}
+        onCancel={() => setBuilding(false)}
+        accent="#c0f069"
       />
     );
-  }
-
   return (
-    <div className="hangar" style={{ '--chassis-accent': vehicle.accent } as React.CSSProperties}>
-      <div className="hangar-art" aria-hidden="true" key={frame}>
-        <img src={IMAGES[frame]} alt="" />
-      </div>
-      <div className="hangar-shade" aria-hidden="true" />
-      <div className="hangar-content">
-        <header className="hangar-header">
-          <div className="brand-lockup">
-            <div className="brand-mark"><span /><span /><span /></div>
+    <div className={`op-console${page === 'Hangar' ? ' is-hangar' : ''}`}>
+      <header className="op-bar">
+        <div className="op-bar-inner">
+          <div className="op-brand">
+            <Crest />
             <div>
-              <h1>STEEL HORIZON</h1>
-              <p>THE IRON COLOSSEUM · MECH GLADIATORS</p>
+              <b>STEEL HORIZON</b>
+              <small>MECH COMBAT SYSTEM</small>
             </div>
           </div>
-          <div className="hangar-header-right">
-            <span className="status-dot" /> THE PITS ARE OPEN <span className="header-divider" /> SECTOR {seed}
-            <span className="header-credits" title="Credits earned in the pits to build new mechs">
-              {credits(garage.credits)} CR
+          <nav aria-label="Command navigation">
+            {tabs.map((t, i) => (
+              <button key={t} aria-current={page === t ? 'page' : undefined} onClick={() => setPage(t)}>
+                <Icon name={['armor', 'radar', 'wrench', 'clock'][i]} size={15} />
+                {t}
+              </button>
+            ))}
+          </nav>
+          <div className="op-tools">
+            <span className="op-credit">
+              <Icon name="coin" size={16} />
+              {garage.credits.toLocaleString('en-US')} <em>CR</em>
             </span>
+            <button
+              onClick={() => setPage(page === 'Settings' ? 'Hangar' : 'Settings')}
+              title="Settings"
+              aria-label="Settings"
+            >
+              <Icon name="gear" size={18} />
+            </button>
+            <FullscreenButton />
           </div>
-          <FullscreenButton />
-        </header>
-
-        <main className="hangar-main">
-          <div className="chassis-intro" key={frame}>
-            <div className="eyebrow"><span className="eyebrow-line" /> GLADIATOR <span className="eyebrow-number">/ 0{VEHICLE_ORDER.indexOf(frame) + 1}</span></div>
-            <p className="chassis-role">{vehicle.role} / {vehicle.epithet}</p>
-            <h2>{garage.mechName}</h2>
-            <div className="chassis-model">{vehicle.name} <span>/</span> READY FOR BATTLE</div>
-
-            <div className="chassis-stats" aria-label="Mech specifications">
-              <div><span>HULL</span><strong>{build.maxHp}</strong></div>
-              <div><span>SHIELD</span><strong>{build.shield}</strong></div>
-              <div><span>SPEED</span><strong>{Math.round(build.maxSpeed * 3.2)} <small>KM/H</small></strong></div>
-              <div><span>STYLE</span><strong className="style-word">{vehicle.role.split(' ')[0]}</strong></div>
-            </div>
-
-            <div className="hangar-details">
-            <div className="hangar-tabs" role="tablist" aria-label="Gladiator details">
-              <button role="tab" aria-selected={tab === 'arsenal'} onClick={() => setTab('arsenal')}>ARSENAL</button>
-              <button role="tab" aria-selected={tab === 'legend'} onClick={() => setTab('legend')}>THE LEGEND</button>
-              <button role="tab" aria-selected={tab === 'config'} onClick={() => setTab('config')}>CONFIG</button>
-              <button role="tab" aria-selected={tab === 'records'} onClick={() => setTab('records')}>HALL OF FAME</button>
-              <span>{credits(garage.credits)} CREDITS</span>
-            </div>
-            {tab === 'arsenal' ? <div className="hangar-panel loadout-weapons loadout-weapons-4" role="tabpanel" aria-label="Arsenal">
-              {loadout.map(({ slot, id }) => (
-                <div className={`loadout-weapon ${id ? '' : 'is-empty'}`} key={slot}>
-                  <div className="loadout-key">{SLOT_KEYS[slot]}</div>
-                  <Icon name={id ? WEAPON_INFO[id].icon : 'lock'} size={19} />
-                  <div>
-                    <strong>{id ? WEAPON_INFO[id].name : 'EMPTY SOCKET'}</strong>
-                    <span className="slot-tag">{SLOT_LABELS[slot]}</span>
-                    <span>{id ? WEAPON_INFO[id].description : 'Nothing mounted. A stripped mech runs lighter and faster.'}</span>
+        </div>
+      </header>
+      <main className="op-main">
+        <div className="op-path">
+          <span>
+            COMMAND CENTER <i>/</i> <b>{page.toUpperCase()}</b>
+          </span>
+          <span className="op-online">
+            <i /> SYSTEM ONLINE
+          </span>
+        </div>
+        {page === 'Hangar' ? (
+          <>
+            <section className={'op-hero op-' + frame} aria-label="Active chassis">
+              <img className="op-hero-art" src={frame === 'warden' ? hero : photos[frame]} alt="" />
+              <div className="op-vignette" />
+              <div className="op-cam">
+                <i /> CAM_0{index} <span>/</span> LIVE FEED
+              </div>
+              <div className="op-hero-copy">
+                <div className="op-kicker">
+                  <i /> ACTIVE CHASSIS <span>//</span> 0{index}
+                </div>
+                <h1 title={name} className={name.length > 10 ? 'op-long-name' : undefined}>{name}</h1>
+                <div className="op-class">
+                  <span>{roles[frame]} class</span>
+                  <b>/</b> {v.epithet}
+                </div>
+                <p>{desc[frame]}</p>
+                <div className="op-stats">
+                  {[
+                    ['armor', 'Hull', build.maxHp, 'HP'],
+                    ['shield', 'Shield', build.shield, 'SP'],
+                    ['bolt', 'Speed', Math.round(build.maxSpeed * 3.2), 'KM/H'],
+                  ].map(([icon, label, value, unit]) => (
+                    <div key={label}>
+                      <small>
+                        <Icon name={String(icon)} size={13} />
+                        {label}
+                      </small>
+                      <strong>
+                        {value} <em>{unit}</em>
+                      </strong>
+                    </div>
+                  ))}
+                </div>
+              </div>
+              <div className="op-viewfinder" aria-hidden="true">
+                <i />+<i />
+              </div>
+              <a href="#deploy-panel" className="op-mobile-setup">
+                Deployment ↓
+              </a>
+              <button className="manual-jump" onClick={() => setPage('Field manual')}>
+                <Icon name="radar" size={14} /> Field manual ↗
+              </button>
+            </section>
+            <div className="op-deck">
+              <section className="op-bay">
+                <Section
+                  n="01"
+                  aside={
+                    <>
+                      {mechs.length > 3 && <span className="op-more-chassis">Scroll →</span>}
+                      <button className="op-build" onClick={() => setBuilding(true)}>
+                        <b>+</b> Build mech
+                      </button>
+                    </>
+                  }
+                >
+                  Chassis bay
+                </Section>
+                <div className={`op-cards${mechs.length > 3 ? ' has-overflow' : ''}`} role="region"
+                  aria-label="Chassis selection" tabIndex={mechs.length > 3 ? 0 : undefined}>
+                  {mechs.map((m, i) => {
+                    const chosen = m.id === garage.activeMechId;
+                    return (
+                      <article key={m.id} className={'op-card ' + (chosen ? 'chosen' : '')}>
+                        <button
+                          className="op-select"
+                          aria-pressed={chosen}
+                          onClick={() => {
+                            onGarage(selectMech(garage, m.id));
+                          }}
+                        >
+                          <div className={'op-thumb thumb-' + m.frame}>
+                            <img src={photos[m.frame]} alt="" />
+                            <small>UNIT / {pad(i + 1)}</small>
+                            {chosen && <span aria-label="Selected">✓</span>}
+                          </div>
+                          <div className="op-card-label">
+                            <b title={m.isPrebuilt ? VEHICLES[m.frame].name.split(' ')[0] : m.name}>
+                              {m.isPrebuilt ? VEHICLES[m.frame].name.split(' ')[0] : m.name}
+                            </b>
+                            <small>
+                              <i /> {m.isPrebuilt ? roles[m.frame] + ' class' : 'Custom build'}
+                            </small>
+                          </div>
+                        </button>
+                        {!m.isPrebuilt && (
+                          <button
+                            className="op-sell"
+                            onClick={() => {
+                              const res = sellCustomMech(garage, m.id);
+                              if (res.ok) onGarage(res.state);
+                            }}
+                          >
+                            Sell · {Math.floor(m.cost / 2)} CR
+                          </button>
+                        )}
+                      </article>
+                    );
+                  })}
+                </div>
+              </section>
+              <section className={`op-loadout${loadoutExpanded ? ' is-expanded' : ''}`}>
+                <Section
+                  n="02"
+                  aside={
+                    <>
+                      <button className="op-loadout-toggle" aria-expanded={loadoutExpanded} aria-controls="hangar-loadout" onClick={() => setLoadoutExpanded(!loadoutExpanded)}>
+                        {loadoutExpanded ? 'Hide details ↑' : 'View details ↓'}
+                      </button>
+                      <button className="op-link" onClick={() => setLegend(!legend)}>
+                        {legend ? 'Loadout' : 'Pilot dossier'} ↗
+                      </button>
+                    </>
+                  }
+                >
+                  {legend ? 'Pilot dossier' : 'Weapon loadout'}
+                </Section>
+                <div id="hangar-loadout" className="op-loadout-content">
+                  {legend ? (
+                    <p className="op-story">
+                      {v.backstory} {v.style}
+                    </p>
+                  ) : (
+                    <div className="op-sockets">
+                      {Object.values(build.loadout).map((id, i) => {
+                        const part = socketParts[i]?.weapon === id ? socketParts[i] : undefined;
+                        const range = i === 0 ? build.primaryRange : i === 1 ? build.secondaryRange : 0;
+                        return (
+                          <div key={i} title={id ? part?.desc ?? WEAPON_INFO[id].description : 'Empty socket'}>
+                            <Icon name={id ? WEAPON_INFO[id].icon : 'lock'} size={23} />
+                            <span>
+                              <small>{['PRIMARY', 'SECONDARY', 'SPECIAL Q', 'SPECIAL E'][i]}</small>
+                              <b>{id ? part?.name ?? WEAPON_INFO[id].short : 'EMPTY'}</b>
+                              {id && (
+                                <em className="socket-cost">
+                                  {range > 0 && `${range} m max · `}
+                                  {[
+                                    build.powerCost.primary,
+                                    build.powerCost.secondary,
+                                    build.powerCost.specialQ,
+                                    build.powerCost.specialE,
+                                  ][i]} kJ / use{i >= 2 && ` · ${RACK_CAPACITIES[i === 2 ? 'Q' : 'E']} charges`}
+                                </em>
+                              )}
+                            </span>
+                            <kbd>{['LMB', 'RMB', 'Q', 'E'][i]}</kbd>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                  <div className="bus-readout">
+                    <span>
+                      <Icon name="battery" size={15} /> REACTOR BUS
+                    </span>
+                    <b>
+                      {build.powerCapacity} kJ <i>reserve</i>
+                    </b>
+                    <b>
+                      +{Math.round(reserveRecharge(build.powerOutput, condition.energy))} kJ/s <i>recharge</i>
+                    </b>
                   </div>
                 </div>
-              ))}
-            </div> : tab === 'legend' ? <div className="hangar-panel legend-panel" role="tabpanel" aria-label="The legend">
-              <p>{vehicle.backstory}</p>
-              <p className="chassis-style"><span>HOW TO FIGHT:</span> {vehicle.style}</p>
-            </div> : tab === 'config' ? <div className="hangar-panel" role="tabpanel" aria-label="Cockpit configuration">
-              <SettingsPanel settings={settings} onChange={onSettings} accent={vehicle.accent} />
-            </div> : <div className="hangar-panel" role="tabpanel" aria-label="Hall of fame">
-              <div className="records-panel" style={{ marginTop: 14 }}>
-                <h4>BEST RUNS IN THE PITS</h4>
-                {records.length === 0 ? (
-                  <div className="records-empty">NO RUNS RECORDED YET — THE SAND IS WAITING.</div>
-                ) : (
-                  <div className="records-list">
-                    {records.map((rec, i) => (
-                      <div key={`${rec.at}-${i}`} className={`records-row ${i === 0 ? 'is-best' : ''}`}>
-                        <span>{pad(i + 1)}</span>
-                        <span>
-                          {pad(rec.score, 6)} <em>· WAVE {pad(rec.wave)} · {VEHICLES[rec.vehicle]?.shortName ?? 'MECH'} · {rec.seed}</em>
-                        </span>
-                        <span>{pad(rec.timeSurvived / 60)}:{pad(rec.timeSurvived % 60)}</span>
-                      </div>
+              </section>
+              <aside id="deploy-panel" className="op-deploy">
+                <div className="op-panel-title">
+                  <Icon name="target" size={18} />
+                  <h2>Deployment</h2>
+                  <span>OPS / 01</span>
+                </div>
+                <div className="op-recon">
+                  <svg viewBox="-320 -180 640 360" preserveAspectRatio="xMidYMid slice" aria-hidden="true">
+                    {sector.roads.map((r, i) => (
+                      <polyline
+                        key={i}
+                        points={r.map((p) => p.join(',')).join(' ')}
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth="4"
+                      />
+                    ))}
+                    {sector.districts.map((d, i) => (
+                      <g key={i} transform={`translate(${d.x},${d.z})`}>
+                        <circle
+                          r={d.r}
+                          fill="none"
+                          stroke="currentColor"
+                          strokeDasharray="8 6"
+                          strokeWidth="2"
+                        />
+                        <circle r="7" fill="currentColor" />
+                      </g>
+                    ))}
+                  </svg>
+                  <div>
+                    <small>PROCEDURAL SECTOR</small>
+                    <strong>{sector.theme.name}</strong>
+                    <p>
+                      {condition.name} · {condition.detail}
+                    </p>
+                  </div>
+                  <Icon name="radar" size={30} />
+                </div>
+                <div className="op-deploy-inner">
+                  <label htmlFor="sector">Sector seed</label>
+                  <div className="op-seed">
+                    <input
+                      id="sector"
+                      value={seed}
+                      onBlur={() => {
+                        if (!seed) setSeed(randomSeedCode());
+                      }}
+                      maxLength={8}
+                      spellCheck={false}
+                      onChange={(e) => setSeed(e.target.value.toUpperCase().replace(/[^A-Z0-9-]/g, ''))}
+                    />
+                    <button
+                      aria-label="Reroll sector seed"
+                      title="Reroll sector seed"
+                      onClick={() => setSeed(randomSeedCode())}
+                    >
+                      <Icon name="reload" size={16} />
+                    </button>
+                  </div>
+                  <label>Drive mode</label>
+                  <div className="op-modes">
+                    {(['arcade', 'realistic'] as const).map((m) => (
+                      <button key={m} aria-pressed={m === controls} onClick={() => setControls(m)}>
+                        {m === 'arcade' ? 'Arcade' : 'Simulation'}
+                      </button>
                     ))}
                   </div>
-                )}
-              </div>
-            </div>}
-            </div>
-            <p className="field-note">AUTOMATIC SHIELD / EXPLOSIVE DRUMS / PROCEDURAL ARENAS</p>
-          </div>
-          <div className="hangar-index" aria-hidden="true"><span>GLADIATOR</span><b>0{VEHICLE_ORDER.indexOf(frame) + 1}</b><span>/ 03</span></div>
-        </main>
-
-        <section className="vehicle-selection" aria-label="Available Mechs">
-          <div className="selection-heading">
-            <span>MECH HANGAR</span>
-            <span>SELECT CHASSIS</span>
-          </div>
-          <div className="vehicle-list">
-            {/* BIG "BUILD NEW MECH" BUTTON NEXT TO MECH CARDS */}
-            <button
-              type="button"
-              className="build-mech-card cursor-pointer"
-              onClick={() => setIsBuilding(true)}
-              aria-label="Build new mech"
-            >
-              <div className="build-mech-card-content">
-                <span className="build-mech-icon">+</span>
-                <strong className="build-mech-title">BUILD NEW MECH</strong>
-                <span className="build-mech-sub">CUSTOM LOADOUT</span>
-              </div>
-            </button>
-
-            {/* Mech selection cards */}
-            {allMechs.map((mech, index) => {
-              const item = VEHICLES[mech.frame];
-              const isSelected = garage.activeMechId === mech.id || (!garage.activeMechId && index === 0);
-              const isCustom = !mech.isPrebuilt;
-              return (
-                <div
-                  key={mech.id}
-                  className={`vehicle-option ${isSelected ? 'is-selected' : ''}`}
-                  onClick={() => onGarage(selectMech(garage, mech.id))}
-                  role="button"
-                  tabIndex={0}
-                  aria-pressed={isSelected}
-                >
-                  <div className="vehicle-thumbnail" aria-hidden="true">
-                    <img src={IMAGES[mech.frame]} alt="" loading="eager" />
-                  </div>
-                  <div className="vehicle-card-content">
-                    <div className="vehicle-card-top">
-                      <span className="vehicle-card-tag">0{index + 1} / {item.shortName}</span>
-                      {isCustom && (
-                        <span className="vehicle-card-badge is-custom">
-                          CUSTOM
-                        </span>
-                      )}
-                    </div>
-
-                    <div className="vehicle-card-name" title={mech.name}>
-                      {mech.name}
-                    </div>
-
-                    <div className="vehicle-card-bottom">
-                      <span className="vehicle-card-sub" title={isCustom ? `VALUE: ${credits(mech.cost)} CR` : `“${item.epithet}”`}>
-                        {isCustom ? `${credits(mech.cost)} CR` : `“${item.epithet}”`}
-                      </span>
-                      {isCustom && (
-                        <button
-                          type="button"
-                          className="vehicle-card-sell"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            const res = sellCustomMech(garage, mech.id);
-                            if (res.ok) onGarage(res.state);
-                          }}
-                          title={`Sell ${mech.name} for half price (+${credits(Math.floor(mech.cost / 2))} CR)`}
-                        >
-                          SELL (+{credits(Math.floor(mech.cost / 2))})
-                        </button>
-                      )}
-                    </div>
-                  </div>
-
-                  {isSelected && <div className="selected-indicator" />}
+                  <button
+                    className="op-launch"
+                    onClick={() => onStart(frame, controls, seed || randomSeedCode())}
+                  >
+                    <span className="op-play">▸</span> Deploy to arena <span>→</span>
+                  </button>
                 </div>
-              );
-            })}
-          </div>
-        </section>
-
-        <footer className="hangar-footer">
-          <div className="control-choice">
-            <span>DRIVE MODE</span>
-            <div role="group" aria-label="Drive mode">
-              <button type="button" aria-pressed={controls === 'arcade'} className={controls === 'arcade' ? 'active' : ''} onClick={() => setControls('arcade')}>EASY</button>
-              <button type="button" aria-pressed={controls === 'realistic'} className={controls === 'realistic' ? 'active' : ''} onClick={() => setControls('realistic')}>SIM</button>
+              </aside>
             </div>
-            <p>{controls === 'arcade' ? 'WASD moves relative to your view.' : 'WASD steers the hull independently.'}</p>
-          </div>
-          <div className="seed-choice">
-            <span>SECTOR SEED</span>
-            <div>
-              <input aria-label="Sector seed" value={seed} maxLength={8} spellCheck={false} onChange={(e) => setSeed(e.target.value.toUpperCase().replace(/[^A-Z0-9-]/g, ''))} />
-              <button type="button" onClick={() => setSeed(randomSeedCode())} aria-label="Generate a new random sector">REROLL</button>
+          </>
+        ) : page === 'Field manual' ? (
+          <FieldManual />
+        ) : page === 'Enemy intel' ? (
+          <>
+            <Section n="INT">Enemy intelligence</Section>
+            <p className="op-lead">Identify the threat. Choose your counter before deployment.</p>
+            <div className="op-dossiers">
+              {Object.entries(DOSSIERS).map(([k, d], i) => (
+                <article key={k}>
+                  <div className="op-file">
+                    <Icon name={d.icon} size={26} /> THREAT FILE / {pad(i + 1)}
+                  </div>
+                  <h3>{d.name}</h3>
+                  <small>{d.role}</small>
+                  <p>{d.strength}</p>
+                  <label>COUNTERMEASURE</label>
+                  <p>{d.counter}</p>
+                </article>
+              ))}
             </div>
-            <p>Every seed builds a new map.</p>
-          </div>
-          <div className="footer-help">LMB PRIMARY <i /> RMB / C SECONDARY <i /> Q / E SPECIALS</div>
-          <button className="deploy-button" type="button" onClick={() => onStart(frame, controls, seed.trim() || randomSeedCode())}>
-            <span>ENTER THE ARENA</span><span aria-hidden="true">-&gt;</span>
-          </button>
+            <div className="op-tip">
+              <Icon name="smoke" /> VEIL SMOKE{' '}
+              <span>
+                Smoke stops incoming machine-gun rounds. Shells and rockets penetrate at 70% damage; rockets
+                lose guidance. Spotted enemies can still fire blind, so move after deploying it.
+              </span>
+            </div>
+            <div className="op-tip">
+              <Icon name="radar" /> FIELD RELAYS{' '}
+              <span>
+                Hold inside a beacon ring for two seconds. Green repairs your hull; amber grants rapid reload.
+                Each relay works once per sector.
+              </span>
+            </div>
+          </>
+        ) : page === 'Settings' ? (
+          <>
+            <Section n="SYS">Cockpit settings</Section>
+            <div className="op-settings">
+              <SettingsPanel settings={settings} onChange={onSettings} accent="#bfea6d" />
+            </div>
+          </>
+        ) : (
+          <>
+            <Section n="LOG">Combat log</Section>
+            <div className="op-records">
+              {records.length ? (
+                records.map((r, i) => (
+                  <div key={i}>
+                    <b>#{pad(i + 1)}</b>
+                    <span>
+                      {VEHICLES[r.vehicle]?.shortName ?? 'MECH'} / {r.seed}
+                    </span>
+                    <span>
+                      WAVE {pad(r.wave)} · {r.kills} KILLS
+                    </span>
+                    <strong>{r.score.toLocaleString()} PTS</strong>
+                  </div>
+                ))
+              ) : (
+                <p>No sorties recorded. Deploy to the arena to log your first run.</p>
+              )}
+            </div>
+          </>
+        )}
+        <footer className="op-foot">
+          <span>
+            <i /> IRON COLOSSEUM <b>//</b> OPERATIONS TERMINAL
+          </span>
+          <span>
+            SH-OS <b>/</b> V.2.0
+          </span>
         </footer>
-      </div>
+      </main>
     </div>
   );
 }

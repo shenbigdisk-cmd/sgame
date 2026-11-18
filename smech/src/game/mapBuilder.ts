@@ -1,3 +1,4 @@
+import { StructureField } from './structures';
 /**
  * World builder: turns a sector layout into a dressed, lit and animated arena.
  */
@@ -279,7 +280,16 @@ export interface ExplosiveBarrel {
   destroyed: boolean;
 }
 
+interface FieldRelay {
+  marker: THREE.Group;
+  reward: 'rapid' | 'repair';
+  charge: number;
+  claimed: boolean;
+}
+
 export interface MapResult {
+  structures: StructureField;
+  relays: FieldRelay[];
   /** persistent fires (burning oil, wrecks) – the engine emits particles here */
   fires: THREE.Vector3[];
   barrels: ExplosiveBarrel[];
@@ -296,6 +306,7 @@ export function buildMap(parent: THREE.Object3D, obstacles: Obstacle[], makeWrec
   const barrels: ExplosiveBarrel[] = [];
   const animators: ((dt: number, t: number) => void)[] = [];
   resetColliderGrid();
+  const structures = new StructureField(obstacles,heightAt);
   // continue the seeded sequence deterministically after layout generation
 
   // ---- terrain mesh ------------------------------------------------------
@@ -546,8 +557,8 @@ export function buildMap(parent: THREE.Object3D, obstacles: Obstacle[], makeWrec
   const addRock = (x: number, z: number, s: number, collide = true) => {
     const y = heightAt(x, z);
     const sy = s * rand(0.6, 1.0);
-    rocks.add(x, y + sy * 0.3, z, s * rand(0.8, 1.4), sy, s * rand(0.8, 1.4), rand(0, TWO_PI), rand(0, 0.4), rand(0, 0.4), pick(rockColors));
-    if (collide) addCircle(x, z, s * 0.95, sy * 1.2, y);
+    const placed = rocks.add(x, y + sy * 0.3, z, s * rand(0.8, 1.4), sy, s * rand(0.8, 1.4), rand(0, TWO_PI), rand(0, 0.4), rand(0, 0.4), pick(rockColors));
+    if (placed && collide) addCircle(x, z, s * 0.95, sy * 1.2, y);
   };
   const addLamp = (x: number, z: number) => {
     const y = heightAt(x, z);
@@ -556,8 +567,7 @@ export function buildMap(parent: THREE.Object3D, obstacles: Obstacle[], makeWrec
   };
   const addBerm = (x: number, z: number, len: number, rot: number) => {
     const y = baseY(x, z, len / 2);
-    berms.add(x, y + 0.95, z, len, 1.9, 2.4, rot, 0, 0, sandbagColor);
-    addBox(x, z, len / 2, 1.2, 1.9, rot, y);
+    if (berms.add(x, y + 0.95, z, len, 1.9, 2.4, rot, 0, 0, sandbagColor)) addBox(x, z, len / 2, 1.2, 1.9, rot, y);
   };
   const addBarrel = (x: number, z: number) => {
     const group = new THREE.Group();
@@ -643,7 +653,7 @@ export function buildMap(parent: THREE.Object3D, obstacles: Obstacle[], makeWrec
     g.position.set(x, y0, z);
     setShadows(g);
     parent.add(g);
-    addBox(x, z, w / 2 + 0.3, d / 2 + 0.3, h + 1, 0, y0);
+    structures.register(addBox(x, z, w / 2 + 0.3, d / 2 + 0.3, h + 1, 0, y0), g, ruined ? 'RUIN' : 'BUILDING', ruined ? 65 : Math.min(190, 75+h*2));
     return true;
   };
 
@@ -662,7 +672,8 @@ export function buildMap(parent: THREE.Object3D, obstacles: Obstacle[], makeWrec
     wall.rotation.y = rand(-0.4, 0.4);
     wall.castShadow = wall.receiveShadow = true;
     parent.add(wall);
-    addCircle(x, z, 6, 3, y);
+    // Low scatter is walkable; only the upright slab actually stops a mech.
+    addBox(wall.position.x,wall.position.z,4.5,.5,5,wall.rotation.y,y);
     if (chance(0.5)) fires.push(new THREE.Vector3(x + rand(-4, 4), y + 0.5, z + rand(-4, 4)));
   };
 
@@ -709,10 +720,13 @@ export function buildMap(parent: THREE.Object3D, obstacles: Obstacle[], makeWrec
         for (const side of [-1.27, 1.27]) {
           if (lvl === stack - 1 && chance(0.25)) continue;
           const lx = rand(-0.3, 0.3);
-          containers.add(x + lx * c + side * s, y + 1.3 + lvl * 2.6, z - lx * s + side * c, 1, 1, 1, rot, 0, 0, pick(containerColors));
+          const cx=x+lx*c+side*s, cz=z-lx*s+side*c;
+          if (containers.add(cx,y+1.3+lvl*2.6,cz,1,1,1,rot,0,0,pick(containerColors))) {
+            addBox(cx,cz,6,1.25,2.6,rot,y+lvl*2.6);
+          }
         }
       }
-      addBox(x, z, 6.1, 2.7, stack * 2.6, rot, y);
+
     };
     const rows = Math.floor(d.r / 15);
     for (let row = -rows; row <= rows; row++) {
@@ -747,7 +761,7 @@ export function buildMap(parent: THREE.Object3D, obstacles: Obstacle[], makeWrec
       g.position.set(wx, y, wz);
       setShadows(g);
       parent.add(g);
-      addBox(wx, wz, 23, 13, 17, 0, y);
+      structures.register(addBox(wx, wz, 23, 13, 17, 0, y), g, 'WAREHOUSE', 170);
       break;
     }
     // fuel tanks
@@ -826,8 +840,9 @@ export function buildMap(parent: THREE.Object3D, obstacles: Obstacle[], makeWrec
       top.rotation.set(rand(-0.2, 0.2), rot, rand(-0.25, 0.25));
       setShadows(wall);
       setShadows(top);
-      parent.add(wall, top);
-      addBox(x, z, w / 2, 0.8, hgt, rot, y);
+      const group = new THREE.Group(); group.position.set(x,y,z); group.rotation.y = rot;
+      parent.add(group); group.attach(wall); group.attach(top);
+      structures.register(addBox(x,z,w/2,0.8,hgt,rot,y),group,'RUIN WALL',55);
       made++;
     }
     for (let i = 0; i < 4; i++) {
@@ -910,8 +925,7 @@ export function buildMap(parent: THREE.Object3D, obstacles: Obstacle[], makeWrec
         const s = rand(3, 5);
         const sy = s * rand(0.7, 1.1);
         const y = Math.max(heightAt(x, z), w.level - 0.2);
-        rocks.add(x, y + sy * 0.3, z, s, sy, s, rand(0, TWO_PI), rand(0, 0.3), rand(0, 0.3), pick(rockColors));
-        addCircle(x, z, s * 0.95, sy * 1.2, y);
+        if (rocks.add(x, y + sy * 0.3, z, s, sy, s, rand(0, TWO_PI), rand(0, 0.3), rand(0, 0.3), pick(rockColors))) addCircle(x, z, s * 0.95, sy * 1.2, y);
       }
     }
     for (let i = 0, made = 0; i < 40 && made < 6; i++) {
@@ -973,7 +987,7 @@ export function buildMap(parent: THREE.Object3D, obstacles: Obstacle[], makeWrec
       g.position.set(tx, y, tz);
       setShadows(g);
       parent.add(g);
-      addCircle(tx, tz, 3.2, 14, y);
+      structures.register(addBox(tx, tz, 3.2, 3.2, 14, 0, y), g, 'WATCHTOWER', 80);
     }
     // tents
     const tentMat = new THREE.MeshStandardMaterial({ color: 0x7d7a52, roughness: 1 });
@@ -1136,15 +1150,26 @@ export function buildMap(parent: THREE.Object3D, obstacles: Obstacle[], makeWrec
     setShadows(g);
     parent.add(g);
     addCircle(0, 26, 4.6, 8, my);
-    for (let k = 0; k < 4; k++) {
-      const ac = (k * Math.PI) / 2 + 0.35;
-      for (const j of [-1, 0, 1]) {
-        const a = ac + j * 0.42;
-        const x = Math.sin(a) * 20;
-        const z = Math.cos(a) * 20;
-        const y = heightAt(x, z);
-        blocks.add(x, y + 0.75, z, 8, 1.5, 1, a + Math.PI / 2);
-        addBox(x, z, 4, 0.5, 1.5, a + Math.PI / 2, y);
+    // Alternate full-height sight breaks and low firing positions. Staggering
+    // the nests leaves wide radial exits even for a heavy custom chassis.
+    const nests = pick([3, 4, 5]);
+    const bearing = rand(0, TWO_PI);
+    for (let k = 0; k < nests; k++) {
+      const a = bearing + k * TWO_PI / nests;
+      const r = rand(28, 38);
+      const tall = k % 2 === 0;
+      const x = Math.sin(a) * r, z = Math.cos(a) * r;
+      if (!free(x, z, 6.5, 2, a, 2)) continue;
+      const h = tall ? 5.2 : 1.9, len = tall ? 11 : 13;
+      const y = baseY(x, z, 3);
+      if (tall) {
+        const g = new THREE.Group(); g.position.set(x,y,z); g.rotation.y = a;
+        const panel = new THREE.Mesh(new THREE.BoxGeometry(len,h,2), concrete); panel.position.y=h/2;
+        g.add(panel); setShadows(g); parent.add(g);
+        structures.register(addBox(x,z,len/2,1,h,a,y),g,'BREACH WALL',60);
+        addLamp(x + Math.cos(a) * 6.5, z - Math.sin(a) * 6.5);
+      } else if (blocks.add(x,y+h/2,z,len,h,2,a)) {
+        addBox(x,z,len/2,1,h,a,y);
       }
     }
   }
@@ -1304,6 +1329,42 @@ export function buildMap(parent: THREE.Object3D, obstacles: Obstacle[], makeWrec
   for (const p of [rocks, trunks, branches, reeds, berms, blocks, containers, lampPoles, lampHeads]) p.finish();
   for (const f of fires) f.y = Math.max(f.y, heightAt(f.x, f.z) + 0.5);
 
+  // Each relay is a one-use objective in the initial playable perimeter.
+  const relays: FieldRelay[] = [];
+  for (const reward of ['rapid', 'repair'] as const) {
+    for (let attempt = 0; attempt < 160; attempt++) {
+      const [x, z] = anywhere(50, START_RADIUS - 26);
+      if (inWater(x, z) || nearObstacles(x, z, 12).some(o => obsDist(o, x, z) < 12)) continue;
+      if (relays.some(r => Math.hypot(x-r.marker.position.x, z-r.marker.position.z) < 64)) continue;
+      const marker = new THREE.Group();
+      const y = heightAt(x,z);
+      marker.position.set(x,y,z);
+      const neon = new THREE.MeshBasicMaterial({ color: reward === 'repair' ? 0x63ffba : 0xffaf46 });
+      const path = Array.from({length: 49}, (_, i) => {
+        const dx = Math.sin(i * TWO_PI / 48) * 9, dz = Math.cos(i * TWO_PI / 48) * 9;
+        return new THREE.Vector3(dx, heightAt(x+dx,z+dz)-y+0.35, dz);
+      });
+      marker.add(new THREE.Mesh(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(path), 48, 0.13, 4), neon));
+      const beacon = new THREE.Mesh(new THREE.OctahedronGeometry(1.8), new THREE.MeshBasicMaterial({color: neon.color, wireframe: true}));
+      beacon.position.y = 6; marker.add(beacon);
+      animators.push((dt,t) => { if(marker.visible) { beacon.rotation.y += dt; beacon.position.y = 6 + Math.sin(t*2)*0.6; } });
+      parent.add(marker);
+      // Two offset blast screens shelter the capture ring without closing it.
+      // A pilot can take the longer open side or punch a direct firing lane.
+      const approach = rand(0,TWO_PI);
+      for (const arm of [-0.88,0.88]) {
+        const facing=approach+arm, wx=x+Math.sin(facing)*13, wz=z+Math.cos(facing)*13;
+        if(inWater(wx,wz) || !free(wx,wz,5.4,1.2,facing,2.8)) continue;
+        const wy=baseY(wx,wz,3), high=arm>0 ? 6.2 : 3.7;
+        const screen=new THREE.Group();screen.position.set(wx,wy,wz);screen.rotation.y=facing;
+        const slab=new THREE.Mesh(new THREE.BoxGeometry(10.8,high,2.2),darkConcrete);slab.position.y=high/2;
+        screen.add(slab);setShadows(screen);parent.add(screen);
+        structures.register(addBox(wx,wz,5.4,1.1,high,facing,wy),screen,'RELAY SCREEN',75);
+      }
+      relays.push({marker, reward, charge: 0, claimed: false});
+      break;
+    }
+  }
   const animate = (dt: number, t: number) => {
     fenceTex.offset.x = t * 0.018;
     fenceTex.offset.y = Math.sin(t * 0.6) * 0.02;
@@ -1311,5 +1372,5 @@ export function buildMap(parent: THREE.Object3D, obstacles: Obstacle[], makeWrec
     for (const d of radarDishes) d.rotation.y += dt * 0.9;
   };
 
-  return { fires, barrels, waterTexture, setRadius, animate };
+  return { structures, relays, fires, barrels, waterTexture, setRadius, animate };
 }

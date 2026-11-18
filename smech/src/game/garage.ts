@@ -167,16 +167,33 @@ export function loadGarage(): GarageState {
     const equippedData = parsed.equipped && typeof parsed.equipped === 'object'
       ? parsed.equipped as Partial<Record<ComponentSlot, string | null>>
       : {};
+    // Old saves can predate activeMechId. Recognise the complete original Pyre
+    // preset without changing custom Pyre builds that happen to use Cinder.
+    const oldPyre = SLOTS.every(
+      (slot) => equippedData[slot] === (slot === 'specialQ' ? 'x_jump' : PRESETS[1].equipped[slot]),
+    );
+    const activeMechId = typeof parsed.activeMechId === 'string' && parsed.activeMechId
+      ? parsed.activeMechId
+      : oldPyre ? 'prebuilt:pyre' : PREBUILT_MECHS[0].id;
+    const prebuilt = PREBUILT_MECHS.find((mech) => mech.id === activeMechId);
     const equipped: Partial<Record<ComponentSlot, string>> = {};
     for (const slot of SLOTS) {
       // A missing or null key is a deliberately stripped mount, not a corrupt
       // save. Only an invalid component id falls back to the starter part.
       if (!Object.prototype.hasOwnProperty.call(equippedData, slot)) continue;
-      const id = equippedData[slot];
+      const savedId = equippedData[slot];
+      const oldFactoryCanister = activeMechId === 'prebuilt:pyre' && slot === 'specialQ'
+        && savedId === 'x_jump' && equippedData.specialE !== 'x_orbital';
+      const id = oldFactoryCanister ? 'x_orbital' : savedId;
       if (id === null || id === undefined || id === '') continue;
       const comp = typeof id === 'string' ? getComponent(id) : undefined;
-      if (comp && typeof id === 'string' && owned.includes(id) && fitsSlot(comp, slot)) equipped[slot] = id;
-      else equipped[slot] = STARTER_EQUIPPED[slot];
+      // Fixed factory mechs can use their supplied parts without purchasing
+      // them; a player-built mech still requires its own owned components.
+      if (comp && typeof id === 'string' && (owned.includes(id) || prebuilt?.equipped[slot] === id) && fitsSlot(comp, slot)) {
+        equipped[slot] = id;
+      } else {
+        equipped[slot] = STARTER_EQUIPPED[slot];
+      }
     }
     // A special may sit in either special slot, but duplicate mounts are not legal.
     if (equipped.specialQ && equipped.specialQ === equipped.specialE) {
@@ -185,9 +202,6 @@ export function loadGarage(): GarageState {
     }
 
     const customMechs = sanitizeCustomMechs(parsed.customMechs);
-    const activeMechId = typeof parsed.activeMechId === 'string' && parsed.activeMechId
-      ? parsed.activeMechId
-      : PREBUILT_MECHS[0].id;
 
     return {
       credits: Math.max(0, Math.floor(Number(parsed.credits) || 0)),
@@ -500,7 +514,10 @@ const COOL_SUFFIXES = [
 /** Generate a cool sci-fi mech designation automatically. */
 export function generateCoolMechName(): string {
   const p = COOL_PREFIXES[Math.floor(Math.random() * COOL_PREFIXES.length)];
-  const s = COOL_SUFFIXES[Math.floor(Math.random() * COOL_SUFFIXES.length)];
+  // Include the separating space and the final hyphen/digit in the limit, so
+  // a generated designation remains unchanged when it is built and saved.
+  const suffixes = COOL_SUFFIXES.filter((suffix) => p.length + suffix.length + 3 <= MAX_MECH_NAME);
+  const s = suffixes[Math.floor(Math.random() * suffixes.length)];
   const num = Math.floor(Math.random() * 9) + 1;
   return `${p} ${s}-${num}`;
 }

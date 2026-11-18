@@ -97,7 +97,8 @@ export function obsResolve(o: Obstacle, pos: { x: number; z: number }, radius: n
     const d = Math.hypot(dx, dz);
     const min = o.r + radius;
     if (d >= min) return false;
-    const k = (min - d) / (d || 1);
+    if (d < 1e-9) { pos.x = o.x + min; pos.z = o.z; return true; }
+    const k = (min - d) / d;
     pos.x += dx * k;
     pos.z += dz * k;
     return true;
@@ -146,3 +147,27 @@ export function obsCorners(o: Obstacle): [number, number][] | null {
 // ---------------------------------------------------------------------------
 // Textures
 // ---------------------------------------------------------------------------
+
+/** A collapsed structure leaves neither a movement collider nor a radar / LOS footprint. */
+export function removeObstacle(o: Obstacle, world: Obstacle[]) {
+  const idx = world.indexOf(o);
+  if (idx !== -1) world.splice(idx, 1);
+  for (const cell of gridCells.values()) {
+    const i = cell.indexOf(o);
+    if (i !== -1) cell.splice(i, 1);
+  }
+}
+
+/** Entry fraction for a swept projectile against a rotated box (thin walls included). */
+export function boxImpact(o: Obstacle, a: {x:number;y:number;z:number}, b: typeof a) {
+  const box = o.box;
+  if (!box) return Infinity;
+  const dx = a.x-o.x, dz = a.z-o.z, vx = b.x-a.x, vz = b.z-a.z;
+  let enter=0, exit=1;
+  const slab = (p:number, v:number, lo:number, hi:number) => {
+    if (Math.abs(v)<1e-8) return p>=lo && p<=hi;
+    const t0=(lo-p)/v,t1=(hi-p)/v;
+    enter=Math.max(enter,Math.min(t0,t1)); exit=Math.min(exit,Math.max(t0,t1)); return enter<=exit;
+  };
+  return slab(dx*box.c-dz*box.s,vx*box.c-vz*box.s,-box.hw,box.hw) && slab(a.y,b.y-a.y,o.y0,o.y0+o.h) && slab(dx*box.s+dz*box.c,vx*box.s+vz*box.c,-box.hd,box.hd) ? enter : Infinity;
+}

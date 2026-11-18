@@ -1,3 +1,4 @@
+import {reserveRecharge} from '../game/forge';
 import { useMemo, useState } from 'react';
 import {
   SLOT_LABELS,
@@ -12,6 +13,7 @@ import {
   buildNewMech,
   calculateBuildCost,
   generateCoolMechName,
+  MAX_MECH_NAME,
   type GarageState,
 } from '../game/garage';
 import { VEHICLES } from '../game/vehicles';
@@ -82,7 +84,7 @@ export default function MechBuilder({ garage, onBuild, onCancel, accent }: Props
             <input
               className="builder-name-input"
               value={draftName}
-              maxLength={22}
+              maxLength={MAX_MECH_NAME}
               spellCheck={false}
               aria-label="Mech callsign"
               onChange={(e) => setDraftName(e.target.value)}
@@ -146,6 +148,7 @@ export default function MechBuilder({ garage, onBuild, onCancel, accent }: Props
                   key={slot}
                   type="button"
                   className={`builder-slot-item ${isSelected ? 'is-selected' : ''}`}
+                  aria-pressed={isSelected}
                   onClick={() => setSelectedSlot(slot)}
                 >
                   <div className="builder-slot-meta">
@@ -177,7 +180,8 @@ export default function MechBuilder({ garage, onBuild, onCancel, accent }: Props
               <div><span>POWER</span><strong>{stats.powerCapacity} <small>KJ</small></strong></div>
             </div>
             <div className="builder-specs-sub">
-              <span>MASS: <b>{stats.mass.toFixed(1)} T</b></span>
+              <span>RESERVE +{Math.round(reserveRecharge(stats.powerOutput))} kJ/s</span><span>MASS: <b>{stats.mass.toFixed(1)} T</b></span>
+              <span>DRIVE STABILITY: +{Math.round(stats.driveStability * 100)}%</span>
               <span className={deficit ? 'text-red-400 font-bold' : 'text-emerald-400'}>
                 {deficit ? 'POWER DEFICIT' : 'GRID BALANCED'}
               </span>
@@ -192,6 +196,12 @@ export default function MechBuilder({ garage, onBuild, onCancel, accent }: Props
             <span>CLICK COMPONENT TO MOUNT</span>
           </div>
 
+          {(selectedSlot === 'primary' || selectedSlot === 'secondary' || selectedSlot === 'drive') && (
+            <p className="builder-handling-help">
+              Range is base maximum travel; cover and gravity can shorten it. Stability reduces extra projectile spread while moving.
+              A stabilised drive adds to the weapon’s rating, up to 95%.
+            </p>
+          )}
           <div className="builder-components-grid">
             {/* Optional empty socket button for weapon and special slots */}
             {(selectedSlot === 'primary' || selectedSlot === 'secondary' || selectedSlot === 'specialQ' || selectedSlot === 'specialE') && (
@@ -219,7 +229,7 @@ export default function MechBuilder({ garage, onBuild, onCancel, accent }: Props
                   {!draftEquipped[selectedSlot] ? (
                     <span className="builder-badge-mounted">✔ MOUNTED</span>
                   ) : (
-                    <button type="button" className="builder-equip-btn">STRIP SOCKET</button>
+                    <button type="button" className="builder-equip-btn" aria-label={`Strip ${SLOT_LABELS[selectedSlot]} socket`}>STRIP SOCKET</button>
                   )}
                 </div>
               </div>
@@ -233,7 +243,21 @@ export default function MechBuilder({ garage, onBuild, onCancel, accent }: Props
                   key={comp.id}
                   className={`builder-comp-card ${isMounted ? 'is-mounted' : ''}`}
                   onClick={() => {
-                    setDraftEquipped((prev) => ({ ...prev, [selectedSlot]: comp.id }));
+                    setDraftEquipped((prev) => {
+                      const next = { ...prev, [selectedSlot]: comp.id };
+                      // Two catalogue variants can share a weapon id (e.g. missile pods).
+                      // Swap rather than silently charging for a duplicate the engine cannot mount.
+                      if (selectedSlot === 'specialQ' || selectedSlot === 'specialE') {
+                        const other = selectedSlot === 'specialQ' ? 'specialE' : 'specialQ';
+                        const mounted = prev[other] ? getComponent(prev[other]!) : undefined;
+                        if (comp.weapon && mounted?.weapon === comp.weapon) {
+                          const previous = prev[selectedSlot];
+                          if (previous && getComponent(previous)?.weapon !== comp.weapon) next[other] = previous;
+                          else delete next[other];
+                        }
+                      }
+                      return next;
+                    });
                   }}
                 >
                   <div className="builder-comp-header">
@@ -243,6 +267,7 @@ export default function MechBuilder({ garage, onBuild, onCancel, accent }: Props
                         {comp.weight.toFixed(1)} T
                         {comp.powerCapacity ? ` · ${comp.powerCapacity} KJ` : ''}
                         {comp.powerOutput ? ` · +${comp.powerOutput} KJ/S` : ''}
+                        {comp.power ? ` · ${comp.power} kJ / USE` : ''}
                         {comp.power && comp.powerInterval ? ` · ${(comp.power / comp.powerInterval).toFixed(0)} KJ/S DRAW` : ''}
                       </span>
                     </div>
@@ -254,19 +279,30 @@ export default function MechBuilder({ garage, onBuild, onCancel, accent }: Props
                   <p className="builder-comp-desc">{comp.desc}</p>
 
                   <div className="builder-comp-specs">
+                    {comp.range !== undefined ? <span>MAX RANGE: {comp.range} M</span> : null}
+                    {comp.stability !== undefined ? <span>STABILITY: {Math.round(comp.stability * 100)}%</span> : null}
+                    {comp.mods?.driveStability ? <span>DRIVE STABILITY: +{Math.round(comp.mods.driveStability * 100)}%</span> : null}
                     {comp.mods?.maxHp ? <span>ARMOR HP: +{comp.mods.maxHp}</span> : null}
                     {comp.mods?.shield ? <span>SHIELD: +{comp.mods.shield}</span> : null}
-                    {comp.mods?.maxSpeed ? <span>SPEED: +{Math.round(comp.mods.maxSpeed * 3.2)} KM/H</span> : null}
-                    {comp.weaponStats?.mgDamage ? <span>BURST DMG: {comp.weaponStats.mgDamage}</span> : null}
+                    {comp.mods?.maxSpeed ? <span>SPEED: {comp.mods.maxSpeed > 0 ? '+' : ''}{Math.round(comp.mods.maxSpeed * 3.2)} KM/H</span> : null}
+                    {comp.weaponStats?.mgDamage ? <span>ROUND DMG: {comp.weaponStats.mgDamage}</span> : null}
                     {comp.weaponStats?.cannonDamage ? <span>SHELL DMG: {comp.weaponStats.cannonDamage}</span> : null}
-                    {comp.weaponStats?.scatterDamage ? <span>BLAST DMG: {comp.weaponStats.scatterDamage}</span> : null}
+                    {comp.weaponStats?.scatterDamage ? <span>PELLET DMG: {comp.weaponStats.scatterDamage} × 6</span> : null}
+                    {comp.weaponStats?.flameDamage ? <span>FIRE DMG: {comp.weaponStats.flameDamage} / TICK</span> : null}
+                    {comp.weaponStats?.cryoDamage ? <span>CRYO DMG: {comp.weaponStats.cryoDamage} / TICK</span> : null}
+                    {comp.weaponStats?.empDamage ? <span>EMP DMG: {comp.weaponStats.empDamage}</span> : null}
+                    {comp.weaponStats?.mgInterval ? <span>ROUND INTERVAL: {comp.weaponStats.mgInterval} S + BURST PAUSE</span> : null}
+                    {comp.weaponStats?.cannonReload ? <span>RELOAD: {comp.weaponStats.cannonReload} S</span> : null}
+                    {comp.weaponStats?.scatterReload ? <span>RELOAD: {comp.weaponStats.scatterReload} S</span> : null}
+                    {comp.weaponStats?.beamInterval ? <span>TICK: {comp.weaponStats.beamInterval} S</span> : null}
+                    {comp.weaponStats?.empReload ? <span>CYCLE: {comp.weaponStats.empReload} S</span> : null}
                   </div>
 
                   <div className="builder-comp-footer">
                     {isMounted ? (
                       <span className="builder-badge-mounted">✔ MOUNTED IN SLOT</span>
                     ) : (
-                      <button type="button" className="builder-equip-btn">
+                      <button type="button" className="builder-equip-btn" aria-label={`Equip ${comp.name}`}>
                         EQUIP COMPONENT
                       </button>
                     )}

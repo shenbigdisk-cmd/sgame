@@ -95,6 +95,7 @@ export default function GameOver({ stats, records = [], onRetry, onMenu }: Props
                 // CREDITS EARNED
               </span>
               <strong style={{ fontFamily: DISPLAY, color: '#ffd24a' }}>+{stats.credits.toLocaleString('en-US')} CR</strong>
+              {!!stats.lootCredits && <small>Includes {stats.lootCredits} CR banked from sky caches</small>}
               <span className="text-[10px] tracking-[0.2em] text-zinc-500" style={{ fontFamily: MONO }}>
                 BUILD NEW MECHS WITH YOUR WINNINGS
               </span>
