@@ -51,6 +51,7 @@ export interface PlayerStats {
   surge: number; // missile barrage size
   dropRate: number; // supply drop frequency
   overdriveStacks: number; // overdrive vent tuning
+  lastStand: number; // LAST CIRCUIT: bonus damage while the hull is critical
 }
 
 export const defaultStats = (): PlayerStats => ({
@@ -92,6 +93,7 @@ export const defaultStats = (): PlayerStats => ({
   surge: 0,
   dropRate: 0,
   overdriveStacks: 0,
+  lastStand: 0,
 });
 
 export const EVOLUTIONS: UpgradeDef[] = [
@@ -127,6 +129,7 @@ export const UPGRADES: UpgradeDef[] = [
   { id: 'sig_bulwark', name: 'BULWARK FIELD', desc: 'Your shield holds +90 points and recharges 35% faster.', rarity: 'epic', icon: 'battery', tag: 'SIGNATURE', signature: true, max: 1 },
   { id: 'sig_surge', name: 'SATURATION BARRAGE', desc: 'Missile salvos fire +2 warheads and their blasts are 40% wider.', rarity: 'epic', icon: 'missile', tag: 'SIGNATURE', signature: true, max: 1 },
   { id: 'sig_scavenger', name: 'SUPPLY NETWORK', desc: 'Supply drops arrive 35% more often and land closer to you.', rarity: 'epic', icon: 'magnet', tag: 'SIGNATURE', signature: true, max: 1 },
+  { id: 'sig_laststand', name: 'LAST CIRCUIT', desc: 'While your hull is below 35%, your weapons deal +35% damage. A dying machine fights harder.', rarity: 'epic', icon: 'skull', tag: 'SIGNATURE', signature: true, max: 1 },
 
   { id:'breacher', name:'BREACH CHARGES', desc:'Explosive impacts deal +50% base damage to structures per rank. Open a flank without spending a full salvo.', rarity:'common', icon:'blast', tag:'WEAPON', max:3 },
   { id:'induction', name:'INDUCTION LOOP', desc:'Recover 8 kJ on each kill per rank, up to your reactor capacity. Keeps weapons supplied during sustained fire.', rarity:'rare', icon:'bolt', tag:'SYSTEM', max:3 },
@@ -211,6 +214,7 @@ const WEAPON_UPGRADE_EFFECTS: Readonly<Record<string, readonly WeaponId[]>> = {
   mortar_cd: ['mortar'],
   overdrive_up: ['overdrive'],
   nova_radius: ['nova'],
+  sig_laststand: ['autocannon', 'cannon', 'scatter', 'coil', 'flame', 'cryo', 'cryoball', 'emp', 'cinder', 'orbital', 'mines', 'missiles', 'turret', 'mortar', 'overdrive', 'rail'],
 };
 
 const UPGRADE_BY_ID = new Map(UPGRADES.map((upgrade) => [upgrade.id, upgrade]));

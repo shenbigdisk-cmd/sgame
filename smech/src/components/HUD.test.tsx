@@ -44,6 +44,7 @@ const state: HudState = {
   feed: [],
   hitMarkerAge: 10,
   critAge: 10,
+  floaters: [],
   damageFlash: 0,
   damageDirs: [],
   waveCountdown: 0,
@@ -311,6 +312,33 @@ describe('upgrade and status feedback', () => {
     expect(open.querySelector('.cp-buff-veiled')).toBeNull();
     expect(open.querySelector('.flight-contact')?.textContent).toContain('Undetected');
     expect(open.querySelector('.flight-contact')?.textContent).not.toContain('Concealed');
+  });
+});
+
+describe('floating combat readouts', () => {
+  it('renders damage, crit and score floaters projected onto the cockpit', () => {
+    const container = renderHud({
+      floaters: [
+        { id: 1, x: 0.5, y: 0.42, text: '42', kind: 'hit', age: 0, maxAge: 0.9 },
+        { id: 2, x: 0.58, y: 0.38, text: '135', kind: 'crit', age: 0.2, maxAge: 1.15 },
+        { id: 3, x: 0.44, y: 0.5, text: '+250 ×3', kind: 'score', age: 0.1, maxAge: 1.5 },
+      ],
+    });
+    const floaters = [...container.querySelectorAll('.cp-floater')];
+    expect(floaters).toHaveLength(3);
+    expect(floaters.map((f) => f.textContent)).toEqual(['42', '135', '+250 ×3']);
+    expect(container.querySelector('.cp-floater--hit')?.getAttribute('style')).toContain('left:50%');
+    expect(container.querySelector('.cp-floater--crit')).not.toBeNull();
+    expect(container.querySelector('.cp-floater--score')).not.toBeNull();
+  });
+
+  it('fades a floater out as it reaches the end of its lifetime', () => {
+    const container = renderHud({
+      floaters: [{ id: 1, x: 0.5, y: 0.5, text: '12', kind: 'hit', age: 0.85, maxAge: 0.9 }],
+    });
+    const style = container.querySelector('.cp-floater')?.getAttribute('style') ?? '';
+    const opacity = Number(/opacity:\s*([\d.]+)/.exec(style)?.[1] ?? '1');
+    expect(opacity).toBeLessThan(0.2);
   });
 });
 

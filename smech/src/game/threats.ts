@@ -53,6 +53,13 @@ export const DOSSIERS: Record<
     strength: 'Heavy hull and paired homing rockets.',
     counter: 'Use terrain to intercept rockets. Its slow stride makes it a good mortar target.',
   },
+  sapper: {
+    name: 'Ember Sapper',
+    role: 'Demolition drone',
+    icon: 'blast',
+    strength: 'Sprints at your hull and detonates on contact. Shooting it open still cooks off its core at half force.',
+    counter: 'It cannot shoot back — only close distance. Destroy it at range, freeze its tracks, or drag it into its own friends.',
+  },
 };
 export function impactMultiplier(kind: EnemyKind, shot: 'bullet' | 'rocket' | 'shell') {
   if (kind === 'skimmer' && shot === 'bullet') return 1.5;

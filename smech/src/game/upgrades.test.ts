@@ -17,6 +17,7 @@ describe('player stats', () => {
     expect(s.critChance).toBe(0);
     expect(s.armor).toBe(0);
     expect(s.overdriveStacks).toBe(0);
+    expect(s.lastStand).toBe(0);
   });
 });
 
@@ -98,6 +99,14 @@ describe('weapon upgrade indicators', () => {
     expect(weaponUpgradeInfo('cinder', 'specialQ', taken).count).toBe(1);
     expect(weaponUpgradeInfo('turret', 'specialE', taken).count).toBe(0);
     expect(weaponUpgradeInfo('smoke', 'specialE', taken).count).toBe(0);
+  });
+
+  it('badges LAST CIRCUIT on every damage-dealing weapon, but not on smoke or unevolved nova', () => {
+    const taken = new Map([['sig_laststand', 1]]);
+    for (const weapon of ALL) {
+      const info = weaponUpgradeInfo(weapon, 'specialE', taken);
+      expect(info.count, weapon).toBe(weapon === 'smoke' || weapon === 'nova' ? 0 : 1);
+    }
   });
 
   it('respects the cryo socket and only applies crit to an evolved damaging nova', () => {

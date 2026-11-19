@@ -66,6 +66,7 @@ const BLIP_COLOR: Record<string, string> = {
   mender: '#63ffba',
   jackal: '#ffa32e',
   skimmer: '#e791ff',
+  sapper: '#ff6a00',
   bastion: '#ffc55a',
   boss: '#ff003c',
   pickup: '#00e5ff',
@@ -486,6 +487,21 @@ export default function HUD({
       />
       {hud.alive && hud.concealed && <div className="cp-veil-effect" aria-hidden="true" />}
       <Canopy />
+      <div className="cp-floaters" aria-hidden="true">
+        {hud.floaters.map((f) => {
+          const t = f.maxAge > 0 ? f.age / f.maxAge : 1;
+          const opacity = t < 0.55 ? 1 : Math.max(0, 1 - (t - 0.55) / 0.45);
+          return (
+            <span
+              key={f.id}
+              className={`cp-floater cp-floater--${f.kind}`}
+              style={{ left: `${f.x * 100}%`, top: `${f.y * 100}%`, opacity }}
+            >
+              {f.text}
+            </span>
+          );
+        })}
+      </div>
       <header className="cp-top">
         <section className="cp-stage">
           <div className="cp-eyebrow">

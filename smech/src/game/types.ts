@@ -1,5 +1,5 @@
 export type VehicleType = 'warden' | 'pyre' | 'glacier';
-export type EnemyKind = 'tank' | 'mech' | 'heavy' | 'sniper' | 'mender' | 'bastion' | 'jackal' | 'skimmer';
+export type EnemyKind = 'tank' | 'mech' | 'heavy' | 'sniper' | 'mender' | 'bastion' | 'jackal' | 'skimmer' | 'sapper';
 /** 'arcade' = hull auto-follows the aim, WASD moves relative to where you look. */
 export type ControlMode = 'arcade' | 'realistic';
 
@@ -42,6 +42,19 @@ export interface UpgradeDef {
 }
 
 export type DropKind = 'repair' | 'shield' | 'overcharge' | 'rapid' | 'emp' | 'score' | 'coins' | 'aegis' | 'ammo';
+
+export interface HudFloater {
+  id: number;
+  /** 0..1 across the screen */
+  x: number;
+  /** 0..1 down the screen */
+  y: number;
+  text: string;
+  /** hit = normal damage, crit = critical hit, score = banked points */
+  kind: 'hit' | 'crit' | 'score';
+  age: number;
+  maxAge: number;
+}
 
 export interface HudBuff {
   id: string;
@@ -149,6 +162,8 @@ export interface HudState {
   feed: FeedEntry[];
   hitMarkerAge: number;
   critAge: number;
+  /** transient world-anchored damage / score readouts, projected to the screen */
+  floaters: HudFloater[];
   damageFlash: number;
   damageDirs: DamageDir[];
   waveCountdown: number;
