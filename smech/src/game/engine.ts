@@ -17,7 +17,14 @@ import * as THREE from 'three';
 import { EffectComposer } from 'three/examples/jsm/postprocessing/EffectComposer.js';
 import { RenderPass } from 'three/examples/jsm/postprocessing/RenderPass.js';
 import { UnrealBloomPass } from 'three/examples/jsm/postprocessing/UnrealBloomPass.js';
-import { OutputPass } from 'three/examples/jsm/postprocessing/OutputPass.js';
+import { ShaderPass } from 'three/examples/jsm/postprocessing/ShaderPass.js';
+import {
+  createSaltlineSky,
+  enablePCSSShadows,
+  AGX_GRADE_SHADER,
+  generateEnvironmentMap,
+  type SaltlineSkyController,
+} from './saltlineVisuals';
 import type { AudioManager } from './audio';
 import type { ControlMode, DropKind, EnemyKind, GameStats, HudState, HudWeapon, RadarBlip, UpgradeDef, VehicleType, WeaponId } from './types';
 import { defaultStats, offerName, rollOffer, weaponUpgradeInfo, type PlayerStats } from './upgrades';
@@ -293,28 +300,6 @@ export interface GameOptions {
 }
 
 // ---------------------------------------------------------------------------
-// Particle system (instanced billboards)
-const SKY_VERT = `
-varying vec3 vWorld;
-void main() {
-  vec4 wp = modelMatrix * vec4(position, 1.0);
-  vWorld = wp.xyz - cameraPosition;
-  gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
-}`;
-const SKY_FRAG = `
-uniform vec3 top;
-uniform vec3 horizon;
-uniform vec3 bottom;
-varying vec3 vWorld;
-void main() {
-  float h = normalize(vWorld).y;
-  vec3 c = h > 0.0 ? mix(horizon, top, pow(h, 0.45)) : mix(horizon, bottom, pow(-h, 0.5));
-  gl_FragColor = vec4(c, 1.0);
-  #include <tonemapping_fragment>
-  #include <colorspace_fragment>
-}`;
-
-// ---------------------------------------------------------------------------
 // Game
 // ---------------------------------------------------------------------------
 export class Game {
@@ -406,6 +391,8 @@ export class Game {
   private lockWarnTimer = 0;
   private composer!: EffectComposer;
   private bloom!: UnrealBloomPass;
+  private saltlineSky?: SaltlineSkyController;
+  private agxPass?: ShaderPass;
   private shieldMesh!: THREE.Mesh;
   private fireSpots: THREE.Vector3[] = [];
   private fireLights: THREE.PointLight[] = [];
@@ -417,6 +404,10 @@ export class Game {
   private dustTimer = 0;
   private tiltPitch = 0;
   private tiltRoll = 0;
+  private swayX = 0;
+  private swayY = 0;
+  private swayTargetX = 0;
+  private swayTargetY = 0;
   private hp: number;
   private alive = true;
   private deathTimer = 0;
@@ -591,6 +582,7 @@ export class Game {
     this.renderer.setSize(window.innerWidth, window.innerHeight, false);
     this.renderer.shadowMap.enabled = true;
     this.renderer.shadowMap.type = THREE.PCFShadowMap;
+    enablePCSSShadows(280, 280, 490, 16, 8);
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
     this.renderer.toneMappingExposure = this.layout.theme.exposure;
     const gl = this.renderer.getContext();
@@ -625,12 +617,14 @@ export class Game {
     this.muzzleLight = new THREE.PointLight(0xffc080, 0, 45, 2);
     this.camera.add(this.muzzleLight);
 
-    // post-processing: bloom makes muzzle flashes, glows and explosions pop
+    // post-processing: bloom + Saltline AgX filmic tone mapping & color grading pass
     this.composer = new EffectComposer(this.renderer);
     this.composer.addPass(new RenderPass(this.scene, this.camera));
-    this.bloom = new UnrealBloomPass(new THREE.Vector2(window.innerWidth, window.innerHeight), 0.55, 0.5, 0.82);
+    this.bloom = new UnrealBloomPass(new THREE.Vector2(window.innerWidth, window.innerHeight), 0.45, 0.4, 0.88);
     this.composer.addPass(this.bloom);
-    this.composer.addPass(new OutputPass());
+    this.agxPass = new ShaderPass(AGX_GRADE_SHADER);
+    this.agxPass.uniforms.uResolution.value.set(window.innerWidth, window.innerHeight);
+    this.composer.addPass(this.agxPass);
     this.composer.setSize(window.innerWidth, window.innerHeight);
 
     // energy shield: a faint hex-ish bubble around the cockpit (only visible edges)
@@ -708,23 +702,19 @@ export class Game {
     this.sun = sun;
     this.sunDir.set(theme.sunDir[0], theme.sunDir[1], theme.sunDir[2]).normalize();
 
-    // sky dome, sun/moon disc and (at night) stars
-    const skyMat = new THREE.ShaderMaterial({
-      side: THREE.BackSide,
-      depthWrite: false,
-      fog: false,
-      uniforms: {
-        top: { value: new THREE.Color(theme.skyTop) },
-        horizon: { value: new THREE.Color(theme.skyHorizon) },
-        bottom: { value: new THREE.Color(theme.skyBottom) },
-      },
-      vertexShader: SKY_VERT,
-      fragmentShader: SKY_FRAG,
-    });
-    this.sky = new THREE.Mesh(new THREE.SphereGeometry(1200, 24, 12), skyMat);
-    this.sky.frustumCulled = false;
+    // Saltline volumetric cloud deck & atmospheric sky
+    const sunCol = new THREE.Color(theme.sunColor);
+    const skyTop = new THREE.Color(theme.skyTop);
+    const skyHor = new THREE.Color(theme.skyHorizon);
+    this.saltlineSky = createSaltlineSky(this.sunDir, sunCol, skyTop, skyHor);
+    this.sky = this.saltlineSky.mesh;
     scene.add(this.sky);
+
+    // Image-Based Lighting: bake HDR cubemap from the sky for realistic specular reflections on all mechs & metals
+    scene.environment = generateEnvironmentMap(this.renderer, this.saltlineSky);
+
     this.sunDisc = new THREE.Mesh(new THREE.CircleGeometry(theme.sunSize, 24), new THREE.MeshBasicMaterial({ color: theme.sunDisc, fog: false }));
+    this.sunDisc.visible = false;
     scene.add(this.sunDisc);
     if (theme.stars > 0) {
       const n = 800;
@@ -1064,6 +1054,8 @@ export class Game {
     this.turretYaw -= e.movementX * sens;
     const dy = this.settings.invertY ? e.movementY : -e.movementY;
     this.pitch = clamp(this.pitch + dy * sens, -0.3, 0.4);
+    this.swayTargetX = clamp(this.swayTargetX - e.movementX * 0.0006, -0.05, 0.05);
+    this.swayTargetY = clamp(this.swayTargetY + dy * 0.0006, -0.035, 0.035);
   };
   private onMouseDown = (e: MouseEvent) => {
     if (!this.isLocked()) return;
@@ -1119,6 +1111,7 @@ export class Game {
   private onResize = () => {
     this.renderer.setSize(window.innerWidth, window.innerHeight, false);
     this.composer.setSize(window.innerWidth, window.innerHeight);
+    this.agxPass?.uniforms.uResolution.value.set(window.innerWidth, window.innerHeight);
     if (this.quality === 1) this.bloom.setSize(Math.round(window.innerWidth / 2), Math.round(window.innerHeight / 2));
     this.camera.aspect = window.innerWidth / window.innerHeight;
     this.camera.updateProjectionMatrix();
@@ -1167,6 +1160,12 @@ export class Game {
 
   private update(dt: number) {
     this.time += dt;
+    this.saltlineSky?.update(dt);
+    if (this.agxPass) {
+      this.agxPass.uniforms.uTime.value = this.time;
+      this.agxPass.uniforms.uDamage.value = this.damageFlash;
+      this.agxPass.uniforms.uLowHealth.value = this.hp < this.cfg.maxHp * 0.35 ? 1.0 : 0.0;
+    }
     if (this.arenaR < this.arenaTarget) {
       this.arenaR = Math.min(this.arenaTarget, this.arenaR + 16 * dt);
       this.mapApi.setRadius(this.arenaR);
@@ -1446,7 +1445,8 @@ export class Game {
     this.armRecoil[0] *= Math.exp(-dt * 10);
     this.armRecoil[1] *= Math.exp(-dt * 10);
     this.recoilPitch *= Math.exp(-dt * 7);
-    const targetFov = this.zoom ? 32 : 70;
+    const speedRatio = Math.max(-0.5, Math.min(1.2, this.speed / Math.max(1, this.cfg.maxSpeed)));
+    const targetFov = this.zoom ? 32 : (this.settings.fov + speedRatio * 3.5);
     if (Math.abs(targetFov - this.fovCurrent) > 0.05) {
       this.fovCurrent += (targetFov - this.fovCurrent) * Math.min(1, dt * 10);
       this.camera.fov = this.fovCurrent;
@@ -4213,7 +4213,9 @@ export class Game {
       wasCrit = true;
       this.critTime = this.time;
       this.audio.playCrit();
-      this.sparks(this.tmpA.set(e.pos.x, e.pos.y + e.height * 0.5, e.pos.z), 1.4);
+      this.sparks(this.tmpA.set(e.pos.x, e.pos.y + e.height * 0.5, e.pos.z), 1.5);
+    } else {
+      this.sparks(this.tmpA.set(e.pos.x + rand(-0.25, 0.25), e.pos.y + e.height * (0.35 + Math.random() * 0.35), e.pos.z + rand(-0.25, 0.25)), 0.6);
     }
     if (powered) dmg *= this.lastStandMul();
     if (e.brittleTime > 0) dmg *= 1.25;
@@ -4584,6 +4586,7 @@ export class Game {
   }
 
   private explosion(pos: THREE.Vector3, scale: number) {
+    this.weaponFx.shockwave(pos, 5.5 * scale, 0xffa344, 0.42 * Math.sqrt(scale));
     const n = Math.floor(18 * scale);
     for (let i = 0; i < n; i++) {
       const th = rand(0, TWO_PI);
@@ -4803,11 +4806,16 @@ export class Game {
       this.camera.position.y += (Math.random() - 0.5) * s * 0.25;
       this.shake *= Math.exp(-dt * 5.5);
     }
-    // weapon recoil
-    this.weapon.visible=!this.zoom;
-    this.arms.forEach((arm,i)=>{
-      poseHardpoint(arm.root,i,this.camera.aspect,this.settings.fov,this.armRecoil[i]);
-      if(arm.rotor) arm.rotor.rotation.z+=dt*this.armRecoil[i]*18;
+    // weapon sway & recoil
+    this.swayX += (this.swayTargetX - this.swayX) * Math.min(1, dt * 14);
+    this.swayY += (this.swayTargetY - this.swayY) * Math.min(1, dt * 14);
+    this.swayTargetX *= Math.exp(-dt * 8);
+    this.swayTargetY *= Math.exp(-dt * 8);
+
+    this.weapon.visible = !this.zoom;
+    this.arms.forEach((arm, i) => {
+      poseHardpoint(arm.root, i, this.camera.aspect, this.settings.fov, this.armRecoil[i], this.swayX, this.swayY);
+      if (arm.rotor) arm.rotor.rotation.z += dt * this.armRecoil[i] * 18;
     });
     this.camera.updateMatrixWorld();
   }

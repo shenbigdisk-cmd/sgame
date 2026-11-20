@@ -1,4 +1,5 @@
 import { StructureField } from './structures';
+import { enhanceGroundMaterial, getBrushedMetalNormalTexture } from './saltlineVisuals';
 /**
  * World builder: turns a sector layout into a dressed, lit and animated arena.
  */
@@ -341,7 +342,19 @@ export function buildMap(parent: THREE.Object3D, obstacles: Obstacle[], makeWrec
   }
   tgeo.setAttribute('color', new THREE.BufferAttribute(colors, 3));
   tgeo.computeVertexNormals();
-  const ground = new THREE.Mesh(tgeo, new THREE.MeshStandardMaterial({ map: makeGroundTexture(theme.ground), vertexColors: true, roughness: 1, metalness: 0 }));
+  const groundMat = new THREE.MeshStandardMaterial({
+    map: makeGroundTexture(theme.ground),
+    vertexColors: true,
+    roughness: 0.85,
+    metalness: 0.15,
+  });
+  enhanceGroundMaterial(groundMat);
+  animators.push((_dt, t) => {
+    if (groundMat.userData.shader?.uniforms?.uTime) {
+      groundMat.userData.shader.uniforms.uTime.value = t;
+    }
+  });
+  const ground = new THREE.Mesh(tgeo, groundMat);
   ground.receiveShadow = true;
   parent.add(ground);
 
@@ -501,10 +514,23 @@ export function buildMap(parent: THREE.Object3D, obstacles: Obstacle[], makeWrec
   setRadius(START_RADIUS);
 
   // ---- shared materials & instanced pools -------------------------------
-  const concrete = new THREE.MeshStandardMaterial({ color: 0x8b857a, roughness: 0.95 });
-  const darkConcrete = new THREE.MeshStandardMaterial({ color: 0x5d5952, roughness: 0.95 });
-  const metal = new THREE.MeshStandardMaterial({ color: 0x4b4f55, roughness: 0.55, metalness: 0.6 });
-  const rust = new THREE.MeshStandardMaterial({ color: 0x6e4b33, roughness: 0.85, metalness: 0.3 });
+  const propNormal = getBrushedMetalNormalTexture();
+  const concrete = new THREE.MeshStandardMaterial({ color: 0x8b857a, roughness: 0.88 });
+  const darkConcrete = new THREE.MeshStandardMaterial({ color: 0x5d5952, roughness: 0.85 });
+  const metal = new THREE.MeshStandardMaterial({
+    color: 0x555d64,
+    roughness: 0.42,
+    metalness: 0.72,
+    normalMap: propNormal,
+    normalScale: new THREE.Vector2(0.3, 0.3),
+  });
+  const rust = new THREE.MeshStandardMaterial({
+    color: 0x7a4e32,
+    roughness: 0.78,
+    metalness: 0.35,
+    normalMap: propNormal,
+    normalScale: new THREE.Vector2(0.4, 0.4),
+  });
   const beaconMat = new THREE.MeshStandardMaterial({ color: 0xff2020, emissive: 0xff2020, emissiveIntensity: 4 });
   const facades = ['#8b857a', '#7a756c', '#9a9184', '#6f6a63', '#857868', '#7c8088'].map(makeFacadeTextures);
 

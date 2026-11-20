@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import type { VehicleConfig } from './vehicles';
 import type { WeaponId } from './types';
+import { createBeveledBox, getBrushedMetalNormalTexture } from './saltlineVisuals';
 
 /** First-person hardpoints. Local forward is -Z, with the breech towards the pilot. */
 export function makeHardpoint(id: WeaponId | null, cfg: VehicleConfig) {
@@ -8,13 +9,21 @@ export function makeHardpoint(id: WeaponId | null, cfg: VehicleConfig) {
   root.name=`hardpoint:${id ?? 'empty'}`; root.add(tip);
   let rotor: THREE.Group | undefined;
   if(!id){root.visible=false;return {root,tip,rotor};}
-  const mat=(color:THREE.ColorRepresentation,metalness=.52)=>new THREE.MeshStandardMaterial({color,metalness,roughness:.48});
-  const alloy=mat(cfg.armorColor), steel=mat(0x66747b), dark=mat(0x222c33), copper=mat(0xad633a), bone=mat(0xadc5c9);
-  const lamp=new THREE.MeshStandardMaterial({color:cfg.accent,emissive:cfg.accent,emissiveIntensity:1.05});
-  const ember=new THREE.MeshStandardMaterial({color:0xffb271,emissive:0xff5a18,emissiveIntensity:1.2});
+  const normalMap = getBrushedMetalNormalTexture();
+  const mat = (color: THREE.ColorRepresentation, metalness = 0.68, roughness = 0.36) =>
+    new THREE.MeshStandardMaterial({
+      color,
+      metalness,
+      roughness,
+      normalMap,
+      normalScale: new THREE.Vector2(0.25, 0.25),
+    });
+  const alloy=mat(cfg.armorColor, 0.70, 0.34), steel=mat(0x66747b, 0.82, 0.30), dark=mat(0x222c33, 0.75, 0.42), copper=mat(0xad633a, 0.85, 0.26), bone=mat(0xadc5c9, 0.62, 0.36);
+  const lamp=new THREE.MeshStandardMaterial({color:cfg.accent,emissive:cfg.accent,emissiveIntensity:1.8,toneMapped:false});
+  const ember=new THREE.MeshStandardMaterial({color:0xffb271,emissive:0xff5a18,emissiveIntensity:2.0,toneMapped:false});
   const mesh=(geo:THREE.BufferGeometry,m:THREE.Material,x:number,y:number,z:number,parent:THREE.Object3D=root)=>{const o=new THREE.Mesh(geo,m);o.position.set(x,y,z);parent.add(o);return o};
-  const box=(w:number,h:number,d:number,x:number,y:number,z:number,m:THREE.Material)=>mesh(new THREE.BoxGeometry(w,h,d),m,x,y,z);
-  const tube=(r:number,end:number,len:number,x:number,y:number,z:number,m:THREE.Material,n=12,parent:THREE.Object3D=root)=>{const o=mesh(new THREE.CylinderGeometry(end,r,len,n),m,x,y,z,parent);o.rotation.x=-Math.PI/2;return o};
+  const box=(w:number,h:number,d:number,x:number,y:number,z:number,m:THREE.Material)=>mesh(createBeveledBox(w,h,d,0.012),m,x,y,z);
+  const tube=(r:number,end:number,len:number,x:number,y:number,z:number,m:THREE.Material,n=20,parent:THREE.Object3D=root)=>{const o=mesh(new THREE.CylinderGeometry(end,r,len,n),m,x,y,z,parent);o.rotation.x=-Math.PI/2;return o};
   const hoop=(r:number,t:number,z:number,m:THREE.Material)=>mesh(new THREE.TorusGeometry(r,t,6,18),m,0,0,z);
   const rib=(z:number)=>box(.48,.046,.065,0,.206,z,dark);
   const tipAt=(z:number,x=0,y=0)=>tip.position.set(x,y,z);
@@ -74,9 +83,24 @@ export function makeHardpoint(id: WeaponId | null, cfg: VehicleConfig) {
 }
 
 /** Fit to the *unzoomed* frustum so narrow screens retain a clear center lane. */
-export function poseHardpoint(root:THREE.Group,index:number,aspect:number,fov:number,recoil:number){
-  const k=Math.tan(fov*Math.PI/360)/Math.tan(70*Math.PI/360);
-  const lateral=Math.min(aspect,2.2);
-  root.scale.setScalar(.68*k*Math.min(1,aspect/.95));
-  root.position.set((index?1:-1)*1.13*lateral*k,-1.42*k,-2.48+recoil*.14);
+export function poseHardpoint(
+  root: THREE.Group,
+  index: number,
+  aspect: number,
+  fov: number,
+  recoil: number,
+  swayX = 0,
+  swayY = 0
+) {
+  const k = Math.tan((fov * Math.PI) / 360) / Math.tan((70 * Math.PI) / 360);
+  const lateral = Math.min(aspect, 2.2);
+  root.scale.setScalar(0.68 * k * Math.min(1, aspect / 0.95));
+  root.position.set(
+    (index ? 1 : -1) * 1.13 * lateral * k + swayX * 0.7,
+    -1.42 * k + swayY * 0.7,
+    -2.48 + recoil * 0.24
+  );
+  root.rotation.x = recoil * 0.16 - swayY * 0.9;
+  root.rotation.y = swayX * 0.9;
+  root.rotation.z = -swayX * 0.5;
 }

@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { VEHICLES } from './vehicles';
 import { COMPONENTS, getComponent, type ComponentSlot } from './forge';
 import type { VehicleType } from './types';
+import { getBrushedMetalNormalTexture, createBeveledBox } from './saltlineVisuals';
 
 /**
  * Procedural models for the forge parts.
@@ -21,13 +22,28 @@ export interface MechPalette {
 }
 
 const mat = (color: number, opts: Partial<THREE.MeshStandardMaterialParameters> = {}) =>
-  new THREE.MeshStandardMaterial({ color, roughness: 0.62, metalness: 0.45, ...opts });
+  new THREE.MeshStandardMaterial({
+    color,
+    roughness: 0.44,
+    metalness: 0.65,
+    normalMap: getBrushedMetalNormalTexture(),
+    normalScale: new THREE.Vector2(0.22, 0.22),
+    ...opts,
+  });
 
 const glow = (color: number) =>
-  new THREE.MeshStandardMaterial({ color, emissive: color, emissiveIntensity: 2.4, roughness: 0.3, metalness: 0.1 });
+  new THREE.MeshStandardMaterial({
+    color,
+    emissive: color,
+    emissiveIntensity: 2.8,
+    roughness: 0.25,
+    metalness: 0.1,
+    toneMapped: false,
+  });
 
-const box = (w: number, h: number, d: number, m: THREE.Material) => new THREE.Mesh(new THREE.BoxGeometry(w, h, d), m);
-const cyl = (rt: number, rb: number, h: number, m: THREE.Material, seg = 12) =>
+const box = (w: number, h: number, d: number, m: THREE.Material) =>
+  new THREE.Mesh(createBeveledBox(w, h, d, Math.min(0.04, Math.min(w, Math.min(h, d)) * 0.2)), m);
+const cyl = (rt: number, rb: number, h: number, m: THREE.Material, seg = 14) =>
   new THREE.Mesh(new THREE.CylinderGeometry(rt, rb, h, seg), m);
 
 /** Axis-aligned barrel pointing down -Z (the mech faces -Z). */

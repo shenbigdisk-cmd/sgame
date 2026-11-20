@@ -6,10 +6,40 @@ interface EnergyFlash {
   duration: number;
 }
 
+interface ShockwaveRing {
+  mesh: THREE.Mesh;
+  age: number;
+  duration: number;
+  maxRadius: number;
+  initialOpacity: number;
+}
+
 /** Layered geometry keeps beams visible on both bloom and low-quality renderers. */
 export class WeaponEffects {
   private flashes: EnergyFlash[] = [];
+  private shockwaves: ShockwaveRing[] = [];
+  private ringGeo = new THREE.RingGeometry(0.82, 1.0, 36);
+
   constructor(private scene: THREE.Scene) {}
+
+  shockwave(pos: THREE.Vector3, maxRadius = 10, color = 0xffaa44, duration = 0.45) {
+    const mat = new THREE.MeshBasicMaterial({
+      color,
+      transparent: true,
+      opacity: 0.85,
+      depthWrite: false,
+      side: THREE.DoubleSide,
+      blending: THREE.AdditiveBlending,
+      toneMapped: false,
+    });
+    const mesh = new THREE.Mesh(this.ringGeo, mat);
+    mesh.position.set(pos.x, pos.y + 0.08, pos.z);
+    mesh.rotation.x = -Math.PI * 0.5;
+    mesh.scale.set(0.2, 0.2, 1);
+    this.scene.add(mesh);
+    this.shockwaves.push({ mesh, age: 0, duration, maxRadius, initialOpacity: 0.85 });
+    if (this.shockwaves.length > 25) this.removeShockwave(0);
+  }
 
   beam(from: THREE.Vector3, to: THREE.Vector3, color = 0x90e5ff, width = 0.06, duration = 0.18, lightning = false) {
     if (from.distanceToSquared(to) < 0.01) return;
@@ -65,6 +95,25 @@ export class WeaponEffects {
         if (material) material.opacity = material.userData.initialOpacity * fade;
       });
     }
+
+    for (let i = this.shockwaves.length - 1; i >= 0; i--) {
+      const sw = this.shockwaves[i];
+      sw.age += dt;
+      if (sw.age >= sw.duration) { this.removeShockwave(i); continue; }
+      const p = sw.age / sw.duration;
+      const ease = 1 - Math.pow(1 - p, 3);
+      const rad = 0.5 + sw.maxRadius * ease;
+      sw.mesh.scale.set(rad, rad, 1);
+      const mat = sw.mesh.material as THREE.MeshBasicMaterial;
+      mat.opacity = sw.initialOpacity * (1 - p * p);
+    }
+  }
+
+  private removeShockwave(index: number) {
+    const sw = this.shockwaves[index];
+    this.scene.remove(sw.mesh);
+    (sw.mesh.material as THREE.Material).dispose();
+    this.shockwaves.splice(index, 1);
   }
 
   private remove(index: number) {
@@ -77,5 +126,9 @@ export class WeaponEffects {
     this.flashes.splice(index, 1);
   }
 
-  dispose() { while (this.flashes.length) this.remove(0); }
+  dispose() {
+    while (this.flashes.length) this.remove(0);
+    while (this.shockwaves.length) this.removeShockwave(0);
+    this.ringGeo.dispose();
+  }
 }
