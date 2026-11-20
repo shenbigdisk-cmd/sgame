@@ -100,12 +100,12 @@ function harness(cfg = buildConfig(STARTER_EQUIPPED)): Harness {
     mats: { bullet: new THREE.MeshBasicMaterial(), playerShell: new THREE.MeshBasicMaterial(), playerRocket: new THREE.MeshBasicMaterial(), rocket: new THREE.MeshBasicMaterial() },
     projectiles: [], enemies: [], explosiveBarrels: [], smokeClouds: [],
     tmpA: new THREE.Vector3(), tmpB: new THREE.Vector3(), tmpC: new THREE.Vector3(), tmpD: new THREE.Vector3(),
-    muzzleLocal: () => new THREE.Vector3(), muzzleLight: { position: new THREE.Vector3(), intensity: 0 },
-    armRecoil: [0, 0], recoilPitch: 0, shake: 0, shotCounter: 0, primaryShots: 0, mgNoiseTimer: 0,
+    muzzleLocal: () => new THREE.Vector3(1.8, -1.4, -3.7), muzzleLight: { position: new THREE.Vector3(), intensity: 0 },
+    armRecoil: [0, 0], armRecoilVel: [0, 0], recoilPitch: 0, shake: 0, shotCounter: 0, primaryShots: 0, mgNoiseTimer: 0,
     shellDrop: 0, cannonCd: 0, secCd: 0, secCdMax: 0, time: 1, alive: true,
     muzzleFlash: vi.fn(), makeNoise: vi.fn(), sparks: vi.fn(), dust: vi.fn(), elementBurst: vi.fn(), addFeed: vi.fn(),
     audio: { playMG: vi.fn(), playCannon: vi.fn(), playScatter: vi.fn(), playEmp: vi.fn(), playFlame: vi.fn(), playCryo: vi.fn(), playArc: vi.fn() },
-    fire: { emit: vi.fn() }, smoke: { emit: vi.fn() }, weaponFx: { beam: vi.fn() },
+    fire: { emit: vi.fn() }, smoke: { emit: vi.fn() }, weaponFx: { beam: vi.fn(), shockwave: vi.fn() },
     hasLOS: () => true, traceCover: vi.fn((_origin, _dir, range: number) => range),
     damageEnemy: vi.fn((e: TestEnemy, damage: number) => { e.hp -= damage; }), beamHit: vi.fn(), enemyShoot: vi.fn(),
     panFor: () => 0,
@@ -253,5 +253,23 @@ describe('Volt EMP in the real simulation', () => {
     expect(linked.empResistance).toBe(EMP.resistance);
     expect(linked.hp).toBe(494);
     expect(far.hp).toBe(500);
+  });
+
+  it('dynamically converges shots on close-range and point-blank enemies directly in front of the mech', () => {
+    const game = harness();
+    const closeHostile = enemy(0);
+    closeHostile.pos.set(0, 50, 4); // 4m in front of camera at (0, 50, 0)
+    game.camera.position.set(0, 50, 0);
+    game.camera.lookAt(0, 50, 10);
+    game.camera.updateMatrixWorld(true);
+    game.enemies = [closeHostile];
+
+    game.firePrimaryBullets();
+    expect(game.projectiles).toHaveLength(1);
+    const p = game.projectiles[0];
+    // Shot is directed forward toward the close target
+    expect(p.vel.z).toBeGreaterThan(200);
+    game.updateProjectiles(0.02);
+    expect(closeHostile.hp).toBeLessThan(500);
   });
 });

@@ -1548,6 +1548,79 @@ export class Game {
     return range;
   }
 
+  /**
+   * Dynamically converge projectile trajectory toward the 3D point the player is aiming at.
+   * If an enemy or obstacle is within the crosshair reticle cone, weapons converge exactly on it.
+   * For point-blank targets where the target is closer than or at the muzzle plane,
+   * flags pointBlank so the bullet spawns from the cockpit sightline and hits immediately.
+   */
+  private getAimConvergence(range: number, muzzleWorldPos?: THREE.Vector3) {
+    this.camera.updateMatrixWorld();
+    const origin = this.camera.position.clone();
+    const dir = this.camera.getWorldDirection(new THREE.Vector3());
+    const coverDist = this.traceCover(origin, dir, range);
+    const slope = sightSlope(this.camera.fov, this.canvas?.clientHeight ?? 720);
+
+    let bestEnemy: Enemy | null = null;
+    let bestDist = Math.min(range, coverDist);
+    let bestScore = -Infinity;
+
+    for (const e of this.enemies) {
+      if (!e.alive) continue;
+      const center = this.enemyCenter(e);
+      const delta = center.clone().sub(origin);
+      const along = delta.dot(dir);
+      if (along <= 0.1 || along > bestDist + e.radius) continue;
+
+      const perpDistSq = delta.lengthSq() - along * along;
+      const coneRadius = e.radius + Math.max(0.6, along * slope);
+      if (perpDistSq > coneRadius * coneRadius) continue;
+      if (!this.hasLOS(origin, e.pos, 0, e.height * 0.5)) continue;
+
+      const perpDist = Math.sqrt(Math.max(0, perpDistSq));
+      const score = -perpDist * 3 - along * 0.02;
+      if (score > bestScore) {
+        bestScore = score;
+        bestEnemy = e;
+        bestDist = along;
+      }
+    }
+
+    let target: THREE.Vector3;
+    let distance: number;
+    if (bestEnemy) {
+      target = this.enemyCenter(bestEnemy);
+      distance = bestDist;
+    } else {
+      distance = Math.min(range, coverDist);
+      target = origin.clone().addScaledVector(dir, distance);
+      if (this.explosiveBarrels) {
+        for (const barrel of this.explosiveBarrels) {
+          if (barrel.destroyed) continue;
+          const delta = barrel.pos.clone().sub(origin);
+          const along = delta.dot(dir);
+          if (along <= 0.1 || along > distance + 1.2) continue;
+          const perpDistSq = delta.lengthSq() - along * along;
+          const coneRadius = 1.2 + Math.max(0.4, along * slope);
+          if (perpDistSq > coneRadius * coneRadius) continue;
+          target = barrel.pos.clone().add(new THREE.Vector3(0, 0.6, 0));
+          distance = along;
+          break;
+        }
+      }
+    }
+
+    let pointBlank = false;
+    if (muzzleWorldPos) {
+      const muzzleForwardDist = muzzleWorldPos.clone().sub(origin).dot(dir);
+      if (distance <= muzzleForwardDist + 0.8) {
+        pointBlank = true;
+      }
+    }
+
+    return { target, enemy: bestEnemy, distance, pointBlank, dir, origin };
+  }
+
   /** Mark the visible point under the sight, in either control mode. */
   private orbitalTarget() {
     this.camera.updateMatrixWorld();
@@ -1599,14 +1672,15 @@ export class Game {
     if (this.controls !== 'arcade') return null;
     let best: Enemy | null = null;
     let bestScore = -Infinity;
+    const slope = sightSlope(this.camera.fov, this.canvas?.clientHeight ?? 720);
     for (const e of this.enemies) {
       if (!e.alive) continue;
       const v = this.tmpA.set(e.pos.x - from.x, e.pos.y + e.height * 0.5 - from.y, e.pos.z - from.z);
       const d = v.length();
-      if (d - e.radius > range || d < 3) continue;
+      if (d - e.radius > range || d < 0.2) continue;
       const cos = v.divideScalar(d).dot(dir);
       const ang = Math.acos(clamp(cos, -1, 1));
-      const tol = (0.038 + e.radius * 0.008) * this.aimAssist;
+      const tol = Math.max((0.045 + e.radius * 0.01) * this.aimAssist, Math.atan(slope) + e.radius / Math.max(1, d));
       if (ang > tol || !this.hasLOS(from, e.pos, 0, e.height * 0.5)) continue;
       const score = -ang * 3 - d * 0.004;
       if (score > bestScore) {
@@ -1697,13 +1771,16 @@ export class Game {
     this.camera.updateMatrixWorld();
     const muzzle = this.camera.localToWorld(this.muzzleLocal('secondary').clone());
     const dir = this.camera.getWorldDirection(new THREE.Vector3());
-    const target = this.camera.position.clone().addScaledVector(dir, 200);
-    const spread = this.movementSpread(0.003, c.secondaryStability);
-    const vel = target.sub(muzzle).normalize();
+    const convergence = this.getAimConvergence(c.secondaryRange, muzzle);
+    const spawnOrigin = convergence.pointBlank
+      ? this.camera.position.clone().addScaledVector(dir, 0.4)
+      : muzzle;
+    const spread = this.movementSpread(0.003, c.secondaryStability) * (convergence.pointBlank ? 0.15 : 1);
+    const vel = convergence.target.clone().sub(spawnOrigin).normalize();
     vel.add(new THREE.Vector3(rand(-spread, spread), rand(-spread, spread), rand(-spread, spread))).normalize().multiplyScalar(c.shellSpeed);
-    const assist = this.assistTarget(muzzle, dir, c.secondaryRange);
+    const assist = convergence.enemy ?? this.assistTarget(this.camera.position, dir, c.secondaryRange);
     this.spawnProjectile(
-      'player', 'shell', muzzle, vel,
+      'player', 'shell', spawnOrigin, vel,
       c.cannonDamage * this.stats.cannonDmgMul * (over ? 2 : 1),
       c.splash * this.stats.splashMul * (over ? 1.6 : 1),
       this.shellDrop, 6, assist ? 2.2 * this.aimAssist : 0, assist,
@@ -1712,13 +1789,13 @@ export class Game {
     shell.weapon = 'cannon';
     shell.rangeLeft = c.secondaryRange;
     this.armRecoil[1] = 1;
-    this.armRecoilVel[1] = -14;
+    (this.armRecoilVel ??= [0, 0])[1] = -14;
     this.recoilPitch += 0.015;
     this.shake = Math.max(this.shake, over ? 0.22 : 0.08);
     this.muzzleLight.position.copy(this.muzzleLocal('secondary'));
     this.muzzleLight.intensity = over ? 720 : 420;
     this.muzzleFlash(muzzle, dir, over ? 1.7 : 1);
-    this.weaponFx.shockwave(this.pos, over ? 9.0 : 6.0, over ? 0xffbb44 : 0xff9933, 0.38);
+    this.weaponFx?.shockwave?.(this.pos, over ? 9.0 : 6.0, over ? 0xffbb44 : 0xff9933, 0.38);
     this.dust(this.pos, over ? 1.4 : 0.9);
     this.audio.playCannon();
     if (over) {
@@ -1737,11 +1814,15 @@ export class Game {
     this.camera.updateMatrixWorld();
     const muzzle = this.camera.localToWorld(this.muzzleLocal('primary').clone());
     const dir = this.camera.getWorldDirection(new THREE.Vector3());
-    const vel = this.camera.position.clone().addScaledVector(dir, 160).sub(muzzle).normalize();
-    const spread = this.movementSpread(coil ? 0.003 : 0.009, c.primaryStability);
+    const convergence = this.getAimConvergence(c.primaryRange, muzzle);
+    const spawnOrigin = convergence.pointBlank
+      ? this.camera.position.clone().addScaledVector(dir, 0.4)
+      : muzzle;
+    const vel = convergence.target.clone().sub(spawnOrigin).normalize();
+    const spread = this.movementSpread(coil ? 0.003 : 0.009, c.primaryStability) * (convergence.pointBlank ? 0.15 : 1);
     vel.add(new THREE.Vector3(rand(-spread, spread), rand(-spread, spread), rand(-spread, spread))).normalize().multiplyScalar(coil ? 340 : 270);
-    const assist = this.assistTarget(muzzle, dir, c.primaryRange);
-    this.spawnProjectile('player', 'bullet', muzzle, vel, c.mgDamage * this.stats.mgDmgMul, 0, 0, 3, assist ? 2.5 * this.aimAssist : 0, assist);
+    const assist = convergence.enemy ?? this.assistTarget(this.camera.position, dir, c.primaryRange);
+    this.spawnProjectile('player', 'bullet', spawnOrigin, vel, c.mgDamage * this.stats.mgDmgMul, 0, 0, 3, assist ? 2.5 * this.aimAssist : 0, assist);
     const shot = this.projectiles[this.projectiles.length - 1];
     shot.rangeLeft = c.primaryRange;
     if (c.loadout.primary) shot.weapon = c.loadout.primary;
@@ -1752,7 +1833,7 @@ export class Game {
     this.muzzleLight.intensity = coil ? 100 : 75;
     this.muzzleFlash(muzzle, dir, 0.3);
     this.armRecoil[0] = coil ? .45 : .7;
-    this.armRecoilVel[0] = coil ? -7 : -10;
+    (this.armRecoilVel ??= [0, 0])[0] = coil ? -7 : -10;
     this.recoilPitch += 0.001;
     this.audio.playMG(coil ? 'coil' : 'autocannon');
     this.mgNoiseTimer -= c.mgInterval;
@@ -1768,7 +1849,11 @@ export class Game {
     this.camera.updateMatrixWorld();
     const muzzle = this.camera.localToWorld(this.muzzleLocal('primary').clone());
     const dir = this.camera.getWorldDirection(new THREE.Vector3());
-    const center = this.camera.position.clone().addScaledVector(dir, 45).sub(muzzle).normalize();
+    const convergence = this.getAimConvergence(c.primaryRange, muzzle);
+    const spawnOrigin = convergence.pointBlank
+      ? this.camera.position.clone().addScaledVector(dir, 0.4)
+      : muzzle;
+    const center = convergence.target.clone().sub(spawnOrigin).normalize();
     const spread = this.movementSpread(c.scatterSpread, c.primaryStability);
     for (let i = 0; i < 6; i++) {
       const v = center.clone();
@@ -1777,7 +1862,7 @@ export class Game {
       v.z += rand(-spread, spread);
       v.normalize().multiplyScalar(c.scatterSpeed * rand(0.9, 1.1));
       this.spawnProjectile(
-        'player', 'shell', muzzle, v,
+        'player', 'shell', spawnOrigin, v,
         c.scatterDamage * this.stats.cannonDmgMul * (over ? 2 : 1),
         c.scatterSplash * this.stats.splashMul * (over ? 1.6 : 1), this.shellDrop, 3, 0,
       );
@@ -1786,13 +1871,13 @@ export class Game {
       pellet.rangeLeft = c.primaryRange;
     }
     this.armRecoil[0] = 1;
-    this.armRecoilVel[0] = -16;
+    (this.armRecoilVel ??= [0, 0])[0] = -16;
     this.recoilPitch += 0.035;
     this.shake = Math.max(this.shake, over ? 0.24 : 0.16);
     this.muzzleLight.position.copy(this.muzzleLocal('primary'));
     this.muzzleLight.intensity = over ? 720 : 500;
     this.muzzleFlash(muzzle, dir, over ? 1.7 : 1.2);
-    this.weaponFx.shockwave(this.pos, over ? 7.5 : 5.0, 0xffa544, 0.32);
+    this.weaponFx?.shockwave?.(this.pos, over ? 7.5 : 5.0, 0xffa544, 0.32);
     this.dust(this.pos, over ? 1.2 : 0.7);
     this.audio.playScatter();
     if (over) {
@@ -1893,7 +1978,7 @@ export class Game {
     this.muzzleLight.position.copy(this.muzzleLocal('secondary'));
     this.muzzleLight.intensity = flame ? 160 : discrete ? 320 : 110;
     this.armRecoil[1] = flame ? .25 : .16;
-    this.armRecoilVel[1] = -4;
+    (this.armRecoilVel ??= [0, 0])[1] = -4;
     this.makeNoise(55);
   }
 
@@ -2024,11 +2109,15 @@ export class Game {
     this.camera.updateMatrixWorld();
     const muzzle = this.camera.localToWorld(this.muzzleLocal('secondary').clone());
     const dir = this.camera.getWorldDirection(new THREE.Vector3());
-    const vel = this.camera.position.clone().addScaledVector(dir, 160).sub(muzzle).normalize();
-    const spread = this.movementSpread(0.004, c.secondaryStability);
+    const convergence = this.getAimConvergence(c.secondaryRange, muzzle);
+    const spawnOrigin = convergence.pointBlank
+      ? this.camera.position.clone().addScaledVector(dir, 0.4)
+      : muzzle;
+    const spread = this.movementSpread(0.004, c.secondaryStability) * (convergence.pointBlank ? 0.15 : 1);
+    const vel = convergence.target.clone().sub(spawnOrigin).normalize();
     vel.add(new THREE.Vector3(rand(-spread, spread), rand(-spread, spread), rand(-spread, spread))).normalize().multiplyScalar(230);
-    const assist = this.assistTarget(muzzle, dir, c.secondaryRange);
-    this.spawnProjectile('player', 'bullet', muzzle, vel, c.empDamage, 0, 0, 3, assist ? 2.2 * this.aimAssist : 0, assist);
+    const assist = convergence.enemy ?? this.assistTarget(this.camera.position, dir, c.secondaryRange);
+    this.spawnProjectile('player', 'bullet', spawnOrigin, vel, c.empDamage, 0, 0, 3, assist ? 2.2 * this.aimAssist : 0, assist);
     const pulse = this.projectiles[this.projectiles.length - 1];
     pulse.weapon = 'emp';
     pulse.rangeLeft = c.secondaryRange;
@@ -2037,7 +2126,7 @@ export class Game {
     this.secCd = c.empReload * this.stats.reloadMul;
     this.secCdMax = this.secCd;
     this.armRecoil[1] = 0.55;
-    this.armRecoilVel[1] = -8;
+    (this.armRecoilVel ??= [0, 0])[1] = -8;
     this.muzzleLight.position.copy(this.muzzleLocal('secondary'));
     this.muzzleLight.intensity = 200;
     this.muzzleFlash(muzzle, dir, 0.45);
@@ -2049,13 +2138,17 @@ export class Game {
     this.camera.updateMatrixWorld();
     const muzzle = this.camera.localToWorld(this.muzzleLocal('secondary').clone());
     const direction = this.camera.getWorldDirection(new THREE.Vector3());
-    const target = this.camera.position.clone().addScaledVector(direction, 40);
+    const convergence = this.getAimConvergence(this.cfg.secondaryRange, muzzle);
+    const spawnOrigin = convergence.pointBlank
+      ? this.camera.position.clone().addScaledVector(direction, 0.4)
+      : muzzle;
+    const target = convergence.target.clone();
     target.y = heightAt(target.x, target.z);
     const flight = 0.8;
     const gravity = 18;
-    const velocity = target.sub(muzzle).divideScalar(flight);
+    const velocity = target.sub(spawnOrigin).divideScalar(flight);
     velocity.y += 0.5 * gravity * flight;
-    this.spawnProjectile('player', 'rocket', muzzle, velocity, 0, 0, gravity, 3.5, 0);
+    this.spawnProjectile('player', 'rocket', spawnOrigin, velocity, 0, 0, gravity, 3.5, 0);
     const ball = this.projectiles[this.projectiles.length - 1];
     ball.weapon = 'cryoball';
     ball.rangeLeft = this.cfg.secondaryRange;
@@ -2063,7 +2156,7 @@ export class Game {
     mesh.material = this.mats.playerRocket;
     mesh.scale.setScalar(1.35);
     this.armRecoil[1] = .8;
-    this.armRecoilVel[1] = -12;
+    (this.armRecoilVel ??= [0, 0])[1] = -12;
     this.secCd = this.cryoCooldown;
     this.secCdMax = this.cryoCooldown;
     this.muzzleFlash(muzzle, direction, 0.45);
