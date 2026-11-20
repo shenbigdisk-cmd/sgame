@@ -17,6 +17,8 @@ export interface ObjectiveWaypoint {
   relAngle: number; // -PI..PI relative to turret view
   color: string;
   isExtraction?: boolean;
+  optional?: boolean;
+  range?: number;
 }
 
 export interface MilitaryInstallation {
@@ -514,6 +516,8 @@ export class CampaignWorldManager {
         relAngle,
         color,
         isExtraction: obj.type === 'reach_extraction',
+        optional: obj.optional,
+        range: obj.radius,
       });
     }
 

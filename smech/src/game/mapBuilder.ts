@@ -297,6 +297,8 @@ export interface MapResult {
   waterTexture: THREE.Texture;
   /** move the perimeter fence to a new radius */
   setRadius: (r: number) => void;
+  /** show or hide the fence visuals without changing the movement limit */
+  setBoundaryVisible: (visible: boolean) => void;
   /** per-frame animation (turbines, radar dishes, fence shimmer) */
   animate: (dt: number, t: number) => void;
 }
@@ -591,6 +593,11 @@ export function buildMap(parent: THREE.Object3D, obstacles: Obstacle[], makeWrec
     (cableGeo.getAttribute('position') as THREE.BufferAttribute).needsUpdate = true;
   };
   setRadius(START_RADIUS);
+  const setBoundaryVisible = (visible: boolean) => {
+    fence.visible = visible;
+    pylons.visible = visible;
+    cables.visible = visible;
+  };
 
   // ---- shared materials & instanced pools -------------------------------
   const propNormal = getBrushedMetalNormalTexture();
@@ -1789,5 +1796,5 @@ export function buildMap(parent: THREE.Object3D, obstacles: Obstacle[], makeWrec
     for (const d of radarDishes) d.rotation.y += dt * 0.9;
   };
 
-  return { structures, relays, fires, barrels, waterTexture, setRadius, animate };
+  return { structures, relays, fires, barrels, waterTexture, setRadius, setBoundaryVisible, animate };
 }

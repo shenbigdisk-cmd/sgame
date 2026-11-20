@@ -74,12 +74,19 @@ export default function GameView({
   const prevKillsRef = useRef(0);
   const lastSoundtrackUpdateRef = useRef(0);
   const lastWaypointUpdateRef = useRef(0);
+  const soundtrackRef = useRef(soundtrack);
   const [objectives, setObjectives] = useState<CampaignObjective[]>(() =>
     campaignMission ? campaignMission.objectives.map((o) => ({ ...o })) : [],
   );
+  const [campaignStage, setCampaignStage] = useState(1);
   const [activeTransmission, setActiveTransmission] = useState<RadioTransmission | null>(null);
   const [extractionReady, setExtractionReady] = useState(false);
+  const extractionReadyRef = useRef(extractionReady);
   const [waypoints, setWaypoints] = useState<ObjectiveWaypoint[]>([]);
+
+  useEffect(() => {
+    soundtrackRef.current = soundtrack;
+  }, [soundtrack]);
 
   useEffect(() => {
     if (!campaignMission) return;
@@ -87,9 +94,12 @@ export default function GameView({
       onTransmission: (t) => setActiveTransmission(t),
       onObjectiveUpdate: () => {
         setObjectives([...engine.objectives]);
+        setCampaignStage(engine.currentStage);
       },
-      onStageAdvance: (_stage, newSpawns) => {
+      onStageAdvance: (stage, newSpawns) => {
         setObjectives([...engine.objectives]);
+        setCampaignStage(stage);
+        extractionReadyRef.current = engine.extractionReady;
         setExtractionReady(engine.extractionReady);
         const g = gameRef.current;
         if (g) {
@@ -104,6 +114,8 @@ export default function GameView({
     });
     campaignEngineRef.current = engine;
     setObjectives([...engine.objectives]);
+    setCampaignStage(engine.currentStage);
+    extractionReadyRef.current = engine.extractionReady;
     setExtractionReady(engine.extractionReady);
     prevKillsRef.current = 0;
   }, [campaignMission, onCampaignVictory]);
@@ -153,25 +165,27 @@ export default function GameView({
           onHud: (nextHud) => {
             setHud(nextHud);
             const now = performance.now();
+            const engine = campaignEngineRef.current;
+            const currentSoundtrack = soundtrackRef.current;
 
-            if (soundtrack && now - lastSoundtrackUpdateRef.current > 350) {
+            if (currentSoundtrack && now - lastSoundtrackUpdateRef.current > 350) {
               lastSoundtrackUpdateRef.current = now;
               if (nextHud.enemiesLeft > 0) {
-                soundtrack.setMood(nextHud.boss ? 'boss' : 'combat');
-                soundtrack.setIntensity(Math.min(1, nextHud.enemiesLeft / 6));
-              } else if (extractionReady) {
-                soundtrack.setMood('victory');
+                currentSoundtrack.setMood(nextHud.boss ? 'boss' : 'combat');
+                currentSoundtrack.setIntensity(Math.min(1, nextHud.enemiesLeft / 6));
+              } else if (engine?.extractionReady ?? extractionReadyRef.current) {
+                currentSoundtrack.setMood('victory');
               } else {
-                soundtrack.setMood('patrol');
-                soundtrack.setIntensity(0.2);
+                currentSoundtrack.setMood('patrol');
+                currentSoundtrack.setIntensity(0.2);
               }
             }
 
-            const engine = campaignEngineRef.current;
             if (engine && g) {
               const hpRatio = nextHud.maxHp > 0 ? nextHud.hp / nextHud.maxHp : 1;
               engine.update(0.05, g.playerPos.x, g.playerPos.z, hpRatio);
-              if (engine.extractionReady !== extractionReady) {
+              if (engine.extractionReady !== extractionReadyRef.current) {
+                extractionReadyRef.current = engine.extractionReady;
                 setExtractionReady(engine.extractionReady);
               }
 
@@ -236,7 +250,7 @@ export default function GameView({
       gameRef.current = null;
       setGame(null);
     };
-  }, [vehicle, config, stepWeight, mechName, controls, seed, audio, touch, onLoot]);
+  }, [vehicle, config, stepWeight, mechName, controls, seed, audio, touch, onLoot, campaignMission]);
 
   // live cockpit preferences are pushed into the running simulation
   useEffect(() => {
@@ -274,6 +288,7 @@ export default function GameView({
       {campaignMission && (
         <CampaignHUD
           objectives={objectives}
+          stage={campaignStage}
           transmission={activeTransmission}
           extractionReady={extractionReady}
           waypoints={waypoints}

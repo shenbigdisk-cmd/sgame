@@ -684,6 +684,7 @@ export class Game {
     // procedural terrain, districts, roads, cover and set dressing
     const map = buildMap(this.worldRoot, this.obstacles, () => createTankMesh(PALETTES.wreck).group, this.layout);
     this.mapApi = map;
+    if (this.opts.campaignMode) map.setBoundaryVisible(false);
     this.fireSpots = map.fires;
     this.explosiveBarrels = map.barrels;
     this.waterTexture = map.waterTexture;
@@ -862,6 +863,7 @@ export class Game {
 
     const map = buildMap(this.worldRoot, this.obstacles, () => createTankMesh(PALETTES.wreck).group, this.layout);
     this.mapApi = map;
+    if (this.opts.campaignMode) map.setBoundaryVisible(false);
     this.fireSpots = map.fires;
     this.explosiveBarrels = map.barrels;
     this.waterTexture = map.waterTexture;

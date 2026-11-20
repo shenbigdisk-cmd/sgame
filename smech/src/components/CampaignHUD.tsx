@@ -5,6 +5,7 @@ import type { ObjectiveWaypoint } from '../game/campaignWorld';
 
 interface CampaignHUDProps {
   objectives: CampaignObjective[];
+  stage: number;
   transmission: RadioTransmission | null;
   extractionReady: boolean;
   waypoints?: ObjectiveWaypoint[];
@@ -29,8 +30,28 @@ function callsignColor(callsign: string): string {
   return member?.color ?? '#06b6d4';
 }
 
+function bearingCue(relAngle: number): { icon: string; instruction: string } {
+  const angle = Math.abs(relAngle);
+  if (angle < 0.32) return { icon: '↑', instruction: 'AHEAD' };
+  if (angle > 2.55) return { icon: '↻', instruction: 'TURN AROUND' };
+  return relAngle > 0
+    ? { icon: '→', instruction: 'TURN RIGHT' }
+    : { icon: '←', instruction: 'TURN LEFT' };
+}
+
+const OBJECTIVE_HINT: Partial<Record<CampaignObjective['type'], string>> = {
+  infiltrate_zone: 'ENTER THE MARKED AREA',
+  hold_zone: 'STAY INSIDE THE RING',
+  reach_extraction: 'REACH THE EXTRACTION BEACON',
+  demolish_installation: 'DESTROY THE MARKED INSTALLATION',
+  neutralize_outpost: 'ELIMINATE HOSTILES IN THE AREA',
+  secure_fob: 'ELIMINATE HOSTILES IN THE AREA',
+  eliminate_warlord: 'ELIMINATE THE WARLORD',
+};
+
 export default function CampaignHUD({
   objectives,
+  stage,
   transmission,
   extractionReady,
   waypoints = [],
@@ -38,116 +59,139 @@ export default function CampaignHUD({
   operationName,
 }: CampaignHUDProps) {
   const [hiddenId, setHiddenId] = useState<string | null>(null);
+  const [collapsed, setCollapsed] = useState(false);
 
   useEffect(() => {
     if (!transmission) return;
-    const timer = setTimeout(() => setHiddenId(transmission.id), 8000);
+    const timer = setTimeout(() => setHiddenId(transmission.id), 6000);
     return () => clearTimeout(timer);
   }, [transmission]);
 
   const activeTransmission =
     transmission && hiddenId !== transmission.id ? transmission : null;
-
-  const currentStage = objectives.find((o) => !o.completed)?.stage ?? objectives[objectives.length - 1]?.stage ?? 1;
+  const activeObjectives = objectives.filter((obj) => obj.stage === stage && !obj.completed);
+  const primaryWaypoint = [...waypoints].sort((a, b) => {
+    if (Boolean(a.optional) !== Boolean(b.optional)) return a.optional ? 1 : -1;
+    return a.dist - b.dist;
+  })[0];
+  const cue = primaryWaypoint ? bearingCue(primaryWaypoint.relAngle) : null;
+  const inObjectiveArea = Boolean(
+    primaryWaypoint?.range !== undefined && primaryWaypoint.dist <= primaryWaypoint.range,
+  );
 
   return (
     <>
-      {/* Top Center Tactical Waypoint Compass HUD */}
-      <div className="absolute top-4 left-1/2 -translate-x-1/2 z-20 flex flex-col items-center pointer-events-none select-none font-mono">
-        <div className="flex items-center gap-4 rounded-full border border-slate-700/80 bg-black/80 px-6 py-1.5 shadow-[0_0_20px_rgba(0,0,0,0.8)] backdrop-blur">
-          {waypoints.length > 0 ? (
-            waypoints.map((wp) => {
-              const isCenter = Math.abs(wp.relAngle) < 0.35;
-              const isLeft = wp.relAngle < -0.35;
-
-              return (
-                <div
-                  key={wp.id}
-                  className="flex items-center gap-2 text-xs font-bold tracking-wider"
-                  style={{ color: wp.color }}
-                >
-                  {isLeft && <span>◀</span>}
-                  {isCenter && <span className="animate-pulse">◆</span>}
-                  <span>
-                    {wp.title}: {wp.dist}m
-                  </span>
-                  {!isLeft && !isCenter && <span>▶</span>}
-                </div>
-              );
-            })
-          ) : (
-            <span className="text-xs text-slate-400">NO ACTIVE WAYPOINTS</span>
-          )}
-        </div>
-      </div>
-
-      {/* Objective Tracker (Top Left) */}
-      <div className="absolute top-16 left-6 z-20 flex flex-col gap-1.5 rounded border border-amber-900/60 bg-black/85 p-3.5 font-mono text-xs backdrop-blur pointer-events-none max-w-sm shadow-xl">
-        <div className="flex items-center justify-between border-b border-slate-800 pb-1.5 mb-1">
-          <span className="text-[10px] font-bold uppercase tracking-widest text-amber-400">
-            {missionTitle ? `${missionTitle} // STAGE ${currentStage}` : 'SORTIE OBJECTIVES'}
-          </span>
-          {extractionReady && (
-            <span className="animate-pulse rounded bg-emerald-950 px-2 py-0.5 text-[10px] font-bold text-emerald-300 border border-emerald-500 shadow-[0_0_10px_rgba(16,185,129,0.4)]">
-              AIRLIFT BEACON ACTIVE
-            </span>
-          )}
-        </div>
-        {operationName && (
-          <div className="text-[9px] tracking-[0.25em] text-slate-500 mb-1">OP: {operationName}</div>
-        )}
-
-        {objectives.map((obj) => {
-          const isHold = obj.type === 'hold_zone';
-          const holdPct = isHold ? Math.min(100, Math.floor((obj.currentCount / obj.targetCount) * 100)) : 0;
-          return (
-            <div key={obj.id} className={`flex items-start gap-2.5 text-[11px] py-0.5 ${obj.optional ? 'opacity-70' : ''}`}>
-              <span
-                className={`font-bold mt-0.5 ${
-                  obj.completed
-                    ? 'text-emerald-400'
-                    : obj.type === 'reach_extraction' && !extractionReady
-                      ? 'text-slate-600'
-                      : 'text-amber-400'
-                }`}
-              >
-                {obj.completed ? '☑' : '☐'}
-              </span>
-              <div className="flex flex-col flex-1">
-                <span
-                  className={`${
-                    obj.completed
-                      ? 'line-through text-slate-500 font-semibold'
-                      : obj.type === 'reach_extraction' && !extractionReady
-                        ? 'text-slate-500 italic'
-                        : 'text-slate-200 font-bold'
-                  }`}
-                >
-                  {obj.optional && <span className="text-[9px] text-cyan-400 mr-1">[OPT]</span>}
-                  {obj.title}
-                  {obj.targetCount > 1 && !obj.completed && (
-                    <span className="text-amber-300 ml-1.5">
-                      {isHold ? `(${Math.floor(obj.currentCount)}/${obj.targetCount}s)` : `(${obj.currentCount}/${obj.targetCount})`}
-                    </span>
-                  )}
-                </span>
-                <span className="text-[10px] text-slate-400">{obj.desc}</span>
-                {isHold && !obj.completed && (
-                  <div className="mt-1 h-1 w-full bg-slate-800 rounded-full overflow-hidden">
-                    <div className="h-full bg-violet-400 transition-all duration-300" style={{ width: `${holdPct}%` }} />
-                  </div>
-                )}
-              </div>
+      {/* Clear, single-target guidance directly below the cockpit compass. */}
+      <div className="pointer-events-none absolute left-1/2 top-[3.25rem] z-20 w-[min(27rem,calc(100vw-1.5rem))] -translate-x-1/2 select-none font-mono">
+        <div className="flex min-h-12 items-center gap-3 border border-amber-400/50 bg-black/85 px-3 py-2 shadow-[0_8px_24px_rgba(0,0,0,0.55)] backdrop-blur-sm">
+          <div className="flex h-8 w-9 shrink-0 items-center justify-center border border-amber-400/40 bg-amber-400/10 text-2xl font-black leading-none text-amber-300">
+            {cue?.icon ?? '◇'}
+          </div>
+          <div className="min-w-0 flex-1">
+            <div className="flex items-center gap-2 text-[9px] font-bold tracking-[0.2em] text-amber-300">
+              <span>{primaryWaypoint ? (inObjectiveArea ? 'OBJECTIVE AREA' : cue?.instruction) : 'NO ACTIVE BEARING'}</span>
+              {primaryWaypoint?.optional && <span className="text-cyan-300">BONUS</span>}
             </div>
-          );
-        })}
+            <div className="truncate text-xs font-bold text-white">
+              {primaryWaypoint?.title ?? (activeObjectives.length ? 'SECURE THE AREA' : 'AWAITING ORDERS')}
+            </div>
+          </div>
+          {primaryWaypoint && (
+            <div className="shrink-0 border-l border-slate-700 pl-3 text-right">
+              <div className="text-lg font-black tabular-nums leading-none text-white">{primaryWaypoint.dist}</div>
+              <div className="mt-1 text-[9px] tracking-widest text-slate-400">METRES</div>
+            </div>
+          )}
+        </div>
       </div>
 
-      {/* Radio Transmission Display (Bottom Center / In-Cockpit Screen) */}
+      {/* Only live tasks for this stage are shown; completed and future tasks leave the HUD. */}
+      <div className="pointer-events-none absolute left-4 top-[5.75rem] z-20 w-[min(21rem,calc(100vw-2rem))] select-none font-mono">
+        <section className="border-l-2 border-amber-400 bg-black/80 px-3 py-2 shadow-lg backdrop-blur-sm">
+          <header className="flex items-center justify-between gap-3">
+            <div className="min-w-0">
+              <div className="truncate text-[9px] font-bold uppercase tracking-[0.18em] text-amber-300">
+                {operationName || missionTitle || 'SORTIE'} <span className="text-slate-500">//</span> STAGE {stage}
+              </div>
+              {missionTitle && operationName && (
+                <div className="truncate text-[9px] tracking-wider text-slate-400">{missionTitle}</div>
+              )}
+            </div>
+            <button
+              type="button"
+              className="pointer-events-auto flex h-6 w-6 shrink-0 items-center justify-center border border-slate-700 text-slate-300 hover:border-amber-400 hover:text-amber-300"
+              aria-label={collapsed ? 'Expand mission objectives' : 'Collapse mission objectives'}
+              aria-expanded={!collapsed}
+              onClick={() => setCollapsed((value) => !value)}
+            >
+              {collapsed ? '+' : '−'}
+            </button>
+          </header>
+
+          {!collapsed && (
+            <div className="mt-1.5 border-t border-slate-800 pt-1.5">
+              {activeObjectives.length > 0 ? (
+                <div className="flex flex-col gap-1.5">
+                  {activeObjectives.slice(0, 3).map((obj) => {
+                    const isHold = obj.type === 'hold_zone';
+                    const holdPct = isHold
+                      ? Math.min(100, Math.floor((obj.currentCount / obj.targetCount) * 100))
+                      : 0;
+                    const counter = isHold
+                      ? `${Math.floor(obj.currentCount)} / ${obj.targetCount}s`
+                      : obj.targetCount > 1
+                        ? `${obj.currentCount} / ${obj.targetCount}`
+                        : null;
+                    return (
+                      <div key={obj.id} className="min-w-0">
+                        <div className="flex items-start gap-2">
+                          <span className={`mt-px text-xs ${obj.optional ? 'text-cyan-300' : 'text-amber-300'}`}>
+                            {obj.optional ? '◇' : '◆'}
+                          </span>
+                          <span className="min-w-0 flex-1 truncate text-[11px] font-bold leading-snug text-slate-100">
+                            {obj.optional && <span className="mr-1 text-[9px] text-cyan-300">BONUS</span>}
+                            {obj.title}
+                          </span>
+                          {counter && <span className="shrink-0 text-[10px] tabular-nums text-amber-200">{counter}</span>}
+                        </div>
+                        {isHold ? (
+                          <div className="ml-4 mt-1 h-1 overflow-hidden rounded-full bg-slate-700">
+                            <div className="h-full bg-violet-400 transition-[width] duration-300" style={{ width: `${holdPct}%` }} />
+                          </div>
+                        ) : (
+                          <div className="ml-4 truncate text-[9px] tracking-wider text-slate-400">
+                            {OBJECTIVE_HINT[obj.type]}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                  {activeObjectives.length > 3 && (
+                    <div className="ml-4 text-[9px] text-slate-400">+{activeObjectives.length - 3} MORE TASKS</div>
+                  )}
+                </div>
+              ) : (
+                <div className="text-[10px] tracking-wider text-emerald-300">STAGE SECURED · NEW ORDERS INBOUND</div>
+              )}
+            </div>
+          )}
+
+          {extractionReady && !collapsed && (
+            <div className="mt-1.5 border-t border-emerald-500/30 pt-1 text-[9px] font-bold tracking-widest text-emerald-300">
+              EXTRACTION BEACON ACTIVE
+            </div>
+          )}
+        </section>
+      </div>
+
+      {/* Brief radio call; it clears on its own after six seconds. */}
       {activeTransmission && (
-        <div className="absolute bottom-28 left-1/2 -translate-x-1/2 z-30 flex items-center gap-3.5 rounded-lg border bg-black/95 px-5 py-3 font-mono shadow-[0_0_30px_rgba(6,182,212,0.4)] backdrop-blur max-w-xl pointer-events-none animate-in fade-in slide-in-from-bottom-2 duration-200" style={{ borderColor: `${callsignColor(activeTransmission.callsign)}88` }}>
+        <div
+          className="pointer-events-none absolute bottom-28 left-1/2 z-30 flex max-w-[min(34rem,calc(100vw-2rem))] -translate-x-1/2 items-center gap-3 rounded border bg-black/95 px-4 py-2.5 font-mono shadow-[0_0_24px_rgba(6,182,212,0.3)] backdrop-blur"
+          style={{ borderColor: `${callsignColor(activeTransmission.callsign)}88` }}
+        >
           <div
-            className="flex h-10 w-10 shrink-0 items-center justify-center rounded border font-bold text-[9px] text-center leading-tight"
+            className="flex h-8 w-8 shrink-0 items-center justify-center rounded border text-[9px] font-bold"
             style={{
               borderColor: callsignColor(activeTransmission.callsign),
               color: callsignColor(activeTransmission.callsign),
@@ -156,16 +200,15 @@ export default function CampaignHUD({
           >
             COMMS
           </div>
-
-          <div className="flex flex-col">
+          <div className="min-w-0">
             <div className="flex items-center gap-2">
-              <span className="text-[10px] font-bold uppercase tracking-wider" style={{ color: callsignColor(activeTransmission.callsign) }}>
+              <span className="truncate text-[10px] font-bold uppercase tracking-wider" style={{ color: callsignColor(activeTransmission.callsign) }}>
                 {activeTransmission.callsign} // {activeTransmission.sender}
               </span>
-              <span className="h-1.5 w-1.5 rounded-full animate-ping" style={{ backgroundColor: callsignColor(activeTransmission.callsign) }} />
+              <span className="h-1.5 w-1.5 shrink-0 animate-ping rounded-full" style={{ backgroundColor: callsignColor(activeTransmission.callsign) }} />
             </div>
-            <p className="text-xs text-slate-100 leading-snug mt-0.5">
-              "{activeTransmission.text}"
+            <p className="mt-0.5 line-clamp-2 text-[11px] leading-snug text-slate-100">
+              “{activeTransmission.text}”
             </p>
           </div>
         </div>
