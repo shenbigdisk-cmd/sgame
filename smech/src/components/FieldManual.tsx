@@ -28,7 +28,7 @@ export default function FieldManual() {
             'radar',
             '03 / ENCOUNTERS',
             'Read the stage',
-            'Deploy normally. Stage events roll automatically: a swarm can bring low-flying Wisps, and a Salvage Rush can bring credit caches and a Jackal hunting them. No mode selection.',
+            'Deploy normally. Stage events roll automatically: a swarm can bring low-flying Wisps, Ember Sappers sprint at you in later stages, and a Salvage Rush can bring credit caches and a Jackal hunting them. No mode selection.',
           ],
         ].map(([icon, label, name, body]) => (
           <article key={name}>

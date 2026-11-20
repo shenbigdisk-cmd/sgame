@@ -118,13 +118,16 @@ seconds to repair, or an amber relay to gain 25 seconds of rapid reload. Each
 can be claimed once in that sector.
 
 ### Waves
-Waves mix seven enemy chassis and can roll `SWARM`, `ARMORED PUSH`, `SNIPER NEST`,
+Waves mix eight enemy chassis and can roll `SWARM`, `ARMORED PUSH`, `SNIPER NEST`,
 `FLANKING AMBUSH` or `REPAIR CONVOY`. Convoys form up around a **Mender**,
 which repairs a wounded ally within 42 m every four seconds if it has line of
 sight. Eliminate it first or separate it from the formation. The **Bastion**
 halves bullet damage but takes 1.5× damage from shell and rocket impacts.
-Raiders, Hounds, Goliaths and Longbows round out the roster. Inspect **Enemy
-intel** in the hangar for all seven counters. Every fifth wave a
+Raiders, Hounds, Goliaths and Longbows round out the roster. Watch for the
+**Ember Sapper**: a demo rig that sprints at your hull and ram-detonates —
+destroying it still cooks the core off at half force, and its blast wounds
+anything nearby, friend or foe. Inspect **Enemy intel** in the hangar for all
+eight counters. Every fifth wave a
 **WARLORD** boss enters the arena. Between waves the arena is repaired, the
 shield is refilled and you choose one of three rewards.
 
@@ -162,6 +165,13 @@ Amber bands mark breachable buildings, warehouses, towers, ruins and blast scree
 
 Your reactor starts full. The hangar lists each weapon's kJ cost, and the round special controls show charges, cooldown, low power, or rearm status. Shield recovery is automatic. **Induction Loop** refunds 8 kJ per kill per rank; **Breach Charges** adds 50% base structure damage per rank.
 
+### Combat readouts
+Damage you deal is projected onto the cockpit as it lands: hull damage floats
+off the target, critical hits read larger and amber, and banked score pops up
+in gold (with the chain multiplier when you are streaking). Rapid hits on the
+same unit merge into a single climbing readout instead of a spray of
+numbers.
+
 ### Rewards
 Repeat picks show their new rank in the name: **Flux Regulator**, then **Flux Regulator 2**. One-time upgrades and instant repairs stay unnumbered. On the cockpit, a weapon's **+N** badge counts installed ranks that affect it, including shared weapon bonuses and evolutions. An evolved weapon has a violet badge. The Q/E badges stay visible while reloading or empty; upgraded primary and secondary guns get small icon badges above the hull meter. Hull-only perks and instant repairs do not increase a weapon's count.
 
@@ -170,7 +180,9 @@ signature categories. Weapons can be **evolved** into stronger forms
 (`STATIC LINK`, `CONCUSSION CORE`, `ABSOLUTE ZERO`, …), and signature upgrades
 introduce new mechanics (cluster munitions, reactive armour, overcharged
 rounds, repair swarm, killstreak surge, arc discharger, bulwark field,
-saturation barrage, supply network).
+saturation barrage, supply network, last circuit). **Last circuit** floods
+your weapons for +35% damage while the hull is below 35% — a dying machine
+fights harder.
 
 Every weapon has exactly one evolution, and an evolution only appears once you
 own the weapon it upgrades. Forge specials evolve too:

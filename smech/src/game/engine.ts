@@ -23,7 +23,8 @@ import type { ControlMode, DropKind, EnemyKind, GameStats, HudState, HudWeapon, 
 import { defaultStats, offerName, rollOffer, weaponUpgradeInfo, type PlayerStats } from './upgrades';
 import { VEHICLES, WEAPON_INFO, socketForWeapon, type VehicleConfig } from './vehicles';
 import { DEFAULT_SETTINGS, type Settings } from './settings';
-import { createBar, createSkimmerMesh, createMechMesh, createTankMesh, setShadows, type Palette } from './enemyMeshes';
+import { createBar, createSkimmerMesh, createMechMesh, createSapperMesh, createTankMesh, setShadows, type Palette, type MechMesh, type SapperMesh, type TankMesh } from './enemyMeshes';
+import { Floaters } from './floaters';
 import { aimAssist, cooldownReadiness, secondaryReadiness, triggerReadiness } from './readiness';
 import { ParticleSystem } from './particles';
 import { WeaponEffects } from './weaponEffects';
@@ -75,6 +76,8 @@ const ENEMIES: Record<EnemyKind, EnemyConfig> = {
   jackal: { name: 'Jackal', hp: 38, speed: 16.5, turnRate: 2.8, aimRate: 2.1, radius: 2.4, height: 5, preferredRange: 55, fireRange: 100, cooldown: 3.6, burstCount: 3, burstInterval: 0.14, score: 180 },
   bastion: { name: 'Bastion', hp: 115, speed: 6, turnRate: 0.8, aimRate: 1.3, radius: 3.6, height: 3.2, preferredRange: 48, fireRange: 125, cooldown: 4.2, burstCount: 1, burstInterval: 0, score: 220 },
   mender: { name: 'Mender', hp: 42, speed: 11, turnRate: 1.8, aimRate: 1.7, radius: 2.4, height: 5, preferredRange: 78, fireRange: 108, cooldown: 3.8, burstCount: 3, burstInterval: 0.15, score: 240 },
+  // no weapon: it ram-detonates. fireRange 0 keeps the trigger logic inert.
+  sapper: { name: 'Ember Sapper', hp: 34, speed: 15.5, turnRate: 3.6, aimRate: 0, radius: 1.7, height: 2.1, preferredRange: 0, fireRange: 0, cooldown: 99, burstCount: 0, burstInterval: 0, score: 130 },
   tank: { name: 'T-90 Raider', hp: 75, speed: 8, turnRate: 0.9, aimRate: 1.6, radius: 3.3, height: 3.0, preferredRange: 65, fireRange: 150, cooldown: 3.2, burstCount: 1, burstInterval: 0, score: 100 },
   mech: { name: 'Hound Walker', hp: 48, speed: 13, turnRate: 2.2, aimRate: 2.8, radius: 2.4, height: 5.0, preferredRange: 42, fireRange: 115, cooldown: 2.4, burstCount: 6, burstInterval: 0.11, score: 150 },
   heavy: { name: 'Goliath', hp: 240, speed: 5.5, turnRate: 0.7, aimRate: 1.1, radius: 4.6, height: 8.5, preferredRange: 85, fireRange: 175, cooldown: 4.6, burstCount: 2, burstInterval: 0.35, score: 400 },
@@ -96,6 +99,7 @@ const PALETTES: Record<EnemyKind | 'wreck', Palette> = {
   jackal: { hull: 0xbd722d, dark: 0x323534, glow: 0xffde65, glowIntensity: 3 },
   bastion: { hull: 0x967329, dark: 0x363229, glow: 0xffd547, glowIntensity: 2.8 },
   mender: { hull: 0x568879, dark: 0x253934, glow: 0x61ffcf, glowIntensity: 3 },
+  sapper: { hull: 0x59351f, dark: 0x241812, glow: 0xffa02e, glowIntensity: 3.4 },
   wreck: { hull: 0x2b2623, dark: 0x1a1816, glow: 0x111111, glowIntensity: 0 },
 };
 const BOSS_PALETTE: Palette = { hull: 0x5a1f2a, dark: 0x1a1013, glow: 0xff2d55, glowIntensity: 4 };
@@ -176,6 +180,8 @@ interface Enemy {
   empResistance: number;
   /** stealth: has this unit spotted the player? */
   aware: boolean;
+  /** sapper has announced its run with a warning ping */
+  warned: boolean;
   canSee: boolean;
   blindFire: boolean;
   losTimer: number;
@@ -444,6 +450,10 @@ export class Game {
   private armRecoil = [0, 0];
   private recoilPitch = 0;
   private shake = 0;
+  private floaters = new Floaters();
+  private floaterAnchor = new THREE.Vector3();
+  /** rising edge tracker for the LAST CIRCUIT signature upgrade */
+  private lastStandActive = false;
   private walkPhase = 0;
   private lastStep = 0;
   private damageFlash = 0;
@@ -1734,15 +1744,24 @@ export class Game {
 
   /** Direct, sound-free damage for beam ticks (the beam loops carry the feedback). */
   private get firepower() { return this.buffT.overcharge > 0 ? SALVAGE.firepower : 1; }
+  /** LAST CIRCUIT: a dying machine fights harder. Applied at the damage site. */
+  private lastStandMul() {
+    return this.stats.lastStand > 0 && this.hp > 0 && this.hp < this.maxHp * 0.35 ? 1 + 0.35 * this.stats.lastStand : 1;
+  }
 
   private beamHit(e: Enemy, dmg: number) {
     if (!e.alive) return;
+    let wasCrit = false;
     if (this.stats.critChance > 0 && Math.random() < this.stats.critChance) {
       dmg *= 2;
+      wasCrit = true;
       this.critTime = this.time;
     }
+    dmg *= this.lastStandMul();
     if (e.brittleTime > 0) dmg *= 1.25;
-    e.hp -= dmg * this.firepower;
+    const dealt = dmg * this.firepower;
+    e.hp -= dealt;
+    this.floaters.addDamage(e, this.floaterAnchor.set(e.pos.x, e.pos.y + e.height * 0.65, e.pos.z), dealt, wasCrit);
     e.hitFlash = 1;
     this.hitMarkerTime = this.time;
     this.alertUnit(e, 4);
@@ -2426,7 +2445,9 @@ export class Game {
         for (const e of this.enemies) {
           if (!e.alive) continue;
           if (Math.hypot(e.pos.x - b.pos.x, e.pos.z - b.pos.z) < b.radius + e.radius) {
-            e.hp -= 7 * this.firepower;
+            const scorch = 7 * this.firepower * this.lastStandMul();
+            e.hp -= scorch;
+            this.floaters.addDamage(e, this.floaterAnchor.set(e.pos.x, e.pos.y + e.height * 0.7, e.pos.z), scorch, false);
             e.hitFlash = Math.max(e.hitFlash, 0.5);
             if (e.hp <= 0) this.killEnemy(e);
           }
@@ -2602,6 +2623,15 @@ export class Game {
 
     // hull regen
     if (s.regen > 0 && this.hp < this.maxHp) this.hp = Math.min(this.maxHp, this.hp + s.regen * dt);
+    // LAST CIRCUIT: announce the moment the hull drops into the danger band
+    if (this.stats.lastStand > 0 && this.alive) {
+      const critical = this.hp > 0 && this.hp < this.maxHp * 0.35;
+      if (critical && !this.lastStandActive) {
+        this.addFeed('LAST CIRCUIT ENGAGED — +35% DAMAGE');
+        this.audio.playOverdrive();
+      }
+      this.lastStandActive = critical;
+    }
     // repair swarm: passive hull + shield rebuild
     if (s.nanites > 0) {
       if (this.hp < this.maxHp) this.hp = Math.min(this.maxHp, this.hp + 2.5 * s.nanites * dt);
@@ -2861,6 +2891,7 @@ export class Game {
       case 'autoloader': s.reloadMul *= 0.85; break;
       case 'he': s.cannonDmgMul += 0.25; s.splashMul += 0.25; break;
       case 'crit': s.critChance += 0.15; break;
+      case 'sig_laststand': s.lastStand += 1; break;
       case 'coolant': s.mgHeatMul *= 0.7; break;
       case 'ap': s.mgDmgMul += 0.4; break;
       case 'targeting': s.assistMul += 0.6; break;
@@ -3606,7 +3637,11 @@ export class Game {
       z = Math.cos(a) * 150;
     }
     const palette = boss ? BOSS_PALETTE : PALETTES[kind];
-    const built = kind === 'skimmer' ? createSkimmerMesh(palette) : kind === 'tank' || kind === 'bastion' || kind === 'sniper' ? createTankMesh(palette) : createMechMesh(palette, kind === 'heavy');
+    const built: TankMesh | SapperMesh | MechMesh = kind === 'skimmer' ? createSkimmerMesh(palette) : kind === 'sapper' ? createSapperMesh(palette) : kind === 'tank' || kind === 'bastion' || kind === 'sniper' ? createTankMesh(palette) : createMechMesh(palette, kind === 'heavy');
+    // capture structural parts up front — later narrowing branches would otherwise poison these types
+    const turretOf = 'turret' in built ? built.turret : null;
+    const torsoOf = 'torso' in built ? built.torso : null;
+    const legsOf: THREE.Object3D[] = 'legs' in built ? (built as MechMesh).legs : [];
     let laser: THREE.Line | null = null;
     if (kind === 'sniper' && 'turret' in built) {
       // long barrel + sensor mast
@@ -3671,6 +3706,7 @@ export class Game {
       stunTime: 0,
       empResistance: 0,
       aware: false,
+      warned: false,
       canSee: false,
       blindFire: false,
       losTimer: rand(0, 0.3),
@@ -3689,9 +3725,9 @@ export class Game {
       burst: 0,
       burstTimer: 0,
       side: 1,
-      turret: 'turret' in built ? built.turret : null,
-      torso: 'torso' in built ? built.torso : null,
-      legs: 'legs' in built ? built.legs : [],
+      turret: turretOf,
+      torso: torsoOf,
+      legs: legsOf,
       walkPhase: rand(0, TWO_PI),
       moving: false,
       hitFlash: 0,
@@ -3800,7 +3836,7 @@ export class Game {
     } else if (e.kind === 'mech' || e.kind === 'mender' || e.kind === 'jackal' || e.kind === 'skimmer') this.spawnProjectile('enemy', 'bullet', muzzle, dir, 3.5 * dm, 0, 0, 1.6, 0);
     else this.spawnProjectile('enemy', 'rocket', muzzle, dir, 22 * dm, 9, 0, 5.5, blind ? 0 : 0.85);
     this.muzzleFlash(muzzle, this.tmpA.copy(dir).normalize(), e.kind === 'mech' ? 0.3 : 0.8);
-    this.audio.playEnemyShot(e.kind === 'mender' || e.kind === 'jackal' || e.kind === 'skimmer' ? 'mech' : e.kind === 'bastion' ? 'tank' : e.kind, muzzle.distanceTo(this.pos), this.panFor(muzzle.x, muzzle.z));
+    this.audio.playEnemyShot(e.kind === 'mender' || e.kind === 'jackal' || e.kind === 'skimmer' || e.kind === 'sapper' ? 'mech' : e.kind === 'bastion' ? 'tank' : e.kind, muzzle.distanceTo(this.pos), this.panFor(muzzle.x, muzzle.z));
   }
 
   private updateEnemies(dt: number) {
@@ -3813,7 +3849,9 @@ export class Game {
       e.empResistance = Math.max(0, e.empResistance - dt);
       if (e.burnTime > 0 && e.alive) {
         e.burnTime -= dt;
-        e.hp -= e.burnDps * this.firepower * dt;
+        const burnTick = e.burnDps * this.firepower * this.lastStandMul() * dt;
+        e.hp -= burnTick;
+        this.floaters.addDamage(e, this.floaterAnchor.set(e.pos.x, e.pos.y + e.height * 0.7, e.pos.z), burnTick, false);
         e.hitFlash = Math.max(e.hitFlash, 0.4);
         if (Math.random() < dt * 9) {
           this.fire.emit({
@@ -3839,6 +3877,13 @@ export class Game {
       const dz = this.pos.z - e.pos.z;
       const dist = Math.hypot(dx, dz);
       const angToPlayer = Math.atan2(dx, dz);
+      const sapper = e.kind === 'sapper';
+      // sappers announce themselves once, early, while there is still time to react
+      if (sapper && !e.warned && dist < 52) {
+        e.warned = true;
+        this.addFeed('SAPPER RUNNING HOT — BREAK OFF OR BURN IT');
+        this.audio.playLockWarning();
+      }
 
       if (e.kind === 'mender' && (e.repairTimer -= dt) <= 0) {
         e.repairTimer = 1;
@@ -3884,8 +3929,8 @@ export class Game {
         if (!e.aware) e.searchPos.set(this.pos.x + rand(-40, 40), 0, this.pos.z + rand(-40, 40));
       }
 
-      e.stateTimer -= dt;
-      if (!e.canSee && this.alive) {
+      if (!sapper) e.stateTimer -= dt;
+      if (!e.canSee && this.alive && !sapper) {
         e.state = 'approach';
       } else if (e.stateTimer <= 0) {
         e.stateTimer = rand(1.5, 3.5);
@@ -3900,7 +3945,7 @@ export class Game {
 
       let desiredYaw = angToPlayer;
       let moveSpeed = cfg.speed;
-      if (!e.canSee && this.alive) {
+      if (!e.canSee && this.alive && !sapper) {
         // hunt: move to the last known / suspected position
         const sx = e.searchPos.x - e.pos.x;
         const sz = e.searchPos.z - e.pos.z;
@@ -3929,6 +3974,11 @@ export class Game {
         case 'hold':
           moveSpeed = 0;
           break;
+      }
+      if (sapper) {
+        desiredYaw = angToPlayer;
+        moveSpeed = this.alive ? cfg.speed * (dist < 28 ? 1.3 : 1) : 0;
+        e.state = 'approach';
       }
       if (e.kind === 'jackal' && this.alive) {
         // Runners can carry only one cache. Preserve the exact stolen value.
@@ -4021,7 +4071,12 @@ export class Game {
       // keep away from the player
       const pd = Math.hypot(e.pos.x - this.pos.x, e.pos.z - this.pos.z);
       const minPD = e.radius + this.cfg.radius;
-      if (pd < minPD && pd > 0.01) {
+      // proximity fuse: a sapper closes all the way in — it does not hold off
+      if (sapper && pd < e.radius + this.cfg.radius + 1.5) {
+        this.killEnemy(e, false);
+        continue;
+      }
+      if (pd < minPD && pd > 0.01 && !sapper) {
         const push = (minPD - pd) / pd;
         e.pos.x += (e.pos.x - this.pos.x) * push;
         e.pos.z += (e.pos.z - this.pos.z) * push;
@@ -4097,7 +4152,7 @@ export class Game {
       if (e.turret) e.turret.rotation.y = rel;
       if (e.torso) {
         e.torso.rotation.y = rel;
-        e.torso.position.y = (e.kind === 'heavy' ? 2.95 * 1.75 : 2.95) + Math.abs(Math.sin(e.walkPhase)) * (e.moving ? 0.18 : 0);
+        e.torso.position.y = (e.kind === 'heavy' ? 2.95 * 1.75 : e.kind === 'sapper' ? 0.08 : 2.95) + Math.abs(Math.sin(e.walkPhase)) * (e.moving ? (e.kind === 'sapper' ? 0.06 : 0.18) : 0);
       }
       if (e.legs.length) {
         const amp = e.moving ? 0.55 : 0.08;
@@ -4152,14 +4207,19 @@ export class Game {
     }
     this.alertUnit(e, 4);
     for (const o of this.enemies) if (o !== e && !o.aware && o.pos.distanceTo(e.pos) < 45) this.alertUnit(o, 4);
+    let wasCrit = false;
     if (this.stats.critChance > 0 && Math.random() < this.stats.critChance) {
       dmg *= 2;
+      wasCrit = true;
       this.critTime = this.time;
       this.audio.playCrit();
       this.sparks(this.tmpA.set(e.pos.x, e.pos.y + e.height * 0.5, e.pos.z), 1.4);
     }
+    if (powered) dmg *= this.lastStandMul();
     if (e.brittleTime > 0) dmg *= 1.25;
-    e.hp -= dmg * (powered ? this.firepower : 1);
+    const dealt = dmg * (powered ? this.firepower : 1);
+    e.hp -= dealt;
+    this.floaters.addDamage(e, this.floaterAnchor.set(e.pos.x, e.pos.y + e.height * 0.65, e.pos.z), dealt, wasCrit);
     e.hitFlash = 1;
     this.hitMarkerTime = this.time;
     this.audio.playHitEnemy();
@@ -4181,9 +4241,10 @@ export class Game {
     for (const e of this.enemies) if (e.pos.distanceTo(this.pos) < radius) this.alertUnit(e, 3.5);
   }
 
-  private killEnemy(e: Enemy) {
+  private killEnemy(e: Enemy, award = true) {
     if (!e.alive) return;
     e.alive = false;
+    if (e.kind === 'sapper') this.sapperBlast(e, award ? 0.72 : 1);
     if (e.burnTime > 0 && this.evolved('flame')) {
       const point = this.enemyCenter(e);
       this.elementBurst(point, 'fire', 20);
@@ -4198,21 +4259,28 @@ export class Game {
     this.explosion(p, e.boss ? 3.2 : e.kind === 'heavy' ? 2.4 : 1.5);
     this.audio.playExplosion(e.pos.distanceTo(this.pos), true, this.panFor(e.pos.x, e.pos.z));
     // kill streak: chained kills within 4s multiply score
-    if (this.time - this.streakTime < 4) this.streak++;
-    else this.streak = 1;
-    this.streakTime = this.time;
-    if (this.streak > 1) this.audio.playKillStreak(this.streak);
-    if (this.stats.haste > 0 && this.streak >= 3) {
+    if (award) {
+      if (this.time - this.streakTime < 4) this.streak++;
+      else this.streak = 1;
+      this.streakTime = this.time;
+    }
+    if (award && this.streak > 1) this.audio.playKillStreak(this.streak);
+    if (award && this.stats.haste > 0 && this.streak >= 3) {
       this.buffT.haste = 8;
       if (this.streak === 3) this.addFeed('KILLSTREAK SURGE  +30% RELOAD  +20% SPEED');
     }
     const mult = this.stats.salvage * (1 + Math.min(4, this.streak - 1) * 0.25);
     const gained = Math.round(e.cfg.score * mult);
-    this.score += gained;
-    this.kills++;
-    this.power=Math.min(this.cfg.powerCapacity,this.power+8*(this.taken.get('induction')??0));
-    this.addFeed(`${e.cfg.name.toUpperCase()} DESTROYED  +${gained}${this.streak > 1 ? `  ×${this.streak} STREAK` : ''}`);
-    if (this.stats.vampire > 0) this.hp = Math.min(this.maxHp, this.hp + this.stats.vampire);
+    if (award) {
+      this.score += gained;
+      this.kills++;
+      this.power=Math.min(this.cfg.powerCapacity,this.power+8*(this.taken.get('induction')??0));
+      this.addFeed(`${e.cfg.name.toUpperCase()} DESTROYED  +${gained}${this.streak > 1 ? `  ×${this.streak} STREAK` : ''}`);
+      this.floaters.addScore(this.tmpA.set(e.pos.x, e.pos.y + e.height * 0.75, e.pos.z), gained, this.streak);
+      if (this.stats.vampire > 0) this.hp = Math.min(this.maxHp, this.hp + this.stats.vampire);
+    } else {
+      this.addFeed(`${e.cfg.name.toUpperCase()} DETONATED`);
+    }
     this.scene.remove(e.bar);
     e.bar.traverse((o) => {
       const m = o as THREE.Mesh;
@@ -4236,6 +4304,40 @@ export class Game {
       this.spawnPickup(e.pos.x + 4, e.pos.z);
       this.spawnPickup(e.pos.x - 4, e.pos.z);
     } else if (Math.random() < 0.22 * this.stats.pickupMul) this.spawnPickup(e.pos.x, e.pos.z);
+  }
+
+  /**
+   * Ember Sapper cook-off. Damages everything in the blast — including other
+   * hostiles, which rewards dragging a runner into its own formation. A
+   * sapper put down by fire detonates at reduced force; a ram detonation is
+   * full force. Aegis and shield behave as usual via damagePlayer.
+   */
+  private sapperBlast(e: Enemy, scale: number) {
+    const center = this.enemyCenter(e);
+    this.explosion(center, 1.15 + 1.05 * scale);
+    this.flashLight(center, 30 + 22 * scale);
+    this.audio.playExplosion(e.pos.distanceTo(this.pos), true, this.panFor(e.pos.x, e.pos.z));
+    this.makeNoise(44);
+    // burning fuel spray
+    for (let i = 0; i < 16; i++) {
+      this.fire.emit({
+        x: center.x + rand(-1.5, 1.5), y: center.y + rand(-0.5, 1.5), z: center.z + rand(-1.5, 1.5),
+        vx: rand(-5, 5), vy: rand(2, 8), vz: rand(-5, 5),
+        life: rand(0.35, 0.8), size0: rand(1.0, 1.6), size1: 0.25, c0: [1, 0.62, 0.18], c1: [1, 0.22, 0.05], grav: -6, drag: 1.4, alpha: 0.9,
+      });
+    }
+    const radius = 8 + 5 * scale;
+    const d = Math.hypot(this.pos.x - e.pos.x, this.pos.z - e.pos.z);
+    if (d < radius) {
+      const fall = 1 - d / radius;
+      this.damagePlayer(14 + 46 * Math.pow(fall, 1.35), e.pos);
+    }
+    for (const o of this.enemies) {
+      if (o === e || !o.alive) continue;
+      const od = o.pos.distanceTo(e.pos);
+      if (od < radius) this.damageEnemy(o, 22 + 48 * (1 - od / radius), false);
+    }
+    this.shake = Math.max(this.shake, clamp(1.15 - d / 20, 0, 0.75));
   }
 
   // -------------------------------------------------------------------------
@@ -4394,12 +4496,14 @@ export class Game {
       const sniperP = this.wave >= 2 ? 0.1 + this.wave * 0.012 : 0;
       if (tag === 'standard' && r > 0.84) return this.wave > 1 && r > 0.92 ? 'mender' : 'bastion';
       if (tag === 'standard' && r >= 0.64 && r <= 0.84) return 'skimmer';
-      if (tag === 'swarm') return r < 0.5 ? 'skimmer' : r < 0.85 ? 'mech' : 'tank';
+      if (tag === 'swarm') return r < 0.46 ? 'skimmer' : r < 0.76 ? 'mech' : r < 0.88 ? 'tank' : 'sapper';
       if (tag === 'armor') return r < 0.35 ? 'tank' : r < 0.6 ? 'heavy' : r < 0.9 ? 'bastion' : 'sniper';
       if (tag === 'snipers') return r < 0.45 ? 'sniper' : r < 0.75 ? 'mech' : 'tank';
       if (r < heavyP) return 'heavy';
       if (r < heavyP + sniperP) return 'sniper';
-      return Math.random() < 0.55 ? 'mech' : 'tank';
+      const tail = Math.random();
+      if (this.wave >= 2 && tail < 0.09) return 'sapper';
+      return tail < 0.6 ? 'mech' : 'tank';
     };
     for (let i = 0; i < count; i++) {
       const kind = tag === 'salvage' && i === 0 ? 'jackal' : tag === 'convoy' ? (i === 0 ? 'mender' : i % 2 ? 'bastion' : 'tank') : pickKind();
@@ -4582,6 +4686,7 @@ export class Game {
   }
 
   private updateEffects(dt: number) {
+    this.floaters.update(dt);
     this.weaponFx.update(dt);
     if (this.waterTexture) {
       this.waterTexture.offset.x += dt * 0.007;
@@ -4860,6 +4965,7 @@ export class Game {
       streak: this.streak,
       streakAge: this.time - this.streakTime,
       critAge: this.time - this.critTime,
+      floaters: this.floaters.project(this.camera),
       detected: this.enemies.filter((e) => e.aware).length,
       seenBy: this.enemies.filter((e) => e.canSee).length,
       ambushAge: this.time - this.ambushTime,

@@ -178,3 +178,74 @@ export function createSkimmerMesh(p:Palette):TankMesh {
   turret.position.y=0.65;const eye=new THREE.Mesh(new THREE.BoxGeometry(0.65,0.32,0.6),glow);eye.position.z=1.48;turret.add(eye);group.add(turret);setShadows(group);
   return {group,turret,flashMats:[hull]};
 }
+
+export interface SapperMesh {
+  group: THREE.Group;
+  torso: THREE.Group;
+  flashMats: THREE.MeshStandardMaterial[];
+}
+
+/**
+ * The Ember Sapper: a low demo rig with twin fuel drums slung beside a
+ * furnace core. No guns — the nose cone is the warhead.
+ */
+export function createSapperMesh(p: Palette): SapperMesh {
+  const { hull, dark, glow } = makeMats(p);
+  const group = new THREE.Group();
+  const torso = new THREE.Group();
+  torso.position.y = 0;
+
+  const chassis = new THREE.Mesh(new THREE.BoxGeometry(2.5, 0.85, 3.4), hull);
+  chassis.position.y = 0.78;
+  torso.add(chassis);
+
+  const nose = new THREE.Mesh(new THREE.ConeGeometry(0.95, 1.7, 4), dark);
+  nose.rotation.x = Math.PI / 2;
+  nose.rotation.y = Math.PI / 4;
+  nose.position.set(0, 0.78, 2.45);
+  torso.add(nose);
+
+  // twin incendiary drums, slung low along the flanks
+  const drumGeo = new THREE.CylinderGeometry(0.5, 0.5, 2.3, 10);
+  const drumL = new THREE.Mesh(drumGeo, dark);
+  drumL.rotation.x = Math.PI / 2;
+  drumL.position.set(1.55, 0.66, -0.15);
+  const drumR = drumL.clone();
+  drumR.position.x = -1.55;
+  torso.add(drumL, drumR);
+  // glowing charge bands keep the payload legible at a glance
+  const bandGeo = new THREE.CylinderGeometry(0.52, 0.52, 0.22, 10);
+  for (const side of [-1, 1]) {
+    for (const off of [-0.62, 0.62]) {
+      const band = new THREE.Mesh(bandGeo, glow);
+      band.rotation.x = Math.PI / 2;
+      band.position.set(side * 1.55, 0.66, off - 0.15);
+      torso.add(band);
+    }
+  }
+
+  // furnace core — the thing that cooks off when the rig dies
+  const core = new THREE.Mesh(new THREE.SphereGeometry(0.58, 12, 10), glow);
+  core.position.set(0, 1.28, 0.55);
+  torso.add(core);
+  const collar = new THREE.Mesh(new THREE.CylinderGeometry(0.66, 0.72, 0.3, 12), dark);
+  collar.position.set(0, 1.22, 0.55);
+  torso.add(collar);
+
+  const mast = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.09, 1.35, 6), dark);
+  mast.position.set(0.85, 1.75, -1.15);
+  const tip = new THREE.Mesh(new THREE.SphereGeometry(0.13, 8, 8), glow);
+  tip.position.set(0.85, 2.45, -1.15);
+  torso.add(mast, tip);
+
+  // stubby ground tracks
+  const trackGeo = new THREE.BoxGeometry(0.78, 0.56, 3.7);
+  const trackL = new THREE.Mesh(trackGeo, dark);
+  trackL.position.set(1.28, 0.3, 0);
+  const trackR = trackL.clone();
+  trackR.position.x = -1.28;
+  group.add(trackL, trackR, torso);
+
+  setShadows(group);
+  return { group, torso, flashMats: [hull] };
+}

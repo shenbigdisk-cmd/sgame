@@ -600,3 +600,50 @@
     line-height: 1;
   }
 }
+
+/* Floating combat readouts: damage numbers climb and fade where they land. */
+.cp-floaters {
+  position: absolute;
+  inset: 0;
+  z-index: 3;
+  overflow: hidden;
+  pointer-events: none;
+}
+.cp-floater {
+  position: absolute;
+  transform: translate(-50%, -50%);
+  font:
+    700 15px/1 'Share Tech Mono',
+    monospace;
+  letter-spacing: 0.05em;
+  color: #eef8fa;
+  text-shadow:
+    0 0 6px rgba(4, 10, 12, 0.9),
+    0 1px 2px rgba(4, 10, 12, 0.8);
+  animation: cp-floater-pop 0.16s ease-out;
+  will-change: left, top, opacity;
+}
+.cp-floater--crit {
+  font-size: 22px;
+  color: #ffc06a;
+  text-shadow:
+    0 0 12px rgba(255, 128, 26, 0.65),
+    0 1px 2px rgba(20, 4, 0, 0.9);
+}
+.cp-floater--score {
+  font-size: 17px;
+  color: #ffd94a;
+  text-shadow:
+    0 0 12px rgba(255, 205, 64, 0.55),
+    0 1px 2px rgba(24, 16, 0, 0.9);
+}
+@keyframes cp-floater-pop {
+  from {
+    transform: translate(-50%, -50%) scale(0.45);
+    opacity: 0;
+  }
+  to {
+    transform: translate(-50%, -50%) scale(1);
+    opacity: 1;
+  }
+}
