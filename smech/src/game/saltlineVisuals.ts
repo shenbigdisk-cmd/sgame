@@ -623,15 +623,39 @@ export function enhanceGroundMaterial(material: THREE.Material): void {
       // Asphalt darkening and tar seams
       diffuseColor.rgb *= mix(1.0, 0.65, uWetness * 0.5); // wet ground is darker
       diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.025, 0.025, 0.03), tar * 0.85); // dark tar sealant
+
+      // Painted industrial demarcation markings with sub-centimetre procedural chipping (Saltline chipN)
+      vec2 mGrid = fract(gxz / 12.0) * 12.0;
+      float lineX = smoothstep(0.07, 0.0, abs(mGrid.x - 6.0));
+      float lineZ = smoothstep(0.07, 0.0, abs(mGrid.y - 6.0));
+      float mark = max(lineX, lineZ);
+      if (mark > 0.01) {
+        float chipN = gNoise(gxz * 19.0) * 0.55 + gNoise(gxz * 64.0) * 0.35 + gNoise(gxz * 170.0) * 0.10;
+        float paintKeep = smoothstep(0.42, 0.64, chipN) * (1.0 - tar * 0.9);
+        vec3 markColor = vec3(0.88, 0.74, 0.32); // weathered signal amber
+        diffuseColor.rgb = mix(diffuseColor.rgb, markColor, mark * paintKeep * 0.75);
+      }
+
+      // Oil slicks with diesel rainbow iridescence (Saltline fuel/oil layer)
+      float oilN = gFbm(gxz * 0.18 + vec2(17.3, 31.7));
+      float oil = smoothstep(0.66, 0.82, oilN) * (1.0 - puddle * 0.6);
+      if (oil > 0.02) {
+        vec3 irid = vec3(
+          0.5 + 0.5 * sin(oilN * 32.0),
+          0.5 + 0.5 * sin(oilN * 32.0 + 2.1),
+          0.5 + 0.5 * sin(oilN * 32.0 + 4.2)
+        );
+        diffuseColor.rgb = mix(diffuseColor.rgb * 0.42, diffuseColor.rgb * 0.28 + irid * 0.16, oil * 0.75);
+      }
       `
     ).replace(
       '#include <roughnessmap_fragment>',
       `
       #include <roughnessmap_fragment>
-      // Roughness modulation: dry aggregate ~0.85 -> soaked ~0.35 -> puddle ~0.08
+      // Roughness modulation: dry aggregate ~0.85 -> soaked ~0.35 -> puddle ~0.045
       float baseR = mix(roughnessFactor, 0.35, uWetness * 0.7);
-      roughnessFactor = mix(baseR + (grain - 0.5) * 0.12, 0.08, puddle);
-      roughnessFactor = clamp(roughnessFactor, 0.04, 1.0);
+      roughnessFactor = mix(baseR + (grain - 0.5) * 0.12, 0.045, max(puddle, oil * 0.9));
+      roughnessFactor = clamp(roughnessFactor, 0.035, 1.0);
       `
     ).replace(
       '#include <normal_fragment_maps>',
@@ -649,7 +673,98 @@ export function enhanceGroundMaterial(material: THREE.Material): void {
 }
 
 // ---------------------------------------------------------------------------
-// 6. Brushed Metal & Scratched Armor Normal Map
+// 6. Procedural Paint Damage & Weathering for Obstacles (Saltline paintDmg model)
+// ---------------------------------------------------------------------------
+export function enhanceObstacleMaterial(
+  material: THREE.Material,
+  options: { wearAmount?: number; rustAmount?: number } = {}
+): void {
+  const noise = getNoiseTexture();
+  const wearAmount = options.wearAmount ?? 0.55;
+  const rustAmount = options.rustAmount ?? 0.65;
+
+  material.onBeforeCompile = (shader) => {
+    material.userData.shader = shader;
+    shader.uniforms.tNoise = { value: noise };
+    shader.uniforms.uWear = { value: wearAmount };
+    shader.uniforms.uRust = { value: rustAmount };
+
+    shader.vertexShader = `
+      varying vec3 vObstacleWorldPos;
+      varying vec3 vObstacleWorldNormal;
+      ${shader.vertexShader}
+    `.replace(
+      '#include <begin_vertex>',
+      `
+      #include <begin_vertex>
+      vObstacleWorldPos = (modelMatrix * vec4(transformed, 1.0)).xyz;
+      vObstacleWorldNormal = normalize((modelMatrix * vec4(normal, 0.0)).xyz);
+      `
+    );
+
+    shader.fragmentShader = `
+      varying vec3 vObstacleWorldPos;
+      varying vec3 vObstacleWorldNormal;
+      uniform sampler2D tNoise;
+      uniform float uWear;
+      uniform float uRust;
+
+      float oNoise(vec2 p) {
+        return texture2D(tNoise, p / 256.0).r;
+      }
+      float oFbm(vec2 p) {
+        float a = 0.5, s = 0.0;
+        for (int i = 0; i < 3; i++) {
+          s += a * oNoise(p);
+          p = mat2(1.6, 1.2, -1.2, 1.6) * p;
+          a *= 0.5;
+        }
+        return s / 0.875;
+      }
+
+      ${shader.fragmentShader}
+    `.replace(
+      '#include <map_fragment>',
+      `
+      #include <map_fragment>
+      vec3 wp = vObstacleWorldPos;
+      vec3 wn = normalize(vObstacleWorldNormal);
+      vec2 puv = abs(wn.y) > 0.5 ? wp.xz : (abs(wn.x) > 0.5 ? wp.zy : wp.xy);
+
+      // Procedural paint chipping (Saltline chipsF & paintDmg)
+      float wearPattern = oFbm(puv * 0.22 + vec2(14.3, 8.7));
+      float fineFlakes = oNoise(puv * 4.2) * 0.6 + oNoise(puv * 14.0) * 0.4;
+      float chip = smoothstep(0.72 - uWear * 0.16, 0.77, wearPattern * 0.6 + fineFlakes * 0.4);
+
+      // Dark substrate metal exposed under chipped paint
+      vec3 bareMetal = vec3(0.08, 0.085, 0.095);
+      diffuseColor.rgb = mix(diffuseColor.rgb, bareMetal, chip * 0.94);
+
+      // Rust halo around chipped areas
+      float rustZone = smoothstep(0.56 - uRust * 0.14, 0.68, wearPattern * 0.6 + fineFlakes * 0.4) * (1.0 - chip);
+      vec3 rustColor = vec3(0.42, 0.18, 0.07);
+      diffuseColor.rgb = mix(diffuseColor.rgb, rustColor, rustZone * 0.72);
+
+      // Vertical rust water streaks running down vertical faces (-Y is gravity)
+      if (abs(wn.y) < 0.45) {
+        float streakNoise = oNoise(vec2(wp.x + wp.z, wp.y * 0.08)) * oNoise(vec2((wp.x + wp.z) * 3.5, wp.y * 0.03));
+        float washout = smoothstep(0.52, 0.76, streakNoise) * rustZone;
+        diffuseColor.rgb = mix(diffuseColor.rgb, rustColor * 0.75, washout * 0.6);
+      }
+      `
+    ).replace(
+      '#include <roughnessmap_fragment>',
+      `
+      #include <roughnessmap_fragment>
+      // Roughness modulation: bare substrate and rust are coarse and matte
+      roughnessFactor = mix(roughnessFactor, 0.92, max(chip * 0.85, rustZone * 0.75));
+      `
+    );
+  };
+}
+
+// ---------------------------------------------------------------------------
+// 7. Brushed Metal & Scratched Armor Normal Map
 // ---------------------------------------------------------------------------
 let cachedMetalNormal: THREE.DataTexture | null = null;
 

@@ -1,5 +1,5 @@
 import { StructureField } from './structures';
-import { enhanceGroundMaterial, getBrushedMetalNormalTexture } from './saltlineVisuals';
+import { enhanceGroundMaterial, enhanceObstacleMaterial, getBrushedMetalNormalTexture } from './saltlineVisuals';
 /**
  * World builder: turns a sector layout into a dressed, lit and animated arena.
  */
@@ -516,7 +516,9 @@ export function buildMap(parent: THREE.Object3D, obstacles: Obstacle[], makeWrec
   // ---- shared materials & instanced pools -------------------------------
   const propNormal = getBrushedMetalNormalTexture();
   const concrete = new THREE.MeshStandardMaterial({ color: 0x8b857a, roughness: 0.88 });
+  enhanceObstacleMaterial(concrete, { wearAmount: 0.5, rustAmount: 0.4 });
   const darkConcrete = new THREE.MeshStandardMaterial({ color: 0x5d5952, roughness: 0.85 });
+  enhanceObstacleMaterial(darkConcrete, { wearAmount: 0.6, rustAmount: 0.5 });
   const metal = new THREE.MeshStandardMaterial({
     color: 0x555d64,
     roughness: 0.42,
@@ -524,6 +526,7 @@ export function buildMap(parent: THREE.Object3D, obstacles: Obstacle[], makeWrec
     normalMap: propNormal,
     normalScale: new THREE.Vector2(0.3, 0.3),
   });
+  enhanceObstacleMaterial(metal, { wearAmount: 0.65, rustAmount: 0.7 });
   const rust = new THREE.MeshStandardMaterial({
     color: 0x7a4e32,
     roughness: 0.78,
@@ -531,6 +534,7 @@ export function buildMap(parent: THREE.Object3D, obstacles: Obstacle[], makeWrec
     normalMap: propNormal,
     normalScale: new THREE.Vector2(0.4, 0.4),
   });
+  enhanceObstacleMaterial(rust, { wearAmount: 0.85, rustAmount: 0.9 });
   const beaconMat = new THREE.MeshStandardMaterial({ color: 0xff2020, emissive: 0xff2020, emissiveIntensity: 4 });
   const facades = ['#8b857a', '#7a756c', '#9a9184', '#6f6a63', '#857868', '#7c8088'].map(makeFacadeTextures);
 
@@ -611,6 +615,7 @@ export function buildMap(parent: THREE.Object3D, obstacles: Obstacle[], makeWrec
   const barrelGeo = new THREE.CylinderGeometry(0.68, 0.72, 2.1, 12);
   const bandGeo = new THREE.CylinderGeometry(0.73, 0.73, 0.2, 12);
   const barrelMat = new THREE.MeshStandardMaterial({ color: 0xac392a, roughness: 0.55, metalness: 0.55 });
+  enhanceObstacleMaterial(barrelMat, { wearAmount: 0.7, rustAmount: 0.6 });
   const bandMat = new THREE.MeshStandardMaterial({ color: 0xe8bd62, roughness: 0.7, emissive: 0x4b2109, emissiveIntensity: 0.3 });
   const barrelCluster = (x: number, z: number, n: number) => {
     for (let i = 0; i < n; i++) {
@@ -792,6 +797,7 @@ export function buildMap(parent: THREE.Object3D, obstacles: Obstacle[], makeWrec
     }
     // fuel tanks
     const tankMat = new THREE.MeshStandardMaterial({ color: 0xb9b4a8, roughness: 0.5, metalness: 0.5 });
+    enhanceObstacleMaterial(tankMat, { wearAmount: 0.55, rustAmount: 0.75 });
     for (let i = 0, made = 0; i < 20 && made < 3; i++) {
       const a = rnd() * TWO_PI;
       const tr = rand(5, 7);

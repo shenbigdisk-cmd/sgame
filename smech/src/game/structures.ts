@@ -1,18 +1,22 @@
 import * as THREE from 'three';
 import { Collapse } from './collapse';
 import { nearObstacles, obsDist, removeObstacle, type Obstacle } from './colliders';
+import { enhanceObstacleMaterial } from './saltlineVisuals';
 
 /** Sector-owned registry. Rubble stays in worldRoot for normal teardown. */
 export class StructureField {
   readonly sites = new Map<Obstacle, { model: THREE.Group; hp: number; max: number; name: string }>();
   private falling: Collapse[] = [];
   private stone = new THREE.DodecahedronGeometry(1, 0);
-  private patina = new THREE.MeshStandardMaterial({ color: 0x625d51, roughness: 0.96, flatShading: true });
+  private patina: THREE.MeshStandardMaterial;
   private amber = new THREE.MeshStandardMaterial({ color: 0xddaa48, emissive: 0x503309, roughness: 0.8 });
   constructor(
     private obstacles: Obstacle[],
     private ground: (x: number, z: number) => number = () => 0,
-  ) {}
+  ) {
+    this.patina = new THREE.MeshStandardMaterial({ color: 0x625d51, roughness: 0.96, flatShading: true });
+    enhanceObstacleMaterial(this.patina, { wearAmount: 0.6, rustAmount: 0.5 });
+  }
   register(o: Obstacle, model: THREE.Group, name: string, hp: number) {
     this.sites.set(o, { model, hp, max: hp, name });
     // A hazard collar distinguishes breachable cover on every approach.
