@@ -589,7 +589,8 @@ export class Game {
     this.renderer.shadowMap.enabled = true;
     this.renderer.shadowMap.type = THREE.PCFShadowMap;
     enablePCSSShadows(280, 280, 490, 16, 8);
-    this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
+    // AGX_GRADE_SHADER handles filmic tone mapping & sRGB output in the post-pass
+    this.renderer.toneMapping = THREE.NoToneMapping;
     this.renderer.toneMappingExposure = this.layout.theme.exposure;
     const gl = this.renderer.getContext();
     const gpuInfo = gl.getExtension('WEBGL_debug_renderer_info');
@@ -1180,6 +1181,7 @@ export class Game {
       this.agxPass.uniforms.uDamage.value = this.damageFlash;
       this.agxPass.uniforms.uLowHealth.value = this.hp < this.cfg.maxHp * 0.35 ? 1.0 : 0.0;
       this.agxPass.uniforms.uFlash.value = flash;
+      this.agxPass.uniforms.uExposure.value = (this.layout.theme.exposure ?? 1.1) * 1.35;
     }
     if (this.arenaR < this.arenaTarget) {
       this.arenaR = Math.min(this.arenaTarget, this.arenaR + 16 * dt);

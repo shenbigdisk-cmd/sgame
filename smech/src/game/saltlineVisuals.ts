@@ -413,6 +413,7 @@ export const AGX_GRADE_SHADER = {
     uSharpen: { value: 0.28 },
     uFxaa: { value: 1.0 },
     uFlash: { value: 0 },
+    uExposure: { value: 1.25 },
   },
   vertexShader: `
     varying vec2 vUv;
@@ -424,7 +425,7 @@ export const AGX_GRADE_SHADER = {
   fragmentShader: `
     uniform sampler2D tDiffuse;
     uniform vec2 uResolution;
-    uniform float uTime, uDamage, uLowHealth, uVignette, uSaturation, uSharpen, uFxaa, uFlash;
+    uniform float uTime, uDamage, uLowHealth, uVignette, uSaturation, uSharpen, uFxaa, uFlash, uExposure;
     varying vec2 vUv;
 
     const mat3 SL_REC2020_TO_SRGB = mat3(
@@ -469,12 +470,16 @@ export const AGX_GRADE_SHADER = {
       return clamp(SL_REC2020_TO_SRGB * color, 0.0, 1.0);
     }
 
+    vec3 toSRGB(vec3 c) {
+      return mix(c * 12.92, 1.055 * pow(max(c, vec3(0.0)), vec3(1.0 / 2.4)) - 0.055, step(vec3(0.0031308), c));
+    }
+
     float luma(vec3 c) { return dot(c, vec3(0.2126, 0.7152, 0.0722)); }
 
     void main() {
       vec2 texel = 1.0 / uResolution;
       vec4 center = texture2D(tDiffuse, vUv);
-      vec3 col = center.rgb;
+      vec3 col = center.rgb * uExposure;
 
       // FXAA anti-aliasing
       if (uFxaa > 0.5) {
@@ -553,7 +558,10 @@ export const AGX_GRADE_SHADER = {
       float dither = (fract(sin(dot(gl_FragCoord.xy, vec2(12.9898, 78.233))) * 43758.5453) - 0.5) / 255.0;
       col += dither * 1.5;
 
-      gl_FragColor = vec4(clamp(col, 0.0, 1.0), 1.0);
+      // Output sRGB display transform (matching Saltline toSRGB)
+      col = toSRGB(clamp(col, 0.0, 1.0));
+
+      gl_FragColor = vec4(col, 1.0);
     }
   `,
 };
