@@ -5,6 +5,7 @@ import { Game } from './engine';
 import { STARTER_EQUIPPED, buildConfig } from './forge';
 import { defaultStats } from './upgrades';
 import { EMP } from './weaponHandling';
+import { DEFAULT_SETTINGS, type Settings } from './settings';
 import type { VehicleConfig } from './vehicles';
 import type { WeaponId } from './types';
 
@@ -72,6 +73,11 @@ type Harness = {
   updateEnemies: (dt: number) => void;
   impact: (p: TestProjectile, enemy: TestEnemy | null, player: boolean) => void;
   spawnProjectile: (owner: 'player', kind: 'bullet', pos: THREE.Vector3, vel: THREE.Vector3, damage: number, splash: number, gravity: number, life: number, homing: number) => void;
+  settings: Settings;
+  turretYaw: number;
+  pitch: number;
+  alive: boolean;
+  updatePitchAssist: (dt: number) => void;
 };
 
 function enemy(x: number, boss = false): TestEnemy {
@@ -96,6 +102,8 @@ function harness(cfg = buildConfig(STARTER_EQUIPPED)): Harness {
     cfg, camera, canvas: { clientHeight: 720 },
     scene: new THREE.Scene(), pos: new THREE.Vector3(), vel: new THREE.Vector3(), speed: 0,
     controls: 'realistic', stats: defaultStats(), taken: new Map<string, number>(),
+    settings: { ...DEFAULT_SETTINGS },
+    turretYaw: 0, pitch: 0,
     geo: { bullet: new THREE.BoxGeometry(0.1, 0.1, 1), shell: new THREE.SphereGeometry(0.3), rocket: new THREE.BoxGeometry(1, 1, 1) },
     mats: { bullet: new THREE.MeshBasicMaterial(), playerShell: new THREE.MeshBasicMaterial(), playerRocket: new THREE.MeshBasicMaterial(), rocket: new THREE.MeshBasicMaterial() },
     projectiles: [], enemies: [], explosiveBarrels: [], smokeClouds: [],
@@ -271,5 +279,35 @@ describe('Volt EMP in the real simulation', () => {
     expect(p.vel.z).toBeGreaterThan(200);
     game.updateProjectiles(0.02);
     expect(closeHostile.hp).toBeLessThan(500);
+  });
+
+  it('automatically tracks elevation (pitch up/down) to nearest enemy in front when pitchAssist is enabled', () => {
+    const game = harness();
+    game.turretYaw = 0; // facing +Z (forwardX=sin(0)=0, forwardZ=cos(0)=1)
+    game.camera.position.set(0, 50, 0);
+    game.pitch = 0;
+
+    // Enemy above camera at (0, 60, 20) in front (+Z)
+    const highEnemy = enemy(0);
+    highEnemy.pos.set(0, 60, 20);
+    game.enemies = [highEnemy];
+
+    game.updatePitchAssist(0.1);
+    expect(game.pitch).toBeGreaterThan(0); // pitched up toward high enemy
+
+    // Reset pitch and test lower enemy at (0, 40, 20)
+    game.pitch = 0;
+    const lowEnemy = enemy(0);
+    lowEnemy.pos.set(0, 40, 20);
+    game.enemies = [lowEnemy];
+
+    game.updatePitchAssist(0.1);
+    expect(game.pitch).toBeLessThan(0); // pitched down toward low enemy
+
+    // When disabled in settings, pitch does not track
+    game.settings.pitchAssist = false;
+    game.pitch = 0;
+    game.updatePitchAssist(0.1);
+    expect(game.pitch).toBe(0);
   });
 });

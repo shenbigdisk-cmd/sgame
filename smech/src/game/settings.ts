@@ -12,6 +12,8 @@ export interface Settings {
   fov: number;
   /** Invert the vertical look axis. */
   invertY: boolean;
+  /** Automatically adjust elevation/pitch towards targeted enemies. */
+  pitchAssist: boolean;
   /** Rendering budget: adaptive, full quality or a light one. */
   quality: QualityMode;
   /** Master volume, 0..1. */
@@ -28,6 +30,7 @@ export const DEFAULT_SETTINGS: Settings = {
   sensitivity: 1,
   fov: 70,
   invertY: false,
+  pitchAssist: true,
   quality: 'auto',
   volume: 0.75,
   music: 0.6,
@@ -53,6 +56,7 @@ export function normaliseSettings(raw: unknown): Settings {
   num('volume');
   num('music');
   if (typeof src.invertY === 'boolean') out.invertY = src.invertY;
+  if (typeof src.pitchAssist === 'boolean') out.pitchAssist = src.pitchAssist;
   if (typeof src.showFps === 'boolean') out.showFps = src.showFps;
   if (typeof src.crosshair === 'boolean') out.crosshair = src.crosshair;
   if (src.quality === 'auto' || src.quality === 'high' || src.quality === 'low') out.quality = src.quality;

@@ -1,6 +1,18 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import { DEFAULT_SETTINGS, SETTINGS_STORAGE_KEY, loadSettings, normaliseSettings, saveSettings } from './settings';
 
+if (typeof localStorage === 'undefined' || typeof localStorage.clear !== 'function') {
+  const store = new Map<string, string>();
+  globalThis.localStorage = {
+    getItem: (k: string) => store.get(k) ?? null,
+    setItem: (k: string, v: string) => { store.set(k, String(v)); },
+    removeItem: (k: string) => { store.delete(k); },
+    clear: () => { store.clear(); },
+    key: (i: number) => Array.from(store.keys())[i] ?? null,
+    get length() { return store.size; },
+  } as Storage;
+}
+
 describe('settings normalisation', () => {
   it('falls back to the defaults for junk input', () => {
     expect(normaliseSettings(null)).toEqual(DEFAULT_SETTINGS);
@@ -17,10 +29,11 @@ describe('settings normalisation', () => {
   });
 
   it('keeps valid values', () => {
-    const s = normaliseSettings({ sensitivity: 1.5, fov: 90, invertY: true, quality: 'low', showFps: true, crosshair: false });
+    const s = normaliseSettings({ sensitivity: 1.5, fov: 90, invertY: true, pitchAssist: false, quality: 'low', showFps: true, crosshair: false });
     expect(s.sensitivity).toBe(1.5);
     expect(s.fov).toBe(90);
     expect(s.invertY).toBe(true);
+    expect(s.pitchAssist).toBe(false);
     expect(s.quality).toBe('low');
     expect(s.showFps).toBe(true);
     expect(s.crosshair).toBe(false);

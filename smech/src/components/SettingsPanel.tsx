@@ -139,6 +139,10 @@ export default function SettingsPanel({ settings, onChange, accent = '#8fdbe1', 
       </div>
 
       <div className="settings-row">
+        <span className="settings-label">INTELLIGENT AIMING</span>
+        <Toggle on={settings.pitchAssist} onChange={(v) => patch({ pitchAssist: v })} label="Auto-elevation pitch tracking" />
+      </div>
+      <div className="settings-row">
         <span className="settings-label">INVERT LOOK</span>
         <Toggle on={settings.invertY} onChange={(v) => patch({ invertY: v })} label="Invert look axis" />
       </div>

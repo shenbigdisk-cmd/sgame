@@ -1288,6 +1288,7 @@ export class Game {
       this.swayTargetX = clamp(this.swayTargetX + arrowYaw * 0.02, -0.05, 0.05);
       this.swayTargetY = clamp(this.swayTargetY + dy * 0.02, -0.035, 0.035);
     }
+    this.updatePitchAssist(dt);
 
     if (this.controls === 'arcade') {
       // ---------------------------------------------------------------------
@@ -1687,6 +1688,51 @@ export class Game {
       }
     }
     return best;
+  }
+
+  /** Automatically moves aim crosshair elevation (pitch up/down) to track targeted enemies. */
+  private updatePitchAssist(dt: number) {
+    if (!this.settings.pitchAssist || !this.alive || !this.enemies.length) return;
+
+    const camPos = this.camera.position;
+    const forwardX = Math.sin(this.turretYaw);
+    const forwardZ = Math.cos(this.turretYaw);
+
+    let bestEnemy: Enemy | null = null;
+    let bestScore = -Infinity;
+
+    for (const e of this.enemies) {
+      if (!e.alive) continue;
+      const dx = e.pos.x - camPos.x;
+      const dz = e.pos.z - camPos.z;
+      const distH = Math.hypot(dx, dz);
+      if (distH < 1.5 || distH > 240) continue;
+
+      const nx = dx / distH;
+      const nz = dz / distH;
+      const dotH = nx * forwardX + nz * forwardZ;
+      if (dotH < 0.4) continue;
+
+      if (!this.hasLOS(camPos, e.pos, 0, (e.height ?? 3) * 0.5)) continue;
+
+      const score = dotH * 120 - distH * 0.35;
+      if (score > bestScore) {
+        bestScore = score;
+        bestEnemy = e;
+      }
+    }
+
+    if (bestEnemy) {
+      const dx = bestEnemy.pos.x - camPos.x;
+      const dz = bestEnemy.pos.z - camPos.z;
+      const distH = Math.hypot(dx, dz);
+      const targetY = bestEnemy.pos.y + (bestEnemy.height ?? 3) * 0.52;
+      const dy = targetY - camPos.y;
+      const targetPitch = clamp(Math.atan2(dy, distH), -0.28, 0.38);
+
+      const trackSpeed = this.zoom ? 12.0 : 8.5;
+      this.pitch += (targetPitch - this.pitch) * Math.min(1.0, dt * trackSpeed);
+    }
   }
 
   private muzzleLocal(slot: 'primary' | 'secondary' | 'utility') {
