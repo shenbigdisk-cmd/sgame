@@ -1,11 +1,15 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import {
   CAMPAIGN_MISSIONS,
+  CAMPAIGN_STORY,
   PILOT_SKILLS,
+  SQUAD,
   addCampaignXp,
   completeCampaignMission,
   createFreshCampaign,
+  isMissionUnlocked,
   loadCampaign,
+  missionAct,
   saveCampaign,
   unlockPilotSkill,
   xpForLevel,
@@ -90,5 +94,55 @@ describe('Campaign data and state persistence', () => {
     expect(completedState.activeMissionId).toBe(CAMPAIGN_MISSIONS[1].id);
     expect(completedState.factions.allied_command).toBe(state.factions.allied_command + 25);
     expect(completedState.salvageInventory).toContainEqual(salvageItem);
+  });
+
+  it('unlocks missions sequentially', () => {
+    const state = createFreshCampaign();
+    expect(isMissionUnlocked(state, CAMPAIGN_MISSIONS[0].id)).toBe(true);
+    expect(isMissionUnlocked(state, CAMPAIGN_MISSIONS[1].id)).toBe(false);
+    expect(isMissionUnlocked(state, CAMPAIGN_MISSIONS[5].id)).toBe(false);
+
+    const afterFirst = completeCampaignMission(state, CAMPAIGN_MISSIONS[0].id);
+    expect(isMissionUnlocked(afterFirst, CAMPAIGN_MISSIONS[1].id)).toBe(true);
+    expect(isMissionUnlocked(afterFirst, CAMPAIGN_MISSIONS[2].id)).toBe(false);
+  });
+
+  it('ships six missions across three acts with a full squad', () => {
+    expect(CAMPAIGN_MISSIONS).toHaveLength(6);
+    expect(CAMPAIGN_STORY.acts).toHaveLength(3);
+    expect(SQUAD).toHaveLength(4);
+    expect(SQUAD[0].callsign).toBe('RAVEN-1');
+    for (const mission of CAMPAIGN_MISSIONS) {
+      expect(missionAct(mission)).toBeGreaterThanOrEqual(1);
+      expect(missionAct(mission)).toBeLessThanOrEqual(3);
+      expect(mission.briefingTranscript.length).toBeGreaterThanOrEqual(3);
+      expect(mission.debriefTranscript!.length).toBeGreaterThanOrEqual(3);
+      expect(mission.transmissions.length).toBeGreaterThanOrEqual(4);
+      expect(mission.salvagePool.length).toBeGreaterThanOrEqual(3);
+      // Every mission ends with an extraction stage
+      const lastStage = Math.max(...mission.objectives.map((o) => o.stage));
+      expect(mission.objectives.some((o) => o.stage === lastStage && o.type === 'reach_extraction')).toBe(true);
+      // At most one kill-count objective per stage (engine credits one per kill)
+      for (let stage = 1; stage <= lastStage; stage++) {
+        const killObjs = mission.objectives.filter(
+          (o) => o.stage === stage && (o.type === 'neutralize_outpost' || o.type === 'secure_fob'),
+        );
+        expect(killObjs.length).toBeLessThanOrEqual(1);
+      }
+    }
+  });
+
+  it('keeps every kill objective within reach of its spawns', () => {
+    for (const mission of CAMPAIGN_MISSIONS) {
+      for (const obj of mission.objectives) {
+        if (obj.type !== 'neutralize_outpost' && obj.type !== 'secure_fob') continue;
+        const spawns = mission.tacticalSpawns.filter((s) => s.stage === obj.stage);
+        expect(spawns.length).toBeGreaterThanOrEqual(obj.targetCount);
+        for (const spawn of spawns) {
+          const dist = Math.hypot(spawn.pos[0] - obj.pos[0], spawn.pos[1] - obj.pos[1]);
+          expect(dist).toBeLessThanOrEqual((obj.radius ?? 35) + 35);
+        }
+      }
+    }
   });
 });

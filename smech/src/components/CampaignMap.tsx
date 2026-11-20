@@ -1,8 +1,13 @@
 import { useState } from 'react';
 import {
   CAMPAIGN_MISSIONS,
+  CAMPAIGN_STORY,
+  COMMANDER,
   FACTIONS,
   PILOT_SKILLS,
+  SQUAD,
+  isMissionUnlocked,
+  missionAct,
   unlockPilotSkill,
   xpForLevel,
   type CampaignMission,
@@ -30,10 +35,11 @@ export default function CampaignMap({
   onOpenForge,
   onBackToMenu,
 }: CampaignMapProps) {
-  const [activeTab, setActiveTab] = useState<'contracts' | 'skills' | 'factions'>('contracts');
+  const [activeTab, setActiveTab] = useState<'contracts' | 'skills' | 'factions' | 'squad'>('contracts');
   const [selectedMission, setSelectedMission] = useState<CampaignMission | null>(() => {
     return (
       CAMPAIGN_MISSIONS.find((m) => m.id === campaign.activeMissionId) ||
+      CAMPAIGN_MISSIONS.find((m) => !campaign.completedMissionIds.includes(m.id)) ||
       CAMPAIGN_MISSIONS[0]
     );
   });
@@ -48,6 +54,8 @@ export default function CampaignMap({
 
   const nextLvlXp = xpForLevel(campaign.level);
   const xpPercent = Math.min(100, Math.floor((campaign.xp / nextLvlXp) * 100));
+  const completedCount = campaign.completedMissionIds.length;
+  const campaignComplete = completedCount >= CAMPAIGN_MISSIONS.length;
 
   return (
     <div className="relative flex h-full w-full flex-col bg-slate-950 font-mono text-slate-100 select-none overflow-hidden">
@@ -63,10 +71,10 @@ export default function CampaignMap({
           <div className="h-4 w-px bg-slate-800" />
           <div>
             <h1 className="text-sm font-bold tracking-widest text-amber-400">
-              CAMPAIGN OPERATIONS // THEATER COMMAND
+              {CAMPAIGN_STORY.title} // {CAMPAIGN_STORY.subtitle}
             </h1>
             <p className="text-[10px] tracking-wider text-slate-400">
-              ALLIED GROUND FORCES // EXPANSIVE BATTLEFIELD OPERATIONS
+              RAVEN SQUAD // {completedCount}/{CAMPAIGN_MISSIONS.length} OPERATIONS SECURED
             </p>
           </div>
         </div>
@@ -119,7 +127,17 @@ export default function CampaignMap({
               : 'border-transparent text-slate-400 hover:text-slate-200'
           }`}
         >
-          <span>🎯</span> MILITARY OPERATIONS
+          <span>🎯</span> OPERATIONS
+        </button>
+        <button
+          onClick={() => setActiveTab('squad')}
+          className={`flex items-center gap-2 px-6 py-3 text-xs font-bold tracking-wider transition border-b-2 ${
+            activeTab === 'squad'
+              ? 'border-rose-400 text-rose-300 bg-rose-500/5'
+              : 'border-transparent text-slate-400 hover:text-slate-200'
+          }`}
+        >
+          <span>🪖</span> RAVEN SQUAD
         </button>
         <button
           onClick={() => setActiveTab('skills')}
@@ -150,36 +168,52 @@ export default function CampaignMap({
             {/* Missions Column */}
             <div className="flex w-1/2 flex-col gap-3 overflow-y-auto pr-2">
               <h2 className="text-xs font-bold uppercase tracking-wider text-slate-400">
-                ACTIVE MILITARY THEATERS
+                THE KESTREL REVENGE — SIX OPERATIONS
               </h2>
+              {campaignComplete && (
+                <div className="rounded border border-emerald-700 bg-emerald-950/30 p-3 text-xs text-emerald-300">
+                  ✓ CAMPAIGN COMPLETE — The Saltline war is won. Replay any operation to improve your record.
+                </div>
+              )}
               {CAMPAIGN_MISSIONS.map((mission) => {
                 const isCompleted = campaign.completedMissionIds.includes(mission.id);
                 const isSelected = selectedMission?.id === mission.id;
-                const isUnlocked = true;
+                const isUnlocked = isMissionUnlocked(campaign, mission.id);
+                const isNext = campaign.activeMissionId === mission.id && !isCompleted;
 
                 return (
                   <div
                     key={mission.id}
                     onClick={() => isUnlocked && setSelectedMission(mission)}
-                    className={`relative flex flex-col rounded-lg border p-4 cursor-pointer transition ${
+                    className={`relative flex flex-col rounded-lg border p-4 transition ${
                       !isUnlocked
                         ? 'opacity-40 border-slate-800 bg-slate-900/20 cursor-not-allowed'
                         : isSelected
-                          ? 'border-amber-400 bg-amber-950/20 shadow-[0_0_15px_rgba(245,158,11,0.15)]'
-                          : 'border-slate-800 bg-slate-900/40 hover:border-slate-700'
+                          ? 'border-amber-400 bg-amber-950/20 shadow-[0_0_15px_rgba(245,158,11,0.15)] cursor-pointer'
+                          : 'border-slate-800 bg-slate-900/40 hover:border-slate-700 cursor-pointer'
                     }`}
                   >
                     <div className="flex items-center justify-between">
                       <div className="flex items-center gap-2">
-                        <span className="h-2 w-2 rounded-full bg-cyan-400" />
+                        <span className={`h-2 w-2 rounded-full ${isCompleted ? 'bg-emerald-400' : isUnlocked ? 'bg-cyan-400' : 'bg-slate-600'}`} />
                         <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
-                          OPERATION {mission.operationNumber} // {mission.operationName}
+                          OP-{mission.operationNumber} // {mission.operationName} — ACT {missionAct(mission)}
                         </span>
                       </div>
                       <div className="flex items-center gap-2">
                         {isCompleted && (
                           <span className="rounded bg-emerald-950 px-2 py-0.5 text-[9px] font-bold text-emerald-400 border border-emerald-700">
                             ✓ SECURED
+                          </span>
+                        )}
+                        {isNext && (
+                          <span className="rounded bg-amber-950 px-2 py-0.5 text-[9px] font-bold text-amber-300 border border-amber-600 animate-pulse">
+                            ▶ NEXT
+                          </span>
+                        )}
+                        {!isUnlocked && (
+                          <span className="rounded bg-slate-800 px-2 py-0.5 text-[9px] font-bold text-slate-400">
+                            🔒 LOCKED
                           </span>
                         )}
                         <span className="rounded bg-slate-800 px-2 py-0.5 text-[9px] font-bold text-amber-300">
@@ -194,6 +228,11 @@ export default function CampaignMap({
                     <p className="mt-1 line-clamp-2 text-xs text-slate-400">
                       {mission.theater}
                     </p>
+                    {!isUnlocked && (
+                      <p className="mt-2 text-[11px] text-slate-500 italic">
+                        Secure Operation {mission.operationNumber - 1} to unlock.
+                      </p>
+                    )}
 
                     <div className="mt-3 flex items-center justify-between text-[11px] text-slate-400 border-t border-slate-800/60 pt-2">
                       <div>REWARDS: <span className="text-amber-300 font-bold">+{mission.rewards.credits} CR</span></div>
@@ -212,11 +251,14 @@ export default function CampaignMap({
                     <div className="flex items-center justify-between border-b border-slate-800 pb-3">
                       <div>
                         <span className="text-[10px] font-bold uppercase tracking-widest text-amber-500">
-                          TACTICAL BRIEFING // OP-{selectedMission.operationNumber}
+                          TACTICAL BRIEFING // OP-{selectedMission.operationNumber} — ACT {missionAct(selectedMission)}
                         </span>
                         <h2 className="text-lg font-bold text-white">
                           {selectedMission.title}
                         </h2>
+                        {selectedMission.squadLead && (
+                          <div className="text-[10px] text-slate-400 mt-0.5">SQUAD LEAD: <span className="text-rose-300 font-bold">{selectedMission.squadLead}</span></div>
+                        )}
                       </div>
                       <div className="text-right">
                         <div className="text-[10px] text-slate-400">THEATER</div>
@@ -226,6 +268,13 @@ export default function CampaignMap({
                       </div>
                     </div>
 
+                    {selectedMission.synopsis && (
+                      <div className="rounded bg-slate-900/60 p-3 text-xs leading-relaxed text-slate-300 border border-slate-800">
+                        <p className="font-semibold text-amber-300/90 mb-1">SITUATION:</p>
+                        <p>{selectedMission.synopsis}</p>
+                      </div>
+                    )}
+
                     <div className="rounded bg-slate-900/60 p-3 text-xs leading-relaxed text-slate-300 border border-slate-800">
                       <p className="font-semibold text-amber-300/90 mb-1">COMMAND TRANSMISSION:</p>
                       {selectedMission.briefingTranscript.map((line, idx) => (
@@ -234,6 +283,19 @@ export default function CampaignMap({
                         </p>
                       ))}
                     </div>
+
+                    {selectedMission.intel && selectedMission.intel.length > 0 && (
+                      <div>
+                        <h4 className="text-xs font-bold uppercase tracking-wider text-slate-400 mb-2">
+                          INTEL — ENEMY COUNTERS:
+                        </h4>
+                        <ul className="space-y-1 text-xs text-slate-300">
+                          {selectedMission.intel.map((tip, idx) => (
+                            <li key={idx} className="flex gap-2"><span className="text-cyan-400">▸</span><span>{tip}</span></li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
 
                     {/* Operational Stages Checklist */}
                     <div>
@@ -294,6 +356,49 @@ export default function CampaignMap({
               )}
             </div>
           </>
+        )}
+
+        {/* Squad Tab */}
+        {activeTab === 'squad' && (
+          <div className="flex h-full w-full flex-col gap-4 overflow-y-auto">
+            <div className="rounded border border-slate-800 bg-slate-900/40 p-4 text-xs leading-relaxed text-slate-300">
+              <p className="font-semibold text-amber-300/90 mb-1">THE KESTREL REVENGE:</p>
+              <p>{CAMPAIGN_STORY.premise}</p>
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              {SQUAD.map((member) => (
+                <div key={member.callsign} className="rounded-lg border border-slate-800 bg-slate-900/40 p-4">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                      <div className="flex h-10 w-10 items-center justify-center rounded border font-bold text-[10px]" style={{ borderColor: member.color, color: member.color, backgroundColor: `${member.color}20` }}>
+                        {member.callsign.replace('RAVEN-', 'R-')}
+                      </div>
+                      <div>
+                        <div className="text-sm font-bold text-white">{member.name}</div>
+                        <div className="text-[10px] text-slate-400">{member.role} // {member.chassis}</div>
+                      </div>
+                    </div>
+                    <span className="rounded px-2 py-0.5 text-[10px] font-bold border" style={{ borderColor: member.color, color: member.color }}>
+                      {member.callsign}
+                    </span>
+                  </div>
+                  <p className="mt-3 text-xs leading-relaxed text-slate-300">{member.bio}</p>
+                </div>
+              ))}
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <div className="rounded-lg border border-sky-800 bg-sky-950/20 p-4">
+                <div className="text-sm font-bold text-sky-300">{COMMANDER.name} — {COMMANDER.callsign}</div>
+                <div className="text-[10px] text-slate-400">{COMMANDER.role}</div>
+                <p className="mt-2 text-xs text-slate-300">{COMMANDER.bio}</p>
+              </div>
+              <div className="rounded-lg border border-red-800 bg-red-950/20 p-4">
+                <div className="text-sm font-bold text-red-300">{'Warlord Viktor "Aegis Bane" Kane'} — AEGIS BANE</div>
+                <div className="text-[10px] text-slate-400">Iron Vanguard 1st Legion — Antagonist</div>
+                <p className="mt-2 text-xs text-slate-300">Believes Cole ordered the bombing of his hometown. He killed Daniel Cole in revenge for a crime Cole never ordered. Both men were lied to by the same broker.</p>
+              </div>
+            </div>
+          </div>
         )}
 
         {/* Skills Tab */}

@@ -131,7 +131,7 @@ export class CampaignEngine {
 
     if (this.missionCompleted) return;
 
-    // Check active zone infiltrate objectives
+    // Check active zone infiltrate / hold / extraction objectives
     const activeStageObjs = this.objectives.filter(
       (o) => o.stage === this.currentStage && !o.completed,
     );
@@ -148,6 +148,28 @@ export class CampaignEngine {
           this.callbacks.onObjectiveUpdate?.(obj);
           this.evaluateStageProgress();
           return;
+        }
+      } else if (obj.type === 'hold_zone' && obj.pos) {
+        // Defense stage: the timer only runs while the player holds the ring.
+        // Leaving pauses the hold (it never resets) — MW-style forgiveness.
+        const dx = playerX - obj.pos[0];
+        const dz = playerZ - obj.pos[1];
+        const dist = Math.hypot(dx, dz);
+        const radius = obj.radius || 35;
+        if (dist <= radius) {
+          const before = Math.floor(obj.currentCount);
+          obj.currentCount += dt;
+          const after = Math.floor(obj.currentCount);
+          if (after !== before) {
+            this.callbacks.onObjectiveUpdate?.(obj);
+          }
+          if (obj.currentCount >= obj.targetCount) {
+            obj.currentCount = obj.targetCount;
+            obj.completed = true;
+            this.callbacks.onObjectiveUpdate?.(obj);
+            this.evaluateStageProgress();
+            return;
+          }
         }
       } else if (obj.type === 'reach_extraction' && this.extractionReady) {
         const targetX = obj.pos ? obj.pos[0] : this.mission.extractionZone.x;
@@ -170,7 +192,10 @@ export class CampaignEngine {
   }
 
   evaluateStageProgress(): void {
-    const stageObjs = this.objectives.filter((o) => o.stage === this.currentStage);
+    // Optional objectives are bonus intel/salvage — they never block advance.
+    const stageObjs = this.objectives.filter(
+      (o) => o.stage === this.currentStage && !o.optional,
+    );
     const allStageDone = stageObjs.length > 0 && stageObjs.every((o) => o.completed);
 
     if (allStageDone) {

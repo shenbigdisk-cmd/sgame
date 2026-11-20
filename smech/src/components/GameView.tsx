@@ -191,6 +191,7 @@ export default function GameView({
                     nextHud.turretYaw,
                     engine.currentStage,
                     engine.extractionReady,
+                    engine.objectives,
                   );
                   setWaypoints(wps);
                 }
@@ -276,6 +277,8 @@ export default function GameView({
           transmission={activeTransmission}
           extractionReady={extractionReady}
           waypoints={waypoints}
+          missionTitle={campaignMission.title}
+          operationName={campaignMission.operationName}
         />
       )}
       {touch && <TouchControls game={game} accent={accent} enabled={!!hud?.alive && !hud.offer && !loading} />}

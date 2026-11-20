@@ -480,12 +480,17 @@ export class CampaignWorldManager {
     turretYaw: number,
     currentStage: number,
     extractionReady: boolean,
+    liveObjectives?: import('./campaign').CampaignObjective[],
   ): ObjectiveWaypoint[] {
     const waypoints: ObjectiveWaypoint[] = [];
 
-    // 1. Waypoints for current stage objectives
-    for (const obj of this.mission.objectives) {
+    // 1. Waypoints for current stage objectives.
+    // The engine mutates its own copy of the objectives, so callers must pass
+    // the live list — reading the mission template would show stale markers.
+    const source = liveObjectives ?? this.mission.objectives;
+    for (const obj of source) {
       if (obj.stage !== currentStage || obj.completed) continue;
+      if (obj.type === 'reach_extraction' && !extractionReady) continue;
 
       const [tx, tz] = obj.pos;
       const dx = tx - playerX;
@@ -499,6 +504,7 @@ export class CampaignWorldManager {
       let color = '#f59e0b';
       if (obj.type === 'demolish_installation') color = '#ef4444';
       else if (obj.type === 'infiltrate_zone') color = '#38bdf8';
+      else if (obj.type === 'hold_zone') color = '#a78bfa';
       else if (obj.type === 'reach_extraction') color = extractionReady ? '#10b981' : '#64748b';
 
       waypoints.push({

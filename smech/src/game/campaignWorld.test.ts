@@ -8,7 +8,7 @@ describe('CampaignWorldManager', () => {
 
   it('spawns 3D installations and extraction pad in scene', () => {
     const scene = new THREE.Scene();
-    const mission = CAMPAIGN_MISSIONS[0];
+    const mission = CAMPAIGN_MISSIONS[3]; // Ghost Signal — flak + generator
     const manager = new CampaignWorldManager(scene, mission, dummyAudio);
 
     expect(scene.children.length).toBeGreaterThan(0);
@@ -25,15 +25,15 @@ describe('CampaignWorldManager', () => {
 
   it('damages and destroys an installation when hit by projectiles', () => {
     const scene = new THREE.Scene();
-    const mission = CAMPAIGN_MISSIONS[0];
+    const mission = CAMPAIGN_MISSIONS[3]; // Ghost Signal
     const onDestroyed = vi.fn();
     const manager = new CampaignWorldManager(scene, mission, dummyAudio, {
       onInstallationDestroyed: onDestroyed,
     });
 
-    // Flak Battery Alpha is at [-90, 80]
-    const start = new THREE.Vector3(-80, 2, 80);
-    const end = new THREE.Vector3(-95, 2, 80);
+    // Flak Battery Alpha is at [-90, 60]
+    const start = new THREE.Vector3(-80, 2, 60);
+    const end = new THREE.Vector3(-95, 2, 60);
 
     // Test swept collision hit
     const hit = manager.checkHit(start, end, 900, 5);
@@ -42,8 +42,27 @@ describe('CampaignWorldManager', () => {
       expect.stringContaining('flak_a'),
       'FLAK BATTERY ALPHA',
       -90,
-      80,
+      60,
     );
+
+    manager.dispose();
+  });
+
+  it('hides completed objectives from waypoints when given live objectives', () => {
+    const scene = new THREE.Scene();
+    const mission = CAMPAIGN_MISSIONS[3];
+    const manager = new CampaignWorldManager(scene, mission, dummyAudio);
+
+    const live = mission.objectives.map((o) => ({ ...o }));
+    const before = manager.getWaypoints(0, 0, 0, 2, false, live);
+    expect(before.length).toBeGreaterThan(0);
+
+    // Complete every stage-2 objective in the live list
+    for (const o of live) {
+      if (o.stage === 2) o.completed = true;
+    }
+    const after = manager.getWaypoints(0, 0, 0, 2, false, live);
+    expect(after).toHaveLength(0);
 
     manager.dispose();
   });

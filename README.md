@@ -300,6 +300,22 @@ Cockpit design references: [Hawken Reborn's HUD update](https://hawkenreborn.com
 
 ---
 
+## Story campaign — SALTLINE: The Kestrel Revenge
+
+A six-operation revenge arc in the Modern Warfare tradition. You are
+Lt. Elias "Raven" Cole, flying with Havoc, Ghost and Doc, hunting the
+Warlord who killed your brother at Kestrel Ridge — and learning the truth
+about who really ordered it. Sequential unlocks, three acts, squad radio
+chatter, hold-the-line defenses, a citadel siege and a final duel.
+
+Full story bible, squad dossiers and mission breakdown:
+[docs/CAMPAIGN.md](docs/CAMPAIGN.md). Campaign code lives in
+`smech/src/game/campaign.ts` (story + missions), `campaignEngine.ts`
+(stage logic) and `campaignWorld.ts` (installations + waypoints), with the
+war room, HUD and debrief in `smech/src/components/Campaign*.tsx`.
+
+---
+
 ## Project layout
 
 ```
