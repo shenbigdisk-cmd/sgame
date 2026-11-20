@@ -3,7 +3,12 @@ import { Game } from '../game/engine';
 import type { AudioManager } from '../game/audio';
 import type { ControlMode, GameStats, HudState, VehicleType } from '../game/types';
 import type { Settings } from '../game/settings';
+import type { CampaignMission, CampaignObjective, RadioTransmission } from '../game/campaign';
+import { CampaignEngine } from '../game/campaignEngine';
+import { CampaignWorldManager, type ObjectiveWaypoint } from '../game/campaignWorld';
+import type { SoundtrackDirector } from '../game/soundtrack';
 import HUD from './HUD';
+import CampaignHUD from './CampaignHUD';
 import TouchControls from './TouchControls';
 import UpgradeScreen from './UpgradeScreen';
 import SettingsPanel from './SettingsPanel';
@@ -26,6 +31,9 @@ interface Props {
   onLoot: (amount: number) => void;
   onGameOver: (s: GameStats) => void;
   onAbort: () => void;
+  campaignMission?: CampaignMission | null;
+  onCampaignVictory?: (mission: CampaignMission) => void;
+  soundtrack?: SoundtrackDirector | null;
 }
 
 const DISPLAY = "'Orbitron', 'Share Tech Mono', monospace";
@@ -34,7 +42,23 @@ const MONO = "'Share Tech Mono', 'Courier New', monospace";
 const isTouchDevice = () =>
   typeof window !== 'undefined' && ('ontouchstart' in window || (navigator.maxTouchPoints ?? 0) > 0) && window.matchMedia('(pointer: coarse)').matches;
 
-export default function GameView({ vehicle, config, stepWeight, mechName, controls, seed, audio, settings, onSettings, onLoot, onGameOver, onAbort }: Props) {
+export default function GameView({
+  vehicle,
+  config,
+  stepWeight,
+  mechName,
+  controls,
+  seed,
+  audio,
+  settings,
+  onSettings,
+  onLoot,
+  onGameOver,
+  onAbort,
+  campaignMission,
+  onCampaignVictory,
+  soundtrack,
+}: Props) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const gameRef = useRef<Game | null>(null);
   const [game, setGame] = useState<Game | null>(null);
@@ -43,6 +67,47 @@ export default function GameView({ vehicle, config, stepWeight, mechName, contro
   const [loading, setLoading] = useState(true);
   const [everLocked, setEverLocked] = useState(false);
   const [pauseTab, setPauseTab] = useState<'controls' | 'settings'>('controls');
+
+  // Campaign objective and radio comms state
+  const campaignEngineRef = useRef<CampaignEngine | null>(null);
+  const worldManagerRef = useRef<CampaignWorldManager | null>(null);
+  const prevKillsRef = useRef(0);
+  const lastSoundtrackUpdateRef = useRef(0);
+  const lastWaypointUpdateRef = useRef(0);
+  const [objectives, setObjectives] = useState<CampaignObjective[]>(() =>
+    campaignMission ? campaignMission.objectives.map((o) => ({ ...o })) : [],
+  );
+  const [activeTransmission, setActiveTransmission] = useState<RadioTransmission | null>(null);
+  const [extractionReady, setExtractionReady] = useState(false);
+  const [waypoints, setWaypoints] = useState<ObjectiveWaypoint[]>([]);
+
+  useEffect(() => {
+    if (!campaignMission) return;
+    const engine = new CampaignEngine(campaignMission, {
+      onTransmission: (t) => setActiveTransmission(t),
+      onObjectiveUpdate: () => {
+        setObjectives([...engine.objectives]);
+      },
+      onStageAdvance: (_stage, newSpawns) => {
+        setObjectives([...engine.objectives]);
+        setExtractionReady(engine.extractionReady);
+        const g = gameRef.current;
+        if (g) {
+          for (const s of newSpawns) {
+            g.spawnTacticalEnemy(s.kind, s.pos[0], s.pos[1], s.boss, false);
+          }
+        }
+      },
+      onMissionSuccess: () => {
+        onCampaignVictory?.(campaignMission);
+      },
+    });
+    campaignEngineRef.current = engine;
+    setObjectives([...engine.objectives]);
+    setExtractionReady(engine.extractionReady);
+    prevKillsRef.current = 0;
+  }, [campaignMission, onCampaignVictory]);
+
   // A failure while building the simulation (no WebGL, corrupt sector, ...)
   // happens inside a timer callback, so it never reaches the error boundary on
   // its own. It is captured here and re-thrown during render instead.
@@ -75,7 +140,63 @@ export default function GameView({ vehicle, config, stepWeight, mechName, contro
           seed,
           audio,
           settings: settingsRef.current,
-          onHud: setHud,
+          campaignMode: Boolean(campaignMission),
+          onEnemyKilled: (e) => {
+            campaignEngineRef.current?.onEnemyKilled(e.kind, e.pos, e.boss);
+          },
+          onCheckInstallationHit: (start, end, damage, splash) => {
+            return worldManagerRef.current?.checkHit(start, end, damage, splash) ?? false;
+          },
+          onAreaDamage: (pos, damage, radius) => {
+            worldManagerRef.current?.applySplashDamage(pos, damage, radius);
+          },
+          onHud: (nextHud) => {
+            setHud(nextHud);
+            const now = performance.now();
+
+            if (soundtrack && now - lastSoundtrackUpdateRef.current > 350) {
+              lastSoundtrackUpdateRef.current = now;
+              if (nextHud.enemiesLeft > 0) {
+                soundtrack.setMood(nextHud.boss ? 'boss' : 'combat');
+                soundtrack.setIntensity(Math.min(1, nextHud.enemiesLeft / 6));
+              } else if (extractionReady) {
+                soundtrack.setMood('victory');
+              } else {
+                soundtrack.setMood('patrol');
+                soundtrack.setIntensity(0.2);
+              }
+            }
+
+            const engine = campaignEngineRef.current;
+            if (engine && g) {
+              const hpRatio = nextHud.maxHp > 0 ? nextHud.hp / nextHud.maxHp : 1;
+              engine.update(0.05, g.playerPos.x, g.playerPos.z, hpRatio);
+              if (engine.extractionReady !== extractionReady) {
+                setExtractionReady(engine.extractionReady);
+              }
+
+              if (worldManagerRef.current) {
+                worldManagerRef.current.update(
+                  0.05,
+                  g.playerPos.x,
+                  g.playerPos.z,
+                  engine.extractionReady,
+                );
+
+                if (now - lastWaypointUpdateRef.current > 200) {
+                  lastWaypointUpdateRef.current = now;
+                  const wps = worldManagerRef.current.getWaypoints(
+                    g.playerPos.x,
+                    g.playerPos.z,
+                    nextHud.turretYaw,
+                    engine.currentStage,
+                    engine.extractionReady,
+                  );
+                  setWaypoints(wps);
+                }
+              }
+            }
+          },
           onLoot,
           onGameOver: (st) => onGameOverRef.current(st),
           onPause: (p) => {
@@ -86,6 +207,17 @@ export default function GameView({ vehicle, config, stepWeight, mechName, contro
         gameRef.current = g;
         setGame(g);
         (window as unknown as { __steelGame?: Game }).__steelGame = g;
+        if (campaignMission) {
+          worldManagerRef.current = new CampaignWorldManager(g.worldScene, campaignMission, audio, {
+            onInstallationDestroyed: (_id, name, x, z) => {
+              campaignEngineRef.current?.onInstallationDestroyed(name, { x, z });
+            },
+          });
+          const initialSpawns = campaignEngineRef.current?.getSpawnsForStage(1) || [];
+          for (const s of initialSpawns) {
+            g.spawnTacticalEnemy(s.kind, s.pos[0], s.pos[1], s.boss, false);
+          }
+        }
         g.start();
         setLoading(false);
         // TouchControls un-pauses touch games on mount; mouse games grab the pointer now
@@ -97,6 +229,8 @@ export default function GameView({ vehicle, config, stepWeight, mechName, contro
     return () => {
       window.clearTimeout(boot);
       window.clearTimeout(lockTimer);
+      worldManagerRef.current?.dispose();
+      worldManagerRef.current = null;
       g?.dispose();
       gameRef.current = null;
       setGame(null);
@@ -134,6 +268,14 @@ export default function GameView({ vehicle, config, stepWeight, mechName, contro
           settings={settings}
           onExtract={() => gameRef.current?.extractNow()}
           onWeapon={(id) => gameRef.current?.useWeapon(id)}
+        />
+      )}
+      {campaignMission && (
+        <CampaignHUD
+          objectives={objectives}
+          transmission={activeTransmission}
+          extractionReady={extractionReady}
+          waypoints={waypoints}
         />
       )}
       {touch && <TouchControls game={game} accent={accent} enabled={!!hud?.alive && !hud.offer && !loading} />}

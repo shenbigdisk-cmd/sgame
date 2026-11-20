@@ -28,6 +28,7 @@ interface Props {
   records: RunRecord[];
   garage: GarageState;
   onGarage: (garage: GarageState) => void;
+  onOpenCampaign?: () => void;
 }
 const photos = { warden, pyre, glacier };
 const roles = { warden: 'Assault', pyre: 'Brawler', glacier: 'Precision' };
@@ -57,7 +58,7 @@ function Section({ n, children, aside }: { n: string; children: React.ReactNode;
   );
 }
 
-export default function Menu({ onStart, settings, onSettings, records, garage, onGarage }: Props) {
+export default function Menu({ onStart, settings, onSettings, records, garage, onGarage, onOpenCampaign }: Props) {
   const [page, setPage] = useState<Page>('Hangar');
   const [building, setBuilding] = useState(false);
   const [controls, setControls] = useState<ControlMode>('arcade');
@@ -101,6 +102,16 @@ export default function Menu({ onStart, settings, onSettings, records, garage, o
             </div>
           </div>
           <nav aria-label="Command navigation">
+            {onOpenCampaign && (
+              <button
+                type="button"
+                className="op-campaign-nav-btn text-amber-400 font-bold border border-amber-500/50 hover:bg-amber-500/20"
+                onClick={onOpenCampaign}
+              >
+                <Icon name="radar" size={15} />
+                Story Mode
+              </button>
+            )}
             {tabs.map((t, i) => (
               <button key={t} aria-current={page === t ? 'page' : undefined} onClick={() => setPage(t)}>
                 <Icon name={['armor', 'radar', 'wrench', 'clock'][i]} size={15} />
@@ -368,6 +379,16 @@ export default function Menu({ onStart, settings, onSettings, records, garage, o
                       </button>
                     ))}
                   </div>
+                  {onOpenCampaign && (
+                    <button
+                      type="button"
+                      className="op-launch mb-2 border border-amber-500/80 bg-amber-500/20 text-amber-300 hover:bg-amber-500 hover:text-black transition"
+                      onClick={onOpenCampaign}
+                      style={{ marginBottom: '8px' }}
+                    >
+                      <span className="op-play">★</span> STORY CAMPAIGN <span>→</span>
+                    </button>
+                  )}
                   <button
                     className="op-launch"
                     onClick={() => onStart(frame, controls, seed || randomSeedCode())}

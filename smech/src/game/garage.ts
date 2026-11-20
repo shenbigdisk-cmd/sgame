@@ -171,7 +171,8 @@ export function loadGarage(): GarageState {
     // preset without changing custom Pyre builds that happen to use Cinder.
     const oldPyre = SLOTS.every(
       (slot) => equippedData[slot] === (slot === 'specialQ' ? 'x_jump' : (slot === 'specialE' ? 'x_mines' : PRESETS[1].equipped[slot]))
-        || equippedData[slot] === (slot === 'specialQ' ? 'x_orbital' : (slot === 'specialE' ? 'x_mines' : PRESETS[1].equipped[slot])),
+        || equippedData[slot] === (slot === 'specialQ' ? 'x_orbital' : (slot === 'specialE' ? 'x_mines' : PRESETS[1].equipped[slot]))
+        || equippedData[slot] === (slot === 'specialQ' ? 'x_jump' : (slot === 'specialE' ? 'x_orbital' : PRESETS[1].equipped[slot])),
     );
     const activeMechId = typeof parsed.activeMechId === 'string' && parsed.activeMechId
       ? parsed.activeMechId

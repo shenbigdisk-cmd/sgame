@@ -299,6 +299,11 @@ export interface GameOptions {
   onHud: (h: HudState) => void;
   onGameOver: (s: GameStats) => void;
   onPause: (paused: boolean) => void;
+  /** Campaign mode: disables random wave survival loop & expands play area to full sector */
+  campaignMode?: boolean;
+  onEnemyKilled?: (e: { kind: EnemyKind; pos: { x: number; z: number }; boss?: boolean; elite?: boolean }) => void;
+  onCheckInstallationHit?: (start: THREE.Vector3, end: THREE.Vector3, damage: number, splash: number) => boolean;
+  onAreaDamage?: (pos: THREE.Vector3, damage: number, radius: number) => void;
 }
 
 // ---------------------------------------------------------------------------
@@ -330,7 +335,9 @@ export class Game {
   private fovCurrent = 70;
 
   // player state
-  private pos = new THREE.Vector3(0, 0, 0);
+  public pos = new THREE.Vector3(0, 0, 0);
+  get playerPos(): THREE.Vector3 { return this.pos; }
+  get worldScene(): THREE.Scene { return this.scene; }
   private recovery = new DriveRecovery();
   private safeFooting = {x:0,z:0};
   private hullYaw = 0;
@@ -558,6 +565,11 @@ export class Game {
     this.seedCode = this.baseSeed;
     this.layout = generateLayout(this.seedCode);
     this.condition = conditionFor(this.seedCode);
+    if (opts.campaignMode) {
+      this.arenaR = WORLD_RADIUS - 10;
+      this.arenaTarget = WORLD_RADIUS - 10;
+      this.zone = MAX_ZONE;
+    }
     this.stepWeight = opts.stepWeight ?? { warden: 1, pyre: 1.5, glacier: 0.75 }[opts.vehicle];
     this.canvas = opts.canvas;
     this.audio = opts.audio;
@@ -990,6 +1002,12 @@ export class Game {
 
   getSettings(): Settings {
     return { ...this.settings };
+  }
+
+  /** Spawn an enemy unit at tactical world coordinates. */
+  public spawnTacticalEnemy(kind: EnemyKind, x: number, z: number, boss = false, elite = false) {
+    this.spawnEnemy(kind, x, z, boss, elite);
+    this.waveActive = true;
   }
 
   /** Debug helper: spawn an enemy a given distance ahead of the turret. */
@@ -3642,6 +3660,9 @@ export class Game {
               break;
             }
           }
+          if (!hit && this.opts?.onCheckInstallationHit && this.opts.onCheckInstallationHit(p.prev, p.pos, p.damage, p.splash)) {
+            hit = true;
+          }
         } else if (this.alive) {
           const center = this.tmpC.set(this.pos.x, this.pos.y + 1.5, this.pos.z);
           if (this.segHitsSphere(p.prev, p.pos, center, this.cfg.radius * 0.95)) {
@@ -4476,6 +4497,12 @@ export class Game {
     if (award) {
       this.score += gained;
       this.kills++;
+      this.opts?.onEnemyKilled?.({
+        kind: e.kind,
+        pos: { x: e.pos.x, z: e.pos.z },
+        boss: e.boss,
+        elite: e.elite,
+      });
       this.power=Math.min(this.cfg.powerCapacity,this.power+8*(this.taken.get('induction')??0));
       this.addFeed(`${e.cfg.name.toUpperCase()} DESTROYED  +${gained}${this.streak > 1 ? `  ×${this.streak} STREAK` : ''}`);
       this.floaters.addScore(this.tmpA.set(e.pos.x, e.pos.y + e.height * 0.75, e.pos.z), gained, this.streak);
@@ -4586,6 +4613,8 @@ export class Game {
 
   private updateWaves(dt: number) {
     if (!this.alive) return;
+    // In campaign mode, random wave survival loops are disabled. Tactical military objectives control encounters.
+    if (this.opts.campaignMode) return;
     // The reward draft waits for the celebration to land: the arena stays
     // live for a beat so the clear, the cheer and the wreck can breathe.
     if (this.victoryPending) {
@@ -4786,6 +4815,7 @@ export class Game {
   }
 
   private explosion(pos: THREE.Vector3, scale: number) {
+    this.opts?.onAreaDamage?.(pos, 80 * scale, 6 * scale);
     this.weaponFx.shockwave(pos, 5.5 * scale, 0xffa344, 0.42 * Math.sqrt(scale));
     const n = Math.floor(18 * scale);
     for (let i = 0; i < n; i++) {

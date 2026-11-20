@@ -121,21 +121,21 @@ describe('stage rearm in the simulation', () => {
     game.weaponCd.mines = 4;
     game.startWave();
     expect(game.ordnance.count).toEqual({ Q: 0, E: 3 });
-    expect(game.weaponCd).toEqual({ orbital: 6, mines: 0 });
+    expect(game.weaponCd).toEqual({ orbital: 0, mines: 4 });
   });
 });
 
 describe('Skyfall in the simulation', () => {
-  it('spends one Q charge only when powered and off cooldown', () => {
+  it('spends one E charge only when powered and off cooldown', () => {
     const game = harness();
     game.power = 0;
     game.useWeapon('orbital');
-    expect(game.ordnance.count.Q).toBe(5);
+    expect(game.ordnance.count.E).toBe(3);
     expect(game.strikes).toHaveLength(0);
     game.power = game.cfg.powerCapacity;
     game.useWeapon('orbital');
-    expect(game.ordnance.count).toEqual({ Q: 4, E: 3 });
-    expect(game.power).toBe(game.cfg.powerCapacity - game.cfg.powerCost.specialQ);
+    expect(game.ordnance.count).toEqual({ Q: 5, E: 2 });
+    expect(game.power).toBe(game.cfg.powerCapacity - game.cfg.powerCost.specialE);
     expect(game.weaponCd.orbital).toBe(7);
     expect(game.strikes[0]).toMatchObject({
       kind: 'orbital',
@@ -145,13 +145,13 @@ describe('Skyfall in the simulation', () => {
       fired: 0,
     });
     game.useWeapon('orbital');
-    expect(game.ordnance.count.Q).toBe(4);
+    expect(game.ordnance.count.E).toBe(2);
     game.weaponCd.orbital = 0;
-    game.ordnance.count.Q = 0;
+    game.ordnance.count.E = 0;
     const power = game.power;
     game.useWeapon('orbital');
     expect(game.power).toBe(power);
-    expect(game.ordnance.count.Q).toBe(0);
+    expect(game.ordnance.count.E).toBe(0);
   });
 
   it('applies the uplink and evolution to the real strike and cooldown', () => {
