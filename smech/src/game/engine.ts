@@ -21,6 +21,7 @@ import { ShaderPass } from 'three/examples/jsm/postprocessing/ShaderPass.js';
 import {
   createSaltlineSky,
   enablePCSSShadows,
+  fitDirectionalLightShadow,
   AGX_GRADE_SHADER,
   generateEnvironmentMap,
   type SaltlineSkyController,
@@ -505,6 +506,11 @@ export class Game {
   private weaponFx: WeaponEffects;
   private flashLights: THREE.PointLight[] = [];
   private muzzleLight: THREE.PointLight;
+  private hemiLight?: THREE.HemisphereLight;
+  private ambientLight?: THREE.AmbientLight;
+  private baseHemiIntensity = 0.55;
+  private baseAmbientIntensity = 0.45;
+  private baseSunIntensity = 1.0;
   private sun!: THREE.DirectionalLight;
   private sky!: THREE.Mesh;
   private sunDisc!: THREE.Mesh;
@@ -689,18 +695,22 @@ export class Game {
     const theme = this.layout.theme;
     const hemi = new THREE.HemisphereLight(theme.hemiSky, theme.hemiGround, theme.hemiIntensity);
     const ambient = new THREE.AmbientLight(theme.ambient, theme.ambientIntensity);
+    this.hemiLight = hemi;
+    this.ambientLight = ambient;
+    this.baseHemiIntensity = theme.hemiIntensity;
+    this.baseAmbientIntensity = theme.ambientIntensity;
+    this.baseSunIntensity = theme.sunIntensity;
     this.worldLights.push(hemi, ambient);
     scene.add(hemi, ambient);
     const sun = new THREE.DirectionalLight(theme.sunColor, theme.sunIntensity);
     sun.castShadow = true;
-    sun.shadow.mapSize.set(1024, 1024);
-    const sc = sun.shadow.camera;
-    sc.left = -140; sc.right = 140; sc.top = 140; sc.bottom = -140; sc.near = 10; sc.far = 500;
+    sun.shadow.mapSize.set(2048, 2048);
     sun.shadow.bias = -0.0006;
     sun.shadow.normalBias = 0.4;
     scene.add(sun, sun.target);
     this.sun = sun;
     this.sunDir.set(theme.sunDir[0], theme.sunDir[1], theme.sunDir[2]).normalize();
+    fitDirectionalLightShadow(this.sun, this.sunDir, this.pos);
 
     // Saltline volumetric cloud deck & atmospheric sky
     const sunCol = new THREE.Color(theme.sunColor);
@@ -1161,10 +1171,15 @@ export class Game {
   private update(dt: number) {
     this.time += dt;
     this.saltlineSky?.update(dt);
+    const flash = this.saltlineSky?.getFlashIntensity() ?? 0;
+    if (this.hemiLight) this.hemiLight.intensity = this.baseHemiIntensity + flash * 0.75;
+    if (this.ambientLight) this.ambientLight.intensity = this.baseAmbientIntensity + flash * 0.4;
+    if (this.sun) this.sun.intensity = this.baseSunIntensity + flash * 0.65;
     if (this.agxPass) {
       this.agxPass.uniforms.uTime.value = this.time;
       this.agxPass.uniforms.uDamage.value = this.damageFlash;
       this.agxPass.uniforms.uLowHealth.value = this.hp < this.cfg.maxHp * 0.35 ? 1.0 : 0.0;
+      this.agxPass.uniforms.uFlash.value = flash;
     }
     if (this.arenaR < this.arenaTarget) {
       this.arenaR = Math.min(this.arenaTarget, this.arenaR + 16 * dt);
@@ -4753,9 +4768,13 @@ export class Game {
     this.sky.position.copy(this.camera.position);
     this.sunDisc.position.copy(this.camera.position).addScaledVector(this.sunDir, 1100);
     this.sunDisc.lookAt(this.camera.position);
-    this.sun.position.set(this.pos.x + this.sunDir.x * 160, this.sunDir.y * 160 + 40, this.pos.z + this.sunDir.z * 160);
-    this.sun.target.position.set(this.pos.x, 0, this.pos.z);
-    this.sun.target.updateMatrixWorld();
+    if (this.quality > 0) {
+      fitDirectionalLightShadow(this.sun, this.sunDir, this.pos);
+    } else {
+      this.sun.position.set(this.pos.x + this.sunDir.x * 160, this.sunDir.y * 160 + 40, this.pos.z + this.sunDir.z * 160);
+      this.sun.target.position.set(this.pos.x, 0, this.pos.z);
+      this.sun.target.updateMatrixWorld();
+    }
   }
 
   private updateCamera(dt: number) {

@@ -194,6 +194,8 @@ export interface SaltlineSkyController {
   material: THREE.ShaderMaterial;
   update: (dt: number) => void;
   setTheme: (sunDir: THREE.Vector3, sunColor: THREE.Color, skyTop: THREE.Color, skyHorizon: THREE.Color) => void;
+  getFlashIntensity: () => number;
+  getFlashDirection: () => THREE.Vector3;
 }
 
 export function createSaltlineSky(
@@ -267,13 +269,90 @@ export function createSaltlineSky(
     uniforms.uHorAway.value.set(hor.r * 0.6, hor.g * 0.65, hor.b * 0.8);
   };
 
-  return { mesh, material: mat, update, setTheme };
+  const getFlashIntensity = () => uniforms.uFlash.value;
+  const getFlashDirection = () => uniforms.uFlashDir.value;
+
+  return { mesh, material: mat, update, setTheme, getFlashIntensity, getFlashDirection };
 }
 
 // ---------------------------------------------------------------------------
-// 3. PCSS Soft Shadows (16-tap Vogel Disk Soft Shadows adapted for Three.js)
+// 3. PCSS Soft Shadows & Dynamic Shadow Frustum (Adapted from Saltline Gy & qy)
 // ---------------------------------------------------------------------------
 let pcssInstalled = false;
+
+export function fitDirectionalLightShadow(
+  light: THREE.DirectionalLight,
+  sunDir: THREE.Vector3,
+  center: THREE.Vector3,
+  radius = 48,
+  lightDistance = 160
+): { width: number; height: number; depth: number } {
+  const normSun = sunDir.clone().normalize();
+  const targetPos = new THREE.Vector3(center.x, 0, center.z);
+  light.target.position.copy(targetPos);
+  light.position.copy(targetPos).addScaledVector(normSun, lightDistance);
+  light.updateMatrixWorld(true);
+  light.target.updateMatrixWorld(true);
+
+  // Compute world-to-light view matrix
+  const lightView = new THREE.Matrix4().lookAt(
+    light.position,
+    targetPos,
+    new THREE.Vector3(0, 1, 0)
+  );
+  lightView.setPosition(light.position);
+  lightView.invert();
+
+  // Active receiver volume around player
+  const rMin = new THREE.Vector3(center.x - radius, -2, center.z - radius);
+  const rMax = new THREE.Vector3(center.x + radius, 28, center.z + radius);
+  // Caster margin extending back along sun
+  const cMin = new THREE.Vector3(center.x - radius - 12, -2, center.z - radius - 12);
+  const cMax = new THREE.Vector3(center.x + radius + 12, 45, center.z + radius + 12);
+
+  const pt = new THREE.Vector3();
+  let minX = Infinity, maxX = -Infinity;
+  let minY = Infinity, maxY = -Infinity;
+  let minZ = Infinity, maxZ = -Infinity;
+
+  const projectBox = (bMin: THREE.Vector3, bMax: THREE.Vector3, zOnly: boolean) => {
+    for (let i = 0; i < 8; i++) {
+      pt.set(
+        i & 1 ? bMax.x : bMin.x,
+        i & 2 ? bMax.y : bMin.y,
+        i & 4 ? bMax.z : bMin.z
+      ).applyMatrix4(lightView);
+
+      if (!zOnly) {
+        minX = Math.min(minX, pt.x);
+        maxX = Math.max(maxX, pt.x);
+        minY = Math.min(minY, pt.y);
+        maxY = Math.max(maxY, pt.y);
+      }
+      minZ = Math.min(minZ, -pt.z);
+      maxZ = Math.max(maxZ, -pt.z);
+    }
+  };
+
+  projectBox(rMin, rMax, false);
+  projectBox(cMin, cMax, true);
+
+  const cam = light.shadow.camera;
+  const pad = 2.0;
+  cam.left = minX - pad;
+  cam.right = maxX + pad;
+  cam.bottom = minY - pad;
+  cam.top = maxY + pad;
+  cam.near = Math.max(1, minZ - 4);
+  cam.far = maxZ + 12;
+  cam.updateProjectionMatrix();
+
+  return {
+    width: cam.right - cam.left,
+    height: cam.top - cam.bottom,
+    depth: cam.far - cam.near,
+  };
+}
 
 export function enablePCSSShadows(
   _frustumWidth = 280,
@@ -333,6 +412,7 @@ export const AGX_GRADE_SHADER = {
     uSaturation: { value: 1.05 },
     uSharpen: { value: 0.28 },
     uFxaa: { value: 1.0 },
+    uFlash: { value: 0 },
   },
   vertexShader: `
     varying vec2 vUv;
@@ -344,7 +424,7 @@ export const AGX_GRADE_SHADER = {
   fragmentShader: `
     uniform sampler2D tDiffuse;
     uniform vec2 uResolution;
-    uniform float uTime, uDamage, uLowHealth, uVignette, uSaturation, uSharpen, uFxaa;
+    uniform float uTime, uDamage, uLowHealth, uVignette, uSaturation, uSharpen, uFxaa, uFlash;
     varying vec2 vUv;
 
     const mat3 SL_REC2020_TO_SRGB = mat3(
@@ -447,6 +527,12 @@ export const AGX_GRADE_SHADER = {
       float sat = uSaturation * (1.0 - 0.5 * uLowHealth) * (1.0 - 0.35 * uDamage);
       l = luma(col);
       col = mix(vec3(l), col, sat);
+
+      // Atmospheric lightning storm flash (from Saltline SALTLINE_POST)
+      if (uFlash > 0.005) {
+        vec3 flashTint = vec3(0.55, 0.72, 1.0) * (0.35 + l * 0.65);
+        col = mix(col, col + flashTint * 0.55, clamp(uFlash, 0.0, 1.0));
+      }
 
       // Vignette
       vec2 uvNorm = (vUv - 0.5) * 2.0;
