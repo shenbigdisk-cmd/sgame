@@ -432,8 +432,6 @@ export class Game {
   private secCd = 0;
   /** the cooldown `secCd` was primed with — used for an accurate readiness bar */
   private secCdMax = 0;
-  private secDryTimer = 0;
-  private prevSecReady = 1.0;
   /** interval between two beam ticks (flamethrower / cryo lance) */
   private beamCd = 0;
   private mines: Mine[] = [];
@@ -873,8 +871,6 @@ export class Game {
     this.mgOverheat = false;
     this.secCd = 0;
     this.secCdMax = 0;
-    this.secDryTimer = 0;
-    this.prevSecReady = 1.0;
     this.beamCd = 0;
     this.secHeat = 0;
     this.secOverheat = false;
@@ -1430,20 +1426,8 @@ export class Game {
     this.mgBurstPauseTimer = Math.max(0, this.mgBurstPauseTimer - dt * rate);
     this.secCd = Math.max(0, this.secCd - dt);
     this.beamCd = Math.max(0, this.beamCd - dt);
-    this.secDryTimer = Math.max(0, this.secDryTimer - dt);
-    const secReady = this.secondaryReadiness();
-    if (this.prevSecReady < 1.0 && secReady >= 1.0) {
-      this.audio.playReady();
-    }
-    this.prevSecReady = secReady;
     const priHeld = this.mouse.left || this.keys.has('Space') || this.padFire.primary;
     const secHeld = this.mouse.right || this.keys.has('KeyC') || this.keys.has('ControlLeft') || this.keys.has('ControlRight') || this.padFire.secondary;
-    if (secHeld && secReady < 1.0 && c.loadout.secondary) {
-      if (this.secDryTimer <= 0) {
-        this.secDryTimer = 0.28;
-        this.audio.playDry();
-      }
-    }
     if (priHeld && !this.mgOverheat && c.loadout.primary) {
       if (c.loadout.primary === 'scatter') {
         if (this.primaryCd <= 0 && this.spendPower(c.loadout.primary)) {

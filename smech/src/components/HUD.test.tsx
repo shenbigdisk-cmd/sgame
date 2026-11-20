@@ -379,7 +379,7 @@ describe('floating radar and additional weapons', () => {
     const [q, e] = cooling.querySelectorAll<HTMLButtonElement>('.cp-special');
     expect(q.disabled).toBe(true);
     expect(q.getAttribute('aria-label')).toContain('Cooldown 4 seconds, 2 of 5 charges');
-    expect(q.querySelector('.cp-special-face')?.textContent).toBe('4s');
+    expect(q.querySelector('.cp-special-face svg')).not.toBeNull();
     expect(q.querySelector('.cp-special-count')?.textContent).toBe('2/5');
     expect(q.querySelector('.cp-special-progress')?.getAttribute('stroke-dasharray')).toBe('50 100');
     expect(e.disabled).toBe(true);

@@ -62,13 +62,14 @@ export function makeHardpoint(id: WeaponId | null, cfg: VehicleConfig): Hardpoin
       for(const z of [-1.52,-1.69])box(.395,.04,.065,0,.12,z,steel,breech);
       indicator=box(.07,.045,.52,-.21,.224,.02,lamp,breech);
       tipAt(brake.position.z-.245);
-      updateCharge = (charge: number, time: number) => {
+      updateCharge = (charge: number) => {
         const c = clamp01(charge);
         const cycle = Math.sin((1 - c) * Math.PI);
         breech!.position.z = cycle * 0.28;
         breech!.rotation.x = -cycle * 0.05;
-        lamp.emissiveIntensity = c < 1.0 ? 0.3 + 1.8 * Math.pow(c, 2) + Math.sin(time * 24) * (1 - c) * 0.4 : 1.8;
-        lamp.color.setRGB(1.0, 0.2 + 0.75 * c, 0.1 + 0.9 * Math.pow(c, 2));
+        // Increases light smoothly from empty dark (0) to full energy (2.2)
+        lamp.emissiveIntensity = c * 2.2;
+        lamp.color.setRGB(c, c * 0.85, c * 0.35);
         lamp.emissive.copy(lamp.color);
       };
       break;
@@ -89,9 +90,10 @@ export function makeHardpoint(id: WeaponId | null, cfg: VehicleConfig): Hardpoin
       tube(.14,.29,.47,0,0,-1.36,copper,8);hoop(.238,.033,-1.51,ember);hoop(.29,.032,-1.59,dark);
       const pilot=mesh(new THREE.OctahedronGeometry(.14),ember,.14,.15,-1.59);pilot.scale.z=1.6;
       tipAt(-1.64);
-      updateCharge = (charge: number, time: number) => {
+      updateCharge = (charge: number) => {
         const c = clamp01(charge);
-        ember.emissiveIntensity = 0.4 + 2.2 * c + (c < 1 ? Math.sin(time * 18) * 0.4 : 0);
+        ember.emissiveIntensity = c * 2.2;
+        ember.emissive.copy(ember.color).multiplyScalar(c);
       };
       break;
     }
@@ -107,10 +109,10 @@ export function makeHardpoint(id: WeaponId | null, cfg: VehicleConfig): Hardpoin
       indicator=hoop(.29,.046,-1.24,lamp);
       for(const x of [-.22,0,.22]){tube(.094,.094,.67,x,.275,-.19,lamp);for(const z of [.1,-.45])tube(.107,.107,.095,x,.275,z,steel)}
       tipAt(-1.30);
-      updateCharge = (charge: number, time: number) => {
+      updateCharge = (charge: number) => {
         const c = clamp01(charge);
-        lamp.emissiveIntensity = 0.3 + 2.4 * Math.pow(c, 2) + (c < 1 ? Math.sin(time * 20) * 0.4 : 0);
-        lamp.color.setHSL(0.55, 0.9, 0.25 + 0.55 * c);
+        lamp.emissiveIntensity = c * 2.4;
+        lamp.color.setHSL(0.55, 0.9, 0.48 * c);
         lamp.emissive.copy(lamp.color);
       };
       break;
@@ -127,17 +129,20 @@ export function makeHardpoint(id: WeaponId | null, cfg: VehicleConfig): Hardpoin
       coils = hoopList;
       indicator = box(.055, .025, 1.22, 0, .24, -.92, electric);
       tipAt(-1.78);
-      updateCharge = (charge: number, time: number) => {
+      updateCharge = (charge: number) => {
         const c = clamp01(charge);
         hoopList.forEach((coil, idx) => {
           const segStart = idx / hoopList.length;
           const segEnd = (idx + 1) / hoopList.length;
           const cVal = clamp01((c - segStart) / (segEnd - segStart));
           const cMat = coil.material as THREE.MeshStandardMaterial;
-          cMat.emissiveIntensity = 0.2 + 2.4 * Math.pow(cVal, 2) + (c < 1 && cVal > 0 ? Math.sin(time * 30 + idx * 2) * 0.5 : 0);
+          cMat.emissiveIntensity = cVal * 2.5;
+          cMat.color.setRGB(0.05 + 0.45 * cVal, 0.3 + 0.6 * cVal, 0.5 + 0.5 * cVal);
+          cMat.emissive.copy(cMat.color);
           coil.scale.setScalar(0.92 + 0.12 * cVal);
         });
-        electric.emissiveIntensity = 0.4 + 2.0 * Math.pow(c, 2);
+        electric.emissiveIntensity = c * 2.2;
+        electric.emissive.copy(electric.color).multiplyScalar(c);
       };
       break;
     }
@@ -155,20 +160,15 @@ export function poseHardpoint(
   swayX = 0,
   swayY = 0,
   strideThump = 0,
-  charge = 1.0,
-  time = 0
+  _charge = 1.0,
+  _time = 0
 ) {
   const k = Math.tan((fov * Math.PI) / 360) / Math.tan((70 * Math.PI) / 360);
   const lateral = Math.min(aspect, 2.2);
   root.scale.setScalar(0.68 * k * Math.min(1, aspect / 0.95));
-  const c = clamp01(charge);
-  const isCharging = index === 1 && c < 1.0;
-  const chargeHum = isCharging ? Math.sin(time * 48) * (1 - c) * 0.003 : 0;
-  const chargeLateral = isCharging ? (1 - c) * 0.015 * Math.cos(time * 36) : 0;
-
   root.position.set(
-    (index ? 1 : -1) * 1.13 * lateral * k + swayX * 0.7 + chargeLateral,
-    -1.42 * k + swayY * 0.7 + strideThump * 0.35 + recoil * 0.05 + chargeHum,
+    (index ? 1 : -1) * 1.13 * lateral * k + swayX * 0.7,
+    -1.42 * k + swayY * 0.7 + strideThump * 0.35 + recoil * 0.05,
     -2.48 + recoil * 0.35
   );
   root.rotation.x = recoil * 0.22 - swayY * 0.9 + strideThump * 0.15;
