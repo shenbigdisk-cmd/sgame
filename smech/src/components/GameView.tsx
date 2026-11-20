@@ -185,18 +185,18 @@ export default function GameView({ vehicle, config, stepWeight, mechName, contro
                 {controls === 'arcade' ? (
                   <>
                     <span><b className="text-zinc-200">WASD</b> move toward aim</span>
-                    <span><b className="text-zinc-200">MOUSE</b> aim</span>
+                    <span><b className="text-zinc-200">MOUSE / ARROWS</b> aim</span>
                     <span><b className="text-zinc-200">A / D</b> sidestep</span>
                     <span><b className="text-zinc-200">HULL</b> lines up itself</span>
                   </>
                 ) : (
                   <>
                     <span><b className="text-zinc-200">WASD</b> drive hull</span>
-                    <span><b className="text-zinc-200">MOUSE</b> aim turret</span>
+                    <span><b className="text-zinc-200">MOUSE / ARROWS</b> aim turret</span>
                   </>
                 )}
-                <span><b className="text-zinc-200">LMB</b> primary weapon</span>
-                <span><b className="text-zinc-200">RMB</b> secondary weapon</span>
+                <span><b className="text-zinc-200">LMB / SPACE</b> primary weapon</span>
+                <span><b className="text-zinc-200">RMB / CTRL / C</b> secondary weapon</span>
                 <span><b className="text-zinc-200">Q / E</b> special weapons</span>
                 <span><b className="text-zinc-200">Z</b> scope</span>
                 <span><b className="text-zinc-200">M</b> music on / off</span>

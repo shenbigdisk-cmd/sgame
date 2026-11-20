@@ -1035,7 +1035,7 @@ export class Game {
   // -------------------------------------------------------------------------
   private onKeyDown = (e: KeyboardEvent) => {
     if (!this.upgrading && (this.paused || !this.alive)) return;
-    if (['Space', 'KeyW', 'KeyA', 'KeyS', 'KeyD', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'ShiftLeft', 'ControlLeft'].includes(e.code)) e.preventDefault();
+    if (['Space', 'KeyW', 'KeyA', 'KeyS', 'KeyD', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'ShiftLeft', 'ControlLeft', 'ControlRight'].includes(e.code)) e.preventDefault();
     if (this.upgrading) {
       if (!e.repeat && (e.code === 'Digit1' || e.code === 'Numpad1')) this.pickUpgrade(0);
       if (!e.repeat && (e.code === 'Digit2' || e.code === 'Numpad2')) this.pickUpgrade(1);
@@ -1257,14 +1257,31 @@ export class Game {
     const mobility = this.stats.speedMul * (this.buffT.haste > 0 ? 1.2 : 1) * (this.buffT.overdrive > 0 ? 1.25 : 1) * (this.buffT.smoke > 0 ? 1.15 : 1) * (inWater(this.pos.x, this.pos.z) ? 0.72 : 1);
     const c = { ...this.cfg, maxSpeed: this.cfg.maxSpeed * mobility, accel: this.cfg.accel * mobility };
     let throttle = 0;
-    if (k.has('KeyW') || k.has('ArrowUp')) throttle += 1;
-    if (k.has('KeyS') || k.has('ArrowDown')) throttle -= 1;
+    if (k.has('KeyW')) throttle += 1;
+    if (k.has('KeyS')) throttle -= 1;
     let turnKey = 0;
-    if (k.has('KeyA') || k.has('ArrowLeft')) turnKey += 1;
-    if (k.has('KeyD') || k.has('ArrowRight')) turnKey -= 1;
+    if (k.has('KeyA')) turnKey += 1;
+    if (k.has('KeyD')) turnKey -= 1;
     throttle += this.padMove.y;
     // keyboard A = +1 (left), D = -1 (right); touch stick +x = right
     const turn = turnKey - this.padMove.x;
+
+    // Arrow keys aiming (right-hand cursor controls rotate aim like a mouse)
+    let arrowYaw = 0;
+    let arrowPitch = 0;
+    if (k.has('ArrowLeft')) arrowYaw += 1;
+    if (k.has('ArrowRight')) arrowYaw -= 1;
+    if (k.has('ArrowUp')) arrowPitch += 1;
+    if (k.has('ArrowDown')) arrowPitch -= 1;
+    if (arrowYaw !== 0 || arrowPitch !== 0) {
+      const turnSpeed = 2.4 * this.settings.sensitivity * (this.zoom ? 0.45 : 1.0);
+      const pitchSpeed = 1.8 * this.settings.sensitivity * (this.zoom ? 0.45 : 1.0);
+      this.turretYaw += arrowYaw * turnSpeed * dt;
+      const dy = (this.settings.invertY ? -arrowPitch : arrowPitch) * pitchSpeed * dt;
+      this.pitch = clamp(this.pitch + dy, -0.3, 0.4);
+      this.swayTargetX = clamp(this.swayTargetX + arrowYaw * 0.02, -0.05, 0.05);
+      this.swayTargetY = clamp(this.swayTargetY + dy * 0.02, -0.035, 0.035);
+    }
 
     if (this.controls === 'arcade') {
       // ---------------------------------------------------------------------
@@ -1405,7 +1422,7 @@ export class Game {
     this.beamCd = Math.max(0, this.beamCd - dt);
     if (this.reloading && this.cannonCd <= 0) { this.reloading = false; this.audio.playReady(); }
     const priHeld = this.mouse.left || this.keys.has('Space') || this.padFire.primary;
-    const secHeld = this.mouse.right || this.keys.has('KeyC') || this.padFire.secondary;
+    const secHeld = this.mouse.right || this.keys.has('KeyC') || this.keys.has('ControlLeft') || this.keys.has('ControlRight') || this.padFire.secondary;
     if (priHeld && !this.mgOverheat && c.loadout.primary) {
       if (c.loadout.primary === 'scatter') {
         if (this.primaryCd <= 0 && this.spendPower(c.loadout.primary)) {
@@ -1694,6 +1711,8 @@ export class Game {
     this.muzzleLight.position.copy(this.muzzleLocal('secondary'));
     this.muzzleLight.intensity = over ? 720 : 420;
     this.muzzleFlash(muzzle, dir, over ? 1.7 : 1);
+    this.weaponFx.shockwave(this.pos, over ? 9.0 : 6.0, over ? 0xffbb44 : 0xff9933, 0.38);
+    this.dust(this.pos, over ? 1.4 : 0.9);
     this.audio.playCannon();
     if (over) {
       this.audio.playCrit();
@@ -1766,6 +1785,8 @@ export class Game {
     this.muzzleLight.position.copy(this.muzzleLocal('primary'));
     this.muzzleLight.intensity = over ? 720 : 500;
     this.muzzleFlash(muzzle, dir, over ? 1.7 : 1.2);
+    this.weaponFx.shockwave(this.pos, over ? 7.5 : 5.0, 0xffa544, 0.32);
+    this.dust(this.pos, over ? 1.2 : 0.7);
     this.audio.playScatter();
     if (over) {
       this.audio.playCrit();
@@ -4698,15 +4719,15 @@ export class Game {
   }
 
   private sparks(pos: THREE.Vector3, scale: number) {
-    const n = Math.floor(8 * scale) + 2;
+    const n = Math.floor(14 * scale) + 4;
     for (let i = 0; i < n; i++) {
       const th = rand(0, TWO_PI);
       const ph = rand(0, Math.PI);
-      const sp = rand(6, 16);
+      const sp = rand(8, 24) * Math.min(1.5, Math.sqrt(scale));
       this.fire.emit({
         x: pos.x, y: pos.y, z: pos.z,
-        vx: Math.sin(ph) * Math.cos(th) * sp, vy: Math.abs(Math.cos(ph)) * sp, vz: Math.sin(ph) * Math.sin(th) * sp,
-        life: rand(0.2, 0.5), size0: 0.35, size1: 0.05, c0: [1, 0.95, 0.7], c1: [1, 0.5, 0.1], grav: 12, drag: 1, alpha: 1,
+        vx: Math.sin(ph) * Math.cos(th) * sp, vy: Math.abs(Math.cos(ph)) * sp * 1.2, vz: Math.sin(ph) * Math.sin(th) * sp,
+        life: rand(0.25, 0.6), size0: 0.35 * Math.sqrt(scale), size1: 0.04, c0: [1, 0.95, 0.7], c1: [1, 0.45, 0.08], grav: 16, drag: 0.85, alpha: 1,
       });
     }
   }
