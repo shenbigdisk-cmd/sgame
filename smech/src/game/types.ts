@@ -162,6 +162,7 @@ export interface HudState {
   feed: FeedEntry[];
   hitMarkerAge: number;
   critAge: number;
+  killAge?: number;
   /** transient world-anchored damage / score readouts, projected to the screen */
   floaters: HudFloater[];
   damageFlash: number;

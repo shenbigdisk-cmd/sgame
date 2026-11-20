@@ -647,3 +647,120 @@
     opacity: 1;
   }
 }
+
+/* Brutalist military compass heading tape */
+.cp-compass {
+  position: absolute;
+  top: 10px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  width: min(340px, 45vw);
+  pointer-events: none;
+  z-index: 12;
+}
+
+.cp-compass-heading {
+  font: 700 12px/1 'Share Tech Mono', monospace;
+  letter-spacing: 0.15em;
+  color: #e8e4da;
+  background: rgba(11, 13, 15, 0.75);
+  padding: 2px 8px;
+  border: 1px solid rgba(232, 228, 218, 0.2);
+  border-bottom: none;
+  border-radius: 2px 2px 0 0;
+  text-shadow: 0 0 8px rgba(255, 179, 71, 0.4);
+}
+
+.cp-compass-window {
+  position: relative;
+  width: 100%;
+  height: 24px;
+  background: linear-gradient(180deg, rgba(11, 13, 15, 0.85), rgba(11, 13, 15, 0.45));
+  border: 1px solid rgba(232, 228, 218, 0.22);
+  border-radius: 2px;
+  overflow: hidden;
+  mask-image: linear-gradient(90deg, transparent, #000 18%, #000 82%, transparent);
+  -webkit-mask-image: linear-gradient(90deg, transparent, #000 18%, #000 82%, transparent);
+}
+
+.cp-compass-centerline {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 50%;
+  width: 2px;
+  transform: translateX(-50%);
+  background: var(--cp-accent, #ffb347);
+  box-shadow: 0 0 6px var(--cp-accent, #ffb347);
+  z-index: 2;
+}
+
+.cp-compass-tick {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  transform: translateX(-50%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  transition: none;
+}
+
+.cp-compass-mark {
+  width: 1px;
+  height: 6px;
+  background: rgba(232, 228, 218, 0.4);
+}
+
+.cp-compass-tick.is-major .cp-compass-mark {
+  width: 1.5px;
+  height: 10px;
+  background: #e8e4da;
+}
+
+.cp-compass-label {
+  font: 700 8.5px/1 'Share Tech Mono', monospace;
+  letter-spacing: 0.05em;
+  color: #e8e4da;
+  margin-top: 2px;
+}
+
+.cp-compass-hull-pip {
+  position: absolute;
+  bottom: 1px;
+  font-size: 8px;
+  line-height: 1;
+  color: var(--cp-accent, #ffb347);
+  transform: translateX(-50%);
+  filter: drop-shadow(0 0 4px var(--cp-accent, #ffb347));
+  z-index: 3;
+}
+
+/* Fullscreen peripheral threat damage arcs */
+.cp-damage-arcs {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  z-index: 10;
+}
+
+/* Dynamic hit marker animations */
+.cp-hit-marker {
+  animation: cp-hit-pulse 0.08s ease-out;
+}
+
+@keyframes cp-hit-pulse {
+  from {
+    transform: scale(0.7);
+    opacity: 0.6;
+  }
+  to {
+    transform: scale(1);
+    opacity: 1;
+  }
+}

@@ -866,3 +866,80 @@ export function createBeveledBox(
   geo.center();
   return geo;
 }
+
+// ---------------------------------------------------------------------------
+// 9. Ambient Dust Volume (Saltline atmospheric windblown micro-particles)
+// ---------------------------------------------------------------------------
+export class AmbientDustVolume {
+  private points: THREE.Points;
+  private positions: Float32Array;
+  private velocities: Float32Array;
+  private count: number;
+  private bounds = 52; // cube half-span around player (m)
+
+  constructor(scene: THREE.Scene, count = 220) {
+    this.count = count;
+    this.positions = new Float32Array(count * 3);
+    this.velocities = new Float32Array(count * 3);
+
+    for (let i = 0; i < count; i++) {
+      this.positions[i * 3] = (Math.random() - 0.5) * this.bounds * 2;
+      this.positions[i * 3 + 1] = 0.5 + Math.random() * 14;
+      this.positions[i * 3 + 2] = (Math.random() - 0.5) * this.bounds * 2;
+
+      this.velocities[i * 3] = 1.4 + Math.random() * 2.2; // wind drift X
+      this.velocities[i * 3 + 1] = (Math.random() - 0.5) * 0.4;
+      this.velocities[i * 3 + 2] = 0.8 + Math.random() * 1.6; // wind drift Z
+    }
+
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute('position', new THREE.BufferAttribute(this.positions, 3).setUsage(THREE.DynamicDrawUsage));
+
+    const mat = new THREE.PointsMaterial({
+      color: 0xdfceb8,
+      size: 0.18,
+      transparent: true,
+      opacity: 0.45,
+      blending: THREE.AdditiveBlending,
+      depthWrite: false,
+      fog: false,
+    });
+
+    this.points = new THREE.Points(geo, mat);
+    this.points.frustumCulled = false;
+    scene.add(this.points);
+  }
+
+  update(dt: number, playerPos: THREE.Vector3) {
+    const halfB = this.bounds;
+    const span = halfB * 2;
+    for (let i = 0; i < this.count; i++) {
+      let x = this.positions[i * 3] + this.velocities[i * 3] * dt;
+      let y = this.positions[i * 3 + 1] + this.velocities[i * 3 + 1] * dt;
+      let z = this.positions[i * 3 + 2] + this.velocities[i * 3 + 2] * dt;
+
+      const relX = x - playerPos.x;
+      const relZ = z - playerPos.z;
+
+      if (relX > halfB) x -= span;
+      else if (relX < -halfB) x += span;
+
+      if (relZ > halfB) z -= span;
+      else if (relZ < -halfB) z += span;
+
+      if (y < 0.2) y += 14;
+      else if (y > 15) y -= 14;
+
+      this.positions[i * 3] = x;
+      this.positions[i * 3 + 1] = y;
+      this.positions[i * 3 + 2] = z;
+    }
+    (this.points.geometry.getAttribute('position') as THREE.BufferAttribute).needsUpdate = true;
+  }
+
+  destroy(scene: THREE.Scene) {
+    scene.remove(this.points);
+    this.points.geometry.dispose();
+    (this.points.material as THREE.Material).dispose();
+  }
+}

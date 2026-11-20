@@ -24,6 +24,7 @@ import {
   fitDirectionalLightShadow,
   AGX_GRADE_SHADER,
   generateEnvironmentMap,
+  AmbientDustVolume,
   type SaltlineSkyController,
 } from './saltlineVisuals';
 import type { AudioManager } from './audio';
@@ -393,6 +394,7 @@ export class Game {
   private composer!: EffectComposer;
   private bloom!: UnrealBloomPass;
   private saltlineSky?: SaltlineSkyController;
+  private ambientDust?: AmbientDustVolume;
   private agxPass?: ShaderPass;
   private shieldMesh!: THREE.Mesh;
   private fireSpots: THREE.Vector3[] = [];
@@ -454,6 +456,7 @@ export class Game {
   private damageFlash = 0;
   private damageDirs: { angle: number; time: number }[] = [];
   private hitMarkerTime = -10;
+  private killTime = -10;
   private message = '';
   private messageTime = -10;
   private feed: FeedItem[] = [];
@@ -726,6 +729,9 @@ export class Game {
 
     // Image-Based Lighting: bake HDR cubemap from the sky for realistic specular reflections on all mechs & metals
     scene.environment = generateEnvironmentMap(this.renderer, this.saltlineSky);
+
+    // Atmospheric windblown micro-particles
+    this.ambientDust = new AmbientDustVolume(scene);
 
     this.sunDisc = new THREE.Mesh(new THREE.CircleGeometry(theme.sunSize, 24), new THREE.MeshBasicMaterial({ color: theme.sunDisc, fog: false }));
     this.sunDisc.visible = false;
@@ -1026,6 +1032,7 @@ export class Game {
       }
     });
     this.weaponFx.dispose();
+    this.ambientDust?.destroy(this.scene);
     this.composer.dispose();
     this.renderer.dispose();
   }
@@ -4302,6 +4309,7 @@ export class Game {
   private killEnemy(e: Enemy, award = true) {
     if (!e.alive) return;
     e.alive = false;
+    this.killTime = this.time;
     if (e.kind === 'sapper') this.sapperBlast(e, award ? 0.72 : 1);
     if (e.burnTime > 0 && this.evolved('flame')) {
       const point = this.enemyCenter(e);
@@ -4747,6 +4755,7 @@ export class Game {
   private updateEffects(dt: number) {
     this.floaters.update(dt);
     this.weaponFx.update(dt);
+    this.ambientDust?.update(dt, this.pos);
     if (this.waterTexture) {
       this.waterTexture.offset.x += dt * 0.007;
       this.waterTexture.offset.y += dt * 0.002;
@@ -5061,6 +5070,7 @@ export class Game {
       streak: this.streak,
       streakAge: this.time - this.streakTime,
       critAge: this.time - this.critTime,
+      killAge: this.time - this.killTime,
       floaters: this.floaters.project(this.camera),
       detected: this.enemies.filter((e) => e.aware).length,
       seenBy: this.enemies.filter((e) => e.canSee).length,

@@ -377,6 +377,87 @@ function MainWeaponUpgrades({ weapons }: { weapons: HudWeapon[] }) {
   );
 }
 
+/** Modern brutalist military heading tape mounted along the upper cockpit canopy */
+function CompassTape({ turretYaw, hullYaw }: { turretYaw: number; hullYaw: number }) {
+  const heading = Math.round(((-turretYaw * 180 / Math.PI) % 360 + 360) % 360);
+  const hullRel = wrap(hullYaw - turretYaw) * 180 / Math.PI;
+  const degPx = 3.6;
+  const halfSpan = 38;
+  const ticks: { d: number; offsetPx: number; isMajor: boolean; label: string }[] = [];
+  const startDeg = Math.floor((heading - halfSpan) / 5) * 5;
+  const endDeg = Math.ceil((heading + halfSpan) / 5) * 5;
+
+  for (let d = startDeg; d <= endDeg; d += 5) {
+    const normD = ((d % 360) + 360) % 360;
+    const offsetPx = (d - heading) * degPx;
+    let label = '';
+    if (normD === 0) label = 'N';
+    else if (normD === 45) label = 'NE';
+    else if (normD === 90) label = 'E';
+    else if (normD === 135) label = 'SE';
+    else if (normD === 180) label = 'S';
+    else if (normD === 225) label = 'SW';
+    else if (normD === 270) label = 'W';
+    else if (normD === 315) label = 'NW';
+    else if (normD % 15 === 0) label = String(normD).padStart(3, '0');
+
+    ticks.push({ d: normD, offsetPx, isMajor: normD % 15 === 0 || label.length > 0, label });
+  }
+
+  const hullPipX = Math.max(-125, Math.min(125, -hullRel * degPx));
+
+  return (
+    <div className="cp-compass" aria-label={`Heading ${heading} degrees`}>
+      <div className="cp-compass-heading">{String(heading).padStart(3, '0')}°</div>
+      <div className="cp-compass-window">
+        <div className="cp-compass-centerline" />
+        {ticks.map((t, idx) => (
+          <div
+            key={idx}
+            className={`cp-compass-tick${t.isMajor ? ' is-major' : ''}`}
+            style={{ left: `calc(50% + ${t.offsetPx}px)` }}
+          >
+            <div className="cp-compass-mark" />
+            {t.label && <span className="cp-compass-label">{t.label}</span>}
+          </div>
+        ))}
+        <div
+          className="cp-compass-hull-pip"
+          style={{ left: `calc(50% + ${hullPipX}px)` }}
+          title="Chassis heading"
+        >
+          ▲
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/** Fullscreen peripheral threat indicators showing incoming damage direction */
+function DamageArcs({ damageDirs }: { damageDirs: { angle: number; age: number }[] }) {
+  if (!damageDirs.length) return null;
+  return (
+    <svg className="cp-damage-arcs" viewBox="-100 -100 200 200" aria-hidden="true">
+      {damageDirs.map((d, i) => {
+        const opacity = Math.max(0, 1 - d.age / 1.3);
+        const deg = (-d.angle * 180) / Math.PI;
+        return (
+          <g key={i} transform={`rotate(${deg})`} opacity={opacity}>
+            <path
+              d="M-28 -84 A 88 88 0 0 1 28 -84"
+              fill="none"
+              stroke="#ff3820"
+              strokeWidth="4"
+              strokeLinecap="round"
+            />
+            <polygon points="0,-92 -5,-85 5,-85" fill="#ff4d36" />
+          </g>
+        );
+      })}
+    </svg>
+  );
+}
+
 function SpecialWeapon({
   weapon,
   slot,
@@ -486,6 +567,7 @@ export default function HUD({
         }}
       />
       {hud.alive && hud.concealed && <div className="cp-veil-effect" aria-hidden="true" />}
+      <DamageArcs damageDirs={hud.damageDirs} />
       <Canopy />
       <div className="cp-floaters" aria-hidden="true">
         {hud.floaters.map((f) => {
@@ -519,6 +601,7 @@ export default function HUD({
             </div>
           )}
         </section>
+        <CompassTape turretYaw={hud.turretYaw} hullYaw={hud.hullYaw} />
         {touch && (
           <button type="button" className="cp-zoom" onClick={onZoom} aria-label="Toggle scope">
             <Icon name="target" size={18} />
@@ -567,13 +650,29 @@ export default function HUD({
                 opacity="0.85"
               />
               <circle r="0.65" fill={hud.aimedEnemy ? '#ff4b60' : '#e2fbff'} />
-              {hud.hitMarkerAge < 0.2 && (
-                <path
-                  d="M-9 -9l-2 -2 M9 -9l2 -2 M9 9l2 2 M-9 9l-2 2"
-                  stroke={hud.critAge < 0.25 ? '#ffbe66' : 'white'}
-                  strokeWidth="1.1"
-                  fill="none"
-                />
+              {hud.hitMarkerAge < 0.28 && (
+                <g className="cp-hit-marker">
+                  {(hud.killAge ?? 999) < 0.35 ? (
+                    <g stroke="#ff3828" strokeWidth="2.2" strokeLinecap="square">
+                      <line x1="-12" y1="-12" x2="12" y2="12" />
+                      <line x1="12" y1="-12" x2="-12" y2="12" />
+                      <circle r="15" fill="none" stroke="#ff3828" strokeWidth="0.8" strokeDasharray="3 3" opacity="0.85" />
+                      <text x="0" y="-17" textAnchor="middle" fill="#ff3828" fontSize="6" fontWeight="900" letterSpacing="1">DESTROYED</text>
+                    </g>
+                  ) : hud.critAge < 0.25 ? (
+                    <g stroke="#ffb347" strokeWidth="1.8" fill="none">
+                      <path d="M-8 -8 L-13 -13 M8 -8 L13 -13 M-8 8 L-13 13 M8 8 L13 13" />
+                      <path d="M-5 -9 L-9 -9 L-9 -5 M5 -9 L9 -9 L9 -5 M-5 9 L-9 9 L-9 5 M5 9 L9 9 L9 5" strokeWidth="1.1" />
+                    </g>
+                  ) : (
+                    <path
+                      d="M-7 -7 L-11 -11 M7 -7 L11 -11 M-7 7 L-11 11 M7 7 L11 11"
+                      stroke="#e8e4da"
+                      strokeWidth="1.4"
+                      fill="none"
+                    />
+                  )}
+                </g>
               )}
             </svg>
           )}

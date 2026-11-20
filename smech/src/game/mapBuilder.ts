@@ -436,7 +436,7 @@ export function buildMap(parent: THREE.Object3D, obstacles: Obstacle[], makeWrec
     parent.add(road);
   }
 
-  // ---- distant mountains -------------------------------------------------
+  // ---- distant mountains & industrial flare stacks ----------------------
   const mGeo = new THREE.ConeGeometry(1, 1, 7, 1);
   const mMat = new THREE.MeshStandardMaterial({ color: 0x5a524a, roughness: 1, flatShading: true });
   for (let i = 0; i < 38; i++) {
@@ -450,7 +450,24 @@ export function buildMap(parent: THREE.Object3D, obstacles: Obstacle[], makeWrec
     parent.add(m);
   }
 
-  // ---- perimeter fence (moves outwards as the map expands) --------------
+  // Distant industrial communication towers / refinery stacks on the horizon
+  const towerGeo = new THREE.CylinderGeometry(0.8, 2.2, 55, 6);
+  const towerMat = new THREE.MeshStandardMaterial({ color: 0x22262a, roughness: 0.8, metalness: 0.8 });
+  const beaconMatDistant = new THREE.MeshBasicMaterial({ color: 0xff2020 });
+  const beaconGeo = new THREE.SphereGeometry(1.6, 6, 6);
+  for (let i = 0; i < 14; i++) {
+    const a = (i / 14) * TWO_PI + rand(-0.12, 0.12);
+    const r = rand(430, 560);
+    const y0 = heightAt(Math.sin(a) * r, Math.cos(a) * r);
+    const tower = new THREE.Mesh(towerGeo, towerMat);
+    tower.position.set(Math.sin(a) * r, y0 + 26, Math.cos(a) * r);
+    parent.add(tower);
+    const beacon = new THREE.Mesh(beaconGeo, beaconMatDistant);
+    beacon.position.set(Math.sin(a) * r, y0 + 54, Math.cos(a) * r);
+    parent.add(beacon);
+  }
+
+  // ---- perimeter fence & catenary power cables ---------------------------
   const FENCE_SEG = 168;
   const fenceGeo = new THREE.BufferGeometry();
   const fPos = new Float32Array((FENCE_SEG + 1) * 2 * 3);
@@ -483,6 +500,18 @@ export function buildMap(parent: THREE.Object3D, obstacles: Obstacle[], makeWrec
   pylons.frustumCulled = false;
   pylons.castShadow = true;
   parent.add(pylons);
+
+  // Catenary power cables strung between all perimeter pylons
+  const CABLE_SUBDIV = 4;
+  const cableVertCount = PYLONS * 2 * CABLE_SUBDIV * 2;
+  const cablePos = new Float32Array(cableVertCount * 3);
+  const cableGeo = new THREE.BufferGeometry();
+  cableGeo.setAttribute('position', new THREE.BufferAttribute(cablePos, 3).setUsage(THREE.DynamicDrawUsage));
+  const fenceCableMat = new THREE.LineBasicMaterial({ color: 0x161a1e, transparent: true, opacity: 0.8 });
+  const cables = new THREE.LineSegments(cableGeo, fenceCableMat);
+  cables.frustumCulled = false;
+  parent.add(cables);
+
   const po = new THREE.Object3D();
   const setRadius = (r: number) => {
     for (let i = 0; i <= FENCE_SEG; i++) {
@@ -510,6 +539,34 @@ export function buildMap(parent: THREE.Object3D, obstacles: Obstacle[], makeWrec
       pylons.setMatrixAt(i, po.matrix);
     }
     pylons.instanceMatrix.needsUpdate = true;
+
+    // String drooped catenary cables along pylon tops
+    let cIdx = 0;
+    for (let i = 0; i < PYLONS; i++) {
+      const nextI = (i + 1) % PYLONS;
+      const a0 = (i / PYLONS) * TWO_PI;
+      const a1 = (nextI / PYLONS) * TWO_PI;
+      const x0 = Math.sin(a0) * r, z0 = Math.cos(a0) * r, y0 = heightAt(x0, z0);
+      const x1 = Math.sin(a1) * r, z1 = Math.cos(a1) * r, y1 = heightAt(x1, z1);
+
+      for (const yOffset of [13.5, 10.8]) {
+        for (let s = 0; s < CABLE_SUBDIV; s++) {
+          const t0 = s / CABLE_SUBDIV;
+          const t1 = (s + 1) / CABLE_SUBDIV;
+          const sag0 = -1.4 * 4 * t0 * (1 - t0);
+          const sag1 = -1.4 * 4 * t1 * (1 - t1);
+
+          cablePos[cIdx++] = x0 + (x1 - x0) * t0;
+          cablePos[cIdx++] = (y0 + yOffset) + ((y1 + yOffset) - (y0 + yOffset)) * t0 + sag0;
+          cablePos[cIdx++] = z0 + (z1 - z0) * t0;
+
+          cablePos[cIdx++] = x0 + (x1 - x0) * t1;
+          cablePos[cIdx++] = (y0 + yOffset) + ((y1 + yOffset) - (y0 + yOffset)) * t1 + sag1;
+          cablePos[cIdx++] = z0 + (z1 - z0) * t1;
+        }
+      }
+    }
+    (cableGeo.getAttribute('position') as THREE.BufferAttribute).needsUpdate = true;
   };
   setRadius(START_RADIUS);
 
