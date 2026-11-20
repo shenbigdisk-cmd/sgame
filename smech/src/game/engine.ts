@@ -729,6 +729,7 @@ export class Game {
 
     // Image-Based Lighting: bake HDR cubemap from the sky for realistic specular reflections on all mechs & metals
     scene.environment = generateEnvironmentMap(this.renderer, this.saltlineSky);
+    scene.environmentIntensity = 0.6;
 
     // Atmospheric windblown micro-particles
     this.ambientDust = new AmbientDustVolume(scene);
@@ -1183,15 +1184,15 @@ export class Game {
     this.time += dt;
     this.saltlineSky?.update(dt);
     const flash = this.saltlineSky?.getFlashIntensity() ?? 0;
-    if (this.hemiLight) this.hemiLight.intensity = this.baseHemiIntensity + flash * 0.75;
-    if (this.ambientLight) this.ambientLight.intensity = this.baseAmbientIntensity + flash * 0.4;
-    if (this.sun) this.sun.intensity = this.baseSunIntensity + flash * 0.65;
+    if (this.hemiLight) this.hemiLight.intensity = this.baseHemiIntensity + flash * 0.12;
+    if (this.ambientLight) this.ambientLight.intensity = this.baseAmbientIntensity + flash * 0.06;
+    if (this.sun) this.sun.intensity = this.baseSunIntensity + flash * 0.08;
     if (this.agxPass) {
       this.agxPass.uniforms.uTime.value = this.time;
       this.agxPass.uniforms.uDamage.value = this.damageFlash;
       this.agxPass.uniforms.uLowHealth.value = this.hp < this.cfg.maxHp * 0.35 ? 1.0 : 0.0;
-      this.agxPass.uniforms.uFlash.value = flash;
-      this.agxPass.uniforms.uExposure.value = (this.layout.theme.exposure ?? 1.1) * 1.35;
+      this.agxPass.uniforms.uFlash.value = flash * 0.4;
+      this.agxPass.uniforms.uExposure.value = (this.layout.theme.exposure ?? 1.0) * 0.94;
     }
     if (this.arenaR < this.arenaTarget) {
       this.arenaR = Math.min(this.arenaTarget, this.arenaR + 16 * dt);

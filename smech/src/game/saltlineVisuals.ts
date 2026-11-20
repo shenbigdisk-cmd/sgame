@@ -112,7 +112,7 @@ void main(){
   clearC = mix(clearC, uZen, smoothstep(0.10, 0.55, h));
   
   // Mie aureole around the sun
-  clearC += uSunCol * vec3(1.0, 0.86, 0.68) * (pow(s, 8.0) * 0.14 + pow(s, 64.0) * 0.55 + pow(s, 600.0) * 2.2 + pow(s, 6000.0) * 14.0);
+  clearC += uSunCol * vec3(1.0, 0.86, 0.68) * (pow(s, 6.0) * 0.08 + pow(s, 32.0) * 0.25 + pow(s, 256.0) * 0.9);
 
   // ---- cloud deck ----
   vec2 cuv = d.xz / (h + 0.10) * vec2(0.62, 0.95);
@@ -135,9 +135,9 @@ void main(){
   float deck = smoothstep(edge - 0.035, edge + 0.11, h + rag * (0.35 + ts));
   cov *= deck;
   
-  // sun hole
-  float hole = smoothstep(0.972, 0.9985, mu + (dens - 0.5) * 0.012);
-  cov *= 1.0 - 0.93 * hole;
+  // sun gap smoothly blended into cloud density
+  float hole = smoothstep(0.88, 0.995, mu + (dens - 0.5) * 0.15);
+  cov *= 1.0 - 0.75 * hole;
   
   // thin drifting scud
   float scud = smoothstep(0.55, 0.85, fbm3(q * vec2(0.55, 1.9) + 31.0)) * (1.0 - deck) * smoothstep(0.02, 0.10, h) * 0.55 * (1.0 - 0.8 * hole);
@@ -160,9 +160,9 @@ void main(){
   warm += uSunCol * rim * pow(ts, 4.0) * (0.5 + 1.6 * pow(s, 6.0)) * (1.0 - 0.85 * hole);
   vec3 cloudC = cool + warm;
   
-  // sheet lightning inside storm clouds
-  float fl = uFlash * pow(max(dot(d, uFlashDir), 0.0), 5.0);
-  cloudC += vec3(0.65, 0.80, 1.0) * fl * (0.5 + 2.5 * dens * dens);
+  // sheet lightning diffused smoothly through clouds without circular artifacts
+  float fl = uFlash * (0.35 + 0.65 * max(dot(d, uFlashDir), 0.0));
+  cloudC += vec3(0.55, 0.72, 0.95) * fl * (0.3 + 1.2 * dens);
   
   // aerial perspective
   cloudC = mix(cloudC, hc * 0.55 + cloudC * 0.45, exp(-h * 11.0));
@@ -173,8 +173,8 @@ void main(){
 
   // sun disk
   float veil = (1.0 - cov * 0.92) * (1.0 - scud * 0.7);
-  float disk = smoothstep(0.999905, 0.999955, mu);
-  col += vec3(1.0, 0.80, 0.52) * disk * 110.0 * veil * (1.0 - uEnv);
+  float disk = smoothstep(0.99992, 0.99997, mu);
+  col += vec3(1.0, 0.85, 0.65) * disk * 18.0 * veil * (1.0 - uEnv);
 
   // below the horizon
   if (d.y < 0.0) {
@@ -284,7 +284,7 @@ export function fitDirectionalLightShadow(
   light: THREE.DirectionalLight,
   sunDir: THREE.Vector3,
   center: THREE.Vector3,
-  radius = 48,
+  radius = 90,
   lightDistance = 160
 ): { width: number; height: number; depth: number } {
   const normSun = sunDir.clone().normalize();
@@ -307,8 +307,8 @@ export function fitDirectionalLightShadow(
   const rMin = new THREE.Vector3(center.x - radius, -2, center.z - radius);
   const rMax = new THREE.Vector3(center.x + radius, 28, center.z + radius);
   // Caster margin extending back along sun
-  const cMin = new THREE.Vector3(center.x - radius - 12, -2, center.z - radius - 12);
-  const cMax = new THREE.Vector3(center.x + radius + 12, 45, center.z + radius + 12);
+  const cMin = new THREE.Vector3(center.x - radius - 16, -2, center.z - radius - 16);
+  const cMax = new THREE.Vector3(center.x + radius + 16, 50, center.z + radius + 16);
 
   const pt = new THREE.Vector3();
   let minX = Infinity, maxX = -Infinity;
@@ -388,6 +388,9 @@ export function enablePCSSShadows(
 				accum += texture( shadowMap, vec3( shadowCoord.xy + vogelDiskSample( i, 16, phi ) * radius, shadowCoord.z ) );
 			}
 			shadow = accum / 16.0;
+			// Smooth edge falloff prevents any visible shadow camera boundary ripples
+			float edgeFade = clamp(min(min(shadowCoord.x, 1.0 - shadowCoord.x), min(shadowCoord.y, 1.0 - shadowCoord.y)) * 16.0, 0.0, 1.0);
+			shadow = mix(1.0, shadow, edgeFade);
 		}
 		return mix( 1.0, shadow, shadowIntensity );
 	}`;
@@ -413,7 +416,7 @@ export const AGX_GRADE_SHADER = {
     uSharpen: { value: 0.28 },
     uFxaa: { value: 1.0 },
     uFlash: { value: 0 },
-    uExposure: { value: 1.25 },
+    uExposure: { value: 0.94 },
   },
   vertexShader: `
     varying vec2 vUv;
