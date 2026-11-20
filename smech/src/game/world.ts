@@ -17,10 +17,12 @@ export {
   inWater,
   zoneRadius,
   onBridge,
+  archStyleForDistrict,
+  ARCH_STYLES,
   BRIDGES,
   RIVERS,
 } from './layout';
-export type { District, DistrictType, Layout, Theme, Bridge, RiverSegment } from './layout';
+export type { District, DistrictType, Layout, Theme, Bridge, RiverSegment, ArchitectureStyle } from './layout';
 export { randomSeedCode, seedFromString, stageSeedCode } from './rng';
 export { nearObstacles, obsCorners, obsDist, obsResolve } from './colliders';
 export type { Obstacle } from './colliders';

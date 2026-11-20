@@ -5,7 +5,7 @@ import { enhanceGroundMaterial, enhanceObstacleMaterial, enhanceWaterMaterial, g
  */
 
 import * as THREE from 'three';
-import { BRIDGES, FLATS, HILLS, RIVERS, START_RADIUS, WATER, WORLD_RADIUS, heightAt, inWater, roadDist, type Bridge, type District, type Layout } from './layout';
+import { BRIDGES, FLATS, HILLS, RIVERS, START_RADIUS, WATER, WORLD_RADIUS, heightAt, inWater, roadDist, type ArchitectureStyle, type Bridge, type District, type Layout } from './layout';
 import { chance, pick, rand, rnd, shuffle } from './rng';
 
 const TWO_PI = Math.PI * 2;
@@ -617,6 +617,17 @@ export function buildMap(parent: THREE.Object3D, obstacles: Obstacle[], makeWrec
   const beaconMat = new THREE.MeshStandardMaterial({ color: 0xff2020, emissive: 0xff2020, emissiveIntensity: 4 });
   const facades = ['#8b857a', '#7a756c', '#9a9184', '#6f6a63', '#857868', '#7c8088'].map(makeFacadeTextures);
 
+  const vermilionMat = new THREE.MeshStandardMaterial({ color: 0xa62b2b, roughness: 0.55 });
+  const terracottaMat = new THREE.MeshStandardMaterial({ color: 0xba5232, roughness: 0.84 });
+  const stuccoMat = new THREE.MeshStandardMaterial({ color: 0xeee4d2, roughness: 0.92 });
+  const sandstoneMat = new THREE.MeshStandardMaterial({ color: 0xd4ba8a, roughness: 0.94 });
+  const turquoiseDomeMat = new THREE.MeshStandardMaterial({ color: 0x1f7a8c, roughness: 0.35, metalness: 0.3 });
+  const goldDomeMat = new THREE.MeshStandardMaterial({ color: 0xd4af37, roughness: 0.3, metalness: 0.75 });
+  const neonPinkMat = new THREE.MeshStandardMaterial({ color: 0xff1493, emissive: 0xff007f, emissiveIntensity: 2.8 });
+  const neonCyanMat = new THREE.MeshStandardMaterial({ color: 0x00f0ff, emissive: 0x00e5ff, emissiveIntensity: 2.8 });
+  const neonAmberMat = new THREE.MeshStandardMaterial({ color: 0xffaa00, emissive: 0xff8800, emissiveIntensity: 2.8 });
+  const cobaltMuralMat = new THREE.MeshStandardMaterial({ color: 0x1a4b8c, roughness: 0.7 });
+
   const rocks = new Pool(parent, new THREE.DodecahedronGeometry(1, 1), new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 1, flatShading: true }), 640);
   const rockColors = [0x75685a, 0x6b6256, 0x84766a, 0x7a6a58, 0x66605a].map((c) => new THREE.Color(c));
   const foliageColors = [0x224926, 0x2e5c30, 0x1d3d22, 0x386634, 0x48692c].map((c) => new THREE.Color(c));
@@ -718,7 +729,7 @@ export function buildMap(parent: THREE.Object3D, obstacles: Obstacle[], makeWrec
   };
 
   // ---- buildings ----------------------------------------------------------
-  const buildBuilding = (x: number, z: number, w: number, d: number, h: number, forceRuin = false) => {
+  const buildBuilding = (x: number, z: number, w: number, d: number, h: number, forceRuin = false, style: ArchitectureStyle = 'brutalist') => {
     if (!free(x, z, w / 2 + 0.3, d / 2 + 0.3, 0, 3)) return false;
     const y0 = heightAt(x, z) - 0.3;
     const g = new THREE.Group();
@@ -731,8 +742,15 @@ export function buildMap(parent: THREE.Object3D, obstacles: Obstacle[], makeWrec
       map.needsUpdate = emissiveMap.needsUpdate = true;
       return new THREE.MeshStandardMaterial({ map, emissiveMap, emissive: 0xffffff, emissiveIntensity: theme.windowGlow, roughness: 0.92 });
     };
-    const sideX = mkFacade(d);
-    const sideZ = mkFacade(w);
+    let sideX = mkFacade(d);
+    let sideZ = mkFacade(w);
+    if (style === 'mediterranean') {
+      sideX = stuccoMat;
+      sideZ = stuccoMat;
+    } else if (style === 'middle_eastern') {
+      sideX = sandstoneMat;
+      sideZ = sandstoneMat;
+    }
     const roofMat = new THREE.MeshStandardMaterial({ color: 0x55524c, roughness: 1 });
     const ruined = forceRuin || (h < 30 && chance(0.3));
     const body = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), [sideX, sideX, roofMat, roofMat, sideZ, sideZ]);
@@ -750,18 +768,71 @@ export function buildMap(parent: THREE.Object3D, obstacles: Obstacle[], makeWrec
         chunk.rotation.set(rand(-0.2, 0.2), rand(0, 1), rand(-0.2, 0.2));
         g.add(chunk);
       }
+      if (style === 'east_asian') {
+        const brokenEave = new THREE.Mesh(new THREE.BoxGeometry(w * 0.7, 0.45, d * 0.7), roofMat);
+        brokenEave.position.set(0, h * 0.85, 0);
+        brokenEave.rotation.z = 0.15;
+        g.add(brokenEave);
+      }
     } else {
-      const parapet = new THREE.Mesh(new THREE.BoxGeometry(w + 0.4, 1, d + 0.4), concrete);
-      parapet.position.y = h + 0.5;
-      const ac = new THREE.Mesh(new THREE.BoxGeometry(rand(1.5, 3), rand(1, 2), rand(1.5, 3)), metal);
-      ac.position.set(rand(-w / 3, w / 3), h + 1.4, rand(-d / 3, d / 3));
-      g.add(parapet, ac);
-      if (h > 30) {
-        const ant = new THREE.Mesh(new THREE.CylinderGeometry(0.12, 0.2, 9, 5), metal);
-        ant.position.set(w * 0.2, h + 5.5, -d * 0.2);
-        const beacon = new THREE.Mesh(new THREE.SphereGeometry(0.35, 8, 8), beaconMat);
-        beacon.position.set(w * 0.2, h + 10.2, -d * 0.2);
-        g.add(ant, beacon);
+      if (style === 'east_asian') {
+        for (const sx of [-w / 2 + 0.25, w / 2 - 0.25]) {
+          for (const sz of [-d / 2 + 0.25, d / 2 - 0.25]) {
+            const pillar = new THREE.Mesh(new THREE.CylinderGeometry(0.32, 0.35, h, 8), vermilionMat);
+            pillar.position.set(sx, h / 2, sz);
+            g.add(pillar);
+          }
+        }
+        const eaveMain = new THREE.Mesh(new THREE.BoxGeometry(w + 2.2, 0.5, d + 2.2), roofMat);
+        eaveMain.position.y = h;
+        const eaveCrest = new THREE.Mesh(new THREE.BoxGeometry(w + 1.1, 0.4, d + 1.1), vermilionMat);
+        eaveCrest.position.y = h + 0.42;
+        g.add(eaveMain, eaveCrest);
+        if (h > 22) {
+          const eaveMid = new THREE.Mesh(new THREE.BoxGeometry(w + 1.6, 0.38, d + 1.6), roofMat);
+          eaveMid.position.y = h * 0.55;
+          g.add(eaveMid);
+        }
+        const neonMat = pick([neonPinkMat, neonCyanMat, neonAmberMat]);
+        const sign = new THREE.Mesh(new THREE.BoxGeometry(0.18, rand(4.5, 8.5), rand(1.2, 1.8)), neonMat);
+        sign.position.set(w / 2 + 0.22, h * 0.6, 0);
+        g.add(sign);
+      } else if (style === 'mediterranean') {
+        const roofH = Math.min(4.5, Math.max(2.2, Math.min(w, d) * 0.35));
+        const gable = new THREE.Mesh(new THREE.ConeGeometry(Math.max(w, d) * 0.72, roofH, 4), terracottaMat);
+        gable.position.y = h + roofH / 2;
+        gable.rotation.y = Math.PI / 4;
+        gable.scale.set(w / Math.max(w, d), 1, d / Math.max(w, d));
+        const portico = new THREE.Mesh(new THREE.BoxGeometry(w * 0.6, 3.2, 0.8), stuccoMat);
+        portico.position.set(0, 1.6, d / 2 + 0.4);
+        g.add(gable, portico);
+      } else if (style === 'middle_eastern') {
+        const crenel = new THREE.Mesh(new THREE.BoxGeometry(w + 0.4, 0.8, d + 0.4), sandstoneMat);
+        crenel.position.y = h + 0.4;
+        const domeMat = pick([turquoiseDomeMat, goldDomeMat, sandstoneMat]);
+        const domeR = Math.min(w, d) * 0.28;
+        const dome = new THREE.Mesh(new THREE.SphereGeometry(domeR, 12, 10, 0, Math.PI * 2, 0, Math.PI * 0.65), domeMat);
+        dome.position.set(0, h + 0.2, 0);
+        g.add(crenel, dome);
+      } else if (style === 'latin_modern') {
+        const insetTier = new THREE.Mesh(new THREE.BoxGeometry(w * 0.78, h * 0.3, d * 0.78), concrete);
+        insetTier.position.y = h + h * 0.15;
+        const mural = new THREE.Mesh(new THREE.BoxGeometry(0.15, h * 0.5, d * 0.6), cobaltMuralMat);
+        mural.position.set(w / 2 + 0.1, h * 0.5, 0);
+        g.add(insetTier, mural);
+      } else {
+        const parapet = new THREE.Mesh(new THREE.BoxGeometry(w + 0.4, 1, d + 0.4), concrete);
+        parapet.position.y = h + 0.5;
+        const ac = new THREE.Mesh(new THREE.BoxGeometry(rand(1.5, 3), rand(1, 2), rand(1.5, 3)), metal);
+        ac.position.set(rand(-w / 3, w / 3), h + 1.4, rand(-d / 3, d / 3));
+        g.add(parapet, ac);
+        if (h > 30) {
+          const ant = new THREE.Mesh(new THREE.CylinderGeometry(0.12, 0.2, 9, 5), metal);
+          ant.position.set(w * 0.2, h + 5.5, -d * 0.2);
+          const beacon = new THREE.Mesh(new THREE.SphereGeometry(0.35, 8, 8), beaconMat);
+          beacon.position.set(w * 0.2, h + 10.2, -d * 0.2);
+          g.add(ant, beacon);
+        }
       }
     }
     g.position.set(x, y0, z);
@@ -795,6 +866,7 @@ export function buildMap(parent: THREE.Object3D, obstacles: Obstacle[], makeWrec
   // DISTRICT GENERATORS
   // ======================================================================
   const buildCity = (d: District) => {
+    const style = d.archStyle ?? 'brutalist';
     const cell = 38;
     const n = Math.ceil(d.r / cell);
     for (let gx = -n; gx <= n; gx++) {
@@ -811,14 +883,77 @@ export function buildMap(parent: THREE.Object3D, obstacles: Obstacle[], makeWrec
         }
         if (roll < 0.18) continue; // open lot
         if (roll < 0.34) {
-          for (const side of [-1, 1]) buildBuilding(cx + side * 7.5, cz, rand(9, 11), rand(16, 22), rand(10, 22));
+          for (const side of [-1, 1]) buildBuilding(cx + side * 7.5, cz, rand(9, 11), rand(16, 22), rand(10, 22), false, style);
         } else {
           const tower = core > 0.5 && chance(0.6);
-          buildBuilding(cx + rand(-2, 2), cz + rand(-2, 2), rand(16, 24), rand(16, 24), tower ? rand(38, 58) : rand(12, 28));
+          buildBuilding(cx + rand(-2, 2), cz + rand(-2, 2), rand(16, 24), rand(16, 24), tower ? rand(38, 58) : rand(12, 28), false, style);
         }
         for (const [ox, oz] of [[-19, -19], [19, -19], [-19, 19], [19, 19]]) {
           if (chance(0.5) && free(cx + ox, cz + oz, 0.5, 0.5, 0, 1.5)) addLamp(cx + ox, cz + oz);
         }
+      }
+    }
+
+    // Cultural Landmark Monuments
+    if (style === 'east_asian') {
+      const ga = d.r * 0.72;
+      const gx = d.x;
+      const gz = d.z + ga;
+      if (free(gx, gz, 7.5, 2.5, 0, 2)) {
+        const g = new THREE.Group();
+        const beamW = 15;
+        const postH = 8.5;
+        for (const sx of [-beamW / 2 + 1.2, beamW / 2 - 1.2]) {
+          const post = new THREE.Mesh(new THREE.CylinderGeometry(0.55, 0.65, postH, 8), vermilionMat);
+          post.position.set(sx, postH / 2, 0);
+          g.add(post);
+        }
+        const lintel = new THREE.Mesh(new THREE.BoxGeometry(beamW + 2.5, 0.85, 1.3), vermilionMat);
+        lintel.position.y = postH;
+        const cap = new THREE.Mesh(new THREE.BoxGeometry(beamW + 3.8, 0.45, 1.8), darkConcrete);
+        cap.position.y = postH + 0.65;
+        const plaque = new THREE.Mesh(new THREE.BoxGeometry(2.6, 1.4, 0.35), neonAmberMat);
+        plaque.position.y = postH - 1.2;
+        g.add(lintel, cap, plaque);
+        g.position.set(gx, heightAt(gx, gz), gz);
+        setShadows(g);
+        parent.add(g);
+        addBox(gx - beamW / 2 + 1.2, gz, 0.6, 0.6, postH, 0, g.position.y);
+        addBox(gx + beamW / 2 - 1.2, gz, 0.6, 0.6, postH, 0, g.position.y);
+      }
+    } else if (style === 'mediterranean') {
+      const px = d.x;
+      const pz = d.z;
+      if (free(px, pz, 5, 5, 0, 2)) {
+        const g = new THREE.Group();
+        const basin = new THREE.Mesh(new THREE.CylinderGeometry(4.2, 4.5, 0.9, 8), stuccoMat);
+        basin.position.y = 0.45;
+        const obelisk = new THREE.Mesh(new THREE.ConeGeometry(1.2, 10, 4), sandstoneMat);
+        obelisk.position.y = 5.5;
+        obelisk.rotation.y = Math.PI / 4;
+        g.add(basin, obelisk);
+        g.position.set(px, heightAt(px, pz), pz);
+        setShadows(g);
+        parent.add(g);
+        addBox(px, pz, 4.2, 4.2, 1.2, 0, g.position.y);
+      }
+    } else if (style === 'middle_eastern') {
+      const mx = d.x + d.r * 0.4;
+      const mz = d.z + d.r * 0.4;
+      if (free(mx, mz, 3.5, 3.5, 0, 2)) {
+        const g = new THREE.Group();
+        const towerH = 24;
+        const shaft = new THREE.Mesh(new THREE.CylinderGeometry(2.2, 2.8, towerH, 8), sandstoneMat);
+        shaft.position.y = towerH / 2;
+        const gallery = new THREE.Mesh(new THREE.CylinderGeometry(3.2, 3.2, 1.6, 8), sandstoneMat);
+        gallery.position.y = towerH + 0.8;
+        const spire = new THREE.Mesh(new THREE.ConeGeometry(2.2, 6.5, 8), goldDomeMat);
+        spire.position.y = towerH + 4.8;
+        g.add(shaft, gallery, spire);
+        g.position.set(mx, heightAt(mx, mz), mz);
+        setShadows(g);
+        parent.add(g);
+        structures.register(addBox(mx, mz, 2.8, 2.8, towerH + 6, 0, g.position.y), g, 'MINARET', 160);
       }
     }
   };
@@ -932,10 +1067,11 @@ export function buildMap(parent: THREE.Object3D, obstacles: Obstacle[], makeWrec
   };
 
   const buildRuins = (d: District) => {
+    const style = d.archStyle ?? 'brutalist';
     for (let i = 0, made = 0; i < 40 && made < 6; i++) {
       const a = rnd() * TWO_PI;
       const rr = rnd() * d.r * 0.8;
-      if (buildBuilding(d.x + Math.sin(a) * rr, d.z + Math.cos(a) * rr, rand(12, 18), rand(12, 18), rand(6, 13), true)) made++;
+      if (buildBuilding(d.x + Math.sin(a) * rr, d.z + Math.cos(a) * rr, rand(12, 18), rand(12, 18), rand(6, 13), true, style)) made++;
     }
     for (let i = 0, made = 0; i < 40 && made < 9; i++) {
       const a = rnd() * TWO_PI;

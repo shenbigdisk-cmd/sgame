@@ -81,6 +81,15 @@ const THEMES: Theme[] = [
 // ---------------------------------------------------------------------------
 export type DistrictType = 'city' | 'industrial' | 'ruins' | 'highlands' | 'marsh' | 'outpost' | 'mesas' | 'crater' | 'forest' | 'beach' | 'grassplain';
 
+export type ArchitectureStyle = 'brutalist' | 'east_asian' | 'mediterranean' | 'middle_eastern' | 'latin_modern' | 'industrial';
+export const ARCH_STYLES: ArchitectureStyle[] = ['east_asian', 'mediterranean', 'middle_eastern', 'latin_modern', 'brutalist'];
+
+export function archStyleForDistrict(d: District): ArchitectureStyle {
+  if (d.type === 'industrial') return 'industrial';
+  const seed = Math.abs(Math.sin(d.x * 0.123 + d.z * 0.321) * 10000);
+  return ARCH_STYLES[Math.floor(seed) % ARCH_STYLES.length];
+}
+
 export interface District {
   type: DistrictType;
   name: string;
@@ -89,6 +98,7 @@ export interface District {
   r: number;
   /** perimeter zone at which the district centre becomes reachable */
   zone: number;
+  archStyle?: ArchitectureStyle;
 }
 
 export interface Layout {
@@ -216,6 +226,7 @@ export function generateLayout(code: string): Layout {
       if (dist - r < 46) continue;
       if (DISTRICTS.some((d) => Math.hypot(d.x - x, d.z - z) < d.r + r + 12)) continue;
       const d: District = { type, name: nameFor(type), x, z, r, zone: zoneOf(x, z) };
+      d.archStyle = archStyleForDistrict(d);
       DISTRICTS.push(d);
       typeCount[type] = (typeCount[type] ?? 0) + 1;
       return d;
