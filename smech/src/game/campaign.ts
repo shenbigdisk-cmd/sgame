@@ -10,8 +10,8 @@
  * - Each mission is 4 stages: three combat stages + extraction.
  * - At most ONE kill-count objective (neutralize/secure) per stage, because
  *   the engine credits each kill to a single objective.
- * - Kill objectives must sit within ~70 m of their spawns (radius + 35 m
- *   pursuit margin), otherwise kills do not count.
+ * - Tactical spawns are staged near their objective; kills count for the
+ *   active stage even if pursuers chase the player beyond the original ring.
  * - Installation names drive the 3D mesh: "GENERATOR" -> reactor,
  *   "ROADBLOCK" -> barrier wall, "FOB"/"BASE" -> command post, else flak.
  */
@@ -389,11 +389,11 @@ export const CAMPAIGN_MISSIONS: CampaignMission[] = [
         stage: 1,
         type: 'neutralize_outpost',
         title: 'Clear the Memorial Road Pickets',
-        desc: 'Eliminate the Vanguard scouts blocking the convoy route.',
+        desc: 'Kill all three pickets: a Wisp skimmer, Hound Walker and T-90 Raider. Red radar contacts mark live hostiles.',
         targetCount: 3,
         currentCount: 0,
         completed: false,
-        pos: [60, 60],
+        pos: [0, -80],
         radius: 35,
       },
       {
@@ -435,9 +435,9 @@ export const CAMPAIGN_MISSIONS: CampaignMission[] = [
       },
     ],
     tacticalSpawns: [
-      { kind: 'skimmer', pos: [55, 55], stage: 1 },
-      { kind: 'mech', pos: [65, 70], stage: 1 },
-      { kind: 'tank', pos: [50, 75], stage: 1 },
+      { kind: 'skimmer', pos: [-8, -72], stage: 1 },
+      { kind: 'mech', pos: [8, -72], stage: 1 },
+      { kind: 'tank', pos: [0, -88], stage: 1 },
       { kind: 'tank', pos: [110, -30], stage: 2 },
       { kind: 'mech', pos: [130, -50], stage: 2 },
       { kind: 'sniper', pos: [115, -60], stage: 2 },

@@ -335,6 +335,26 @@
   background: var(--cp-accent);
   box-shadow: 0 0 6px var(--cp-accent);
 }
+.cp-radar-legend {
+  position: absolute;
+  top: -22px;
+  right: -1px;
+  display: flex;
+  gap: 9px;
+  padding: 3px 6px;
+  border: 1px solid #9bdae044;
+  color: #d9e5e7;
+  background: #061018e8;
+  font: 700 8px/1 'Share Tech Mono', monospace;
+  letter-spacing: 0.06em;
+  white-space: nowrap;
+}
+.cp-radar-legend b {
+  margin-right: 2px;
+  font-size: 9px;
+}
+.cp-radar-legend-objective { color: #ffd166; }
+.cp-radar-legend-hostile { color: #ff5c33; }
 .flight-radar > svg {
   display: block;
   width: var(--radar-size);

@@ -46,7 +46,7 @@ export class CampaignEngine {
     return this.mission.tacticalSpawns.filter((s) => s.stage === stage);
   }
 
-  onEnemyKilled(kind: EnemyKind, pos?: { x: number; z: number }, isBoss?: boolean): void {
+  onEnemyKilled(kind: EnemyKind, _pos?: { x: number; z: number }, isBoss?: boolean): void {
     let changed = false;
     const activeStageObjs = this.objectives.filter(
       (o) => o.stage === this.currentStage && !o.completed,
@@ -54,15 +54,9 @@ export class CampaignEngine {
 
     for (const obj of activeStageObjs) {
       if (obj.type === 'neutralize_outpost' || obj.type === 'secure_fob') {
-        // If coordinate radius is specified, check if enemy was within the outpost perimeter
-        if (pos && obj.pos) {
-          const dx = pos.x - obj.pos[0];
-          const dz = pos.z - obj.pos[1];
-          const dist = Math.hypot(dx, dz);
-          const maxRadius = (obj.radius || 35) + 35; // allow margin for enemy pursuit
-          if (dist > maxRadius) continue;
-        }
-
+        // Campaign mode disables random arena waves, so every stage kill is
+        // part of this tactical encounter. Don't drop credit when pursuers
+        // chase the player away from their original spawn radius.
         if (obj.targetKind && obj.targetKind !== kind) {
           continue;
         }

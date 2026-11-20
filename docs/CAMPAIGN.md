@@ -81,6 +81,10 @@ someone to hold the square.
 - **Intel before every sortie.** The war-room briefing lists enemy counters
   for that operation's threat mix (Bastion → shells/rockets, Mender →
   kill first, Sapper → kill at range, Longbow → break line of sight).
+- **Radar navigation.** A gold diamond marks the active objective on the
+  cockpit radar; hostile contacts appear as coloured threat markers. OP-1's
+  pickets are a Wisp skimmer, Hound Walker and T-90 Raider, all staged on
+  dry, open ground.
 - **Hold-the-line defense.** OP-3 opens with a `hold_zone` stage: stay in
   the ring while the timer runs. Leaving pauses the hold; it never resets.
 - **Story salvage.** Every debrief offers a choice of three artifacts —
@@ -93,8 +97,9 @@ someone to hold the square.
 
 - At most **one kill-count objective per stage** — the engine credits each
   kill to a single objective.
-- Kill objectives sit within `(radius + 35 m)` of their spawns, or kills
-  don't count.
+- Tactical spawns are staged near their objective, but every matching kill
+  during the active stage counts even if a pursuer follows the player out of
+  the original area; this prevents kill objectives from soft-locking.
 - Installation names drive the 3D mesh: `GENERATOR` → reactor,
   `ROADBLOCK` → barrier wall, `FOB`/`BASE` → command post, else flak tower.
 - Every mission ends with a `reach_extraction` stage.

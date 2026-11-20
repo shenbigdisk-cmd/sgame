@@ -26,12 +26,12 @@ describe('CampaignEngine Stage Progression', () => {
 
     expect(engine.currentStage).toBe(1);
 
-    // Stage 1: Clear the Memorial Road Pickets (targetCount: 3) at [60, 60]
-    engine.onEnemyKilled('skimmer', { x: 55, z: 55 });
+    // Stage 1: Clear the Memorial Road Pickets (targetCount: 3) at [0, -80]
+    engine.onEnemyKilled('skimmer', { x: -8, z: -72 });
     expect(engine.currentStage).toBe(1);
-    engine.onEnemyKilled('mech', { x: 65, z: 70 });
+    engine.onEnemyKilled('mech', { x: 8, z: -72 });
     expect(engine.currentStage).toBe(1);
-    engine.onEnemyKilled('tank', { x: 50, z: 75 });
+    engine.onEnemyKilled('tank', { x: 0, z: -88 });
 
     // Should now advance to Stage 2
     expect(engine.currentStage).toBe(2);
@@ -69,13 +69,25 @@ describe('CampaignEngine Stage Progression', () => {
     expect(stage4Trans).toBeDefined();
   });
 
+  it('credits pursuers even after they leave the original objective ring', () => {
+    const engine = new CampaignEngine(CAMPAIGN_MISSIONS[0]);
+
+    // These kills are 80 m from [0, -80], outside the old radius + pursuit
+    // allowance. They are still the three tactical pickets for this stage.
+    engine.onEnemyKilled('skimmer', { x: 0, z: 0 });
+    engine.onEnemyKilled('mech', { x: 0, z: 0 });
+    engine.onEnemyKilled('tank', { x: 0, z: 0 });
+
+    expect(engine.currentStage).toBe(2);
+  });
+
   it('completes mission when player enters extraction zone during extraction stage', () => {
     const onMissionSuccess = vi.fn();
     const mission = CAMPAIGN_MISSIONS[0];
     const engine = new CampaignEngine(mission, { onMissionSuccess });
 
     // Advance Stage 1
-    for (let i = 0; i < 3; i++) engine.onEnemyKilled('tank', { x: 60, z: 60 });
+    for (let i = 0; i < 3; i++) engine.onEnemyKilled('tank', { x: 0, z: -80 });
     // Advance Stage 2
     for (let i = 0; i < 4; i++) engine.onEnemyKilled('tank', { x: 120, z: -40 });
     // Advance Stage 3

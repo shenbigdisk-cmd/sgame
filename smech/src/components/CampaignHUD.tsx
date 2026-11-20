@@ -1,14 +1,12 @@
 import { useEffect, useState } from 'react';
 import type { CampaignObjective, RadioTransmission } from '../game/campaign';
 import { SQUAD } from '../game/campaign';
-import type { ObjectiveWaypoint } from '../game/campaignWorld';
 
 interface CampaignHUDProps {
   objectives: CampaignObjective[];
   stage: number;
   transmission: RadioTransmission | null;
   extractionReady: boolean;
-  waypoints?: ObjectiveWaypoint[];
   missionTitle?: string;
   operationName?: string;
 }
@@ -30,15 +28,6 @@ function callsignColor(callsign: string): string {
   return member?.color ?? '#06b6d4';
 }
 
-function bearingCue(relAngle: number): { icon: string; instruction: string } {
-  const angle = Math.abs(relAngle);
-  if (angle < 0.32) return { icon: '↑', instruction: 'AHEAD' };
-  if (angle > 2.55) return { icon: '↻', instruction: 'TURN AROUND' };
-  return relAngle > 0
-    ? { icon: '→', instruction: 'TURN RIGHT' }
-    : { icon: '←', instruction: 'TURN LEFT' };
-}
-
 const OBJECTIVE_HINT: Partial<Record<CampaignObjective['type'], string>> = {
   infiltrate_zone: 'ENTER THE MARKED AREA',
   hold_zone: 'STAY INSIDE THE RING',
@@ -54,7 +43,6 @@ export default function CampaignHUD({
   stage,
   transmission,
   extractionReady,
-  waypoints = [],
   missionTitle,
   operationName,
 }: CampaignHUDProps) {
@@ -70,41 +58,9 @@ export default function CampaignHUD({
   const activeTransmission =
     transmission && hiddenId !== transmission.id ? transmission : null;
   const activeObjectives = objectives.filter((obj) => obj.stage === stage && !obj.completed);
-  const primaryWaypoint = [...waypoints].sort((a, b) => {
-    if (Boolean(a.optional) !== Boolean(b.optional)) return a.optional ? 1 : -1;
-    return a.dist - b.dist;
-  })[0];
-  const cue = primaryWaypoint ? bearingCue(primaryWaypoint.relAngle) : null;
-  const inObjectiveArea = Boolean(
-    primaryWaypoint?.range !== undefined && primaryWaypoint.dist <= primaryWaypoint.range,
-  );
 
   return (
     <>
-      {/* Clear, single-target guidance directly below the cockpit compass. */}
-      <div className="pointer-events-none absolute left-1/2 top-[3.25rem] z-20 w-[min(27rem,calc(100vw-1.5rem))] -translate-x-1/2 select-none font-mono">
-        <div className="flex min-h-12 items-center gap-3 border border-amber-400/50 bg-black/85 px-3 py-2 shadow-[0_8px_24px_rgba(0,0,0,0.55)] backdrop-blur-sm">
-          <div className="flex h-8 w-9 shrink-0 items-center justify-center border border-amber-400/40 bg-amber-400/10 text-2xl font-black leading-none text-amber-300">
-            {cue?.icon ?? '◇'}
-          </div>
-          <div className="min-w-0 flex-1">
-            <div className="flex items-center gap-2 text-[9px] font-bold tracking-[0.2em] text-amber-300">
-              <span>{primaryWaypoint ? (inObjectiveArea ? 'OBJECTIVE AREA' : cue?.instruction) : 'NO ACTIVE BEARING'}</span>
-              {primaryWaypoint?.optional && <span className="text-cyan-300">BONUS</span>}
-            </div>
-            <div className="truncate text-xs font-bold text-white">
-              {primaryWaypoint?.title ?? (activeObjectives.length ? 'SECURE THE AREA' : 'AWAITING ORDERS')}
-            </div>
-          </div>
-          {primaryWaypoint && (
-            <div className="shrink-0 border-l border-slate-700 pl-3 text-right">
-              <div className="text-lg font-black tabular-nums leading-none text-white">{primaryWaypoint.dist}</div>
-              <div className="mt-1 text-[9px] tracking-widest text-slate-400">METRES</div>
-            </div>
-          )}
-        </div>
-      </div>
-
       {/* Only live tasks for this stage are shown; completed and future tasks leave the HUD. */}
       <div className="pointer-events-none absolute left-4 top-[5.75rem] z-20 w-[min(21rem,calc(100vw-2rem))] select-none font-mono">
         <section className="border-l-2 border-amber-400 bg-black/80 px-3 py-2 shadow-lg backdrop-blur-sm">
@@ -154,13 +110,12 @@ export default function CampaignHUD({
                           </span>
                           {counter && <span className="shrink-0 text-[10px] tabular-nums text-amber-200">{counter}</span>}
                         </div>
-                        {isHold ? (
+                        <div className="ml-4 truncate text-[9px] text-slate-400">
+                          {obj.desc || OBJECTIVE_HINT[obj.type]}
+                        </div>
+                        {isHold && (
                           <div className="ml-4 mt-1 h-1 overflow-hidden rounded-full bg-slate-700">
                             <div className="h-full bg-violet-400 transition-[width] duration-300" style={{ width: `${holdPct}%` }} />
-                          </div>
-                        ) : (
-                          <div className="ml-4 truncate text-[9px] tracking-wider text-slate-400">
-                            {OBJECTIVE_HINT[obj.type]}
                           </div>
                         )}
                       </div>

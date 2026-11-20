@@ -4,6 +4,7 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { beforeAll, describe, expect, it, vi } from 'vitest';
 import { SIGHT_RADIUS, SIGHT_SIZE, sightSlope } from '../game/aimRing';
 import { DEFAULT_SETTINGS } from '../game/settings';
+import type { ObjectiveWaypoint } from '../game/campaignWorld';
 import type { HudState, HudWeapon } from '../game/types';
 import HUD from './HUD';
 
@@ -91,7 +92,12 @@ const state: HudState = {
   fps: 60,
 };
 
-function renderHud(changes: Partial<HudState> = {}, crosshair = true, touch = false) {
+function renderHud(
+  changes: Partial<HudState> = {},
+  crosshair = true,
+  touch = false,
+  campaignTarget?: ObjectiveWaypoint,
+) {
   const container = document.createElement('div');
   container.innerHTML = renderToStaticMarkup(
     <HUD
@@ -99,6 +105,7 @@ function renderHud(changes: Partial<HudState> = {}, crosshair = true, touch = fa
       vehicle="warden"
       touch={touch}
       settings={{ ...DEFAULT_SETTINGS, crosshair }}
+      campaignTarget={campaignTarget}
     />,
   );
   return container;
@@ -107,6 +114,29 @@ function renderHud(changes: Partial<HudState> = {}, crosshair = true, touch = fa
 beforeAll(() => {
   // @ts-expect-error React act environment flag
   globalThis.IS_REACT_ACT_ENVIRONMENT = true;
+});
+
+describe('campaign navigation on the radar', () => {
+  it('marks the live objective on the radar rather than adding a header banner', () => {
+    const target: ObjectiveWaypoint = {
+      id: 'pickets',
+      title: 'Clear the Memorial Road Pickets',
+      dist: 80,
+      relAngle: Math.PI / 2,
+      color: '#f59e0b',
+      range: 35,
+    };
+    const container = renderHud({}, true, false, target);
+    const marker = container.querySelector<SVGGElement>('.cp-radar-objective');
+    const coords = /translate\(([-\d.]+) ([-\d.]+)\)/.exec(marker?.getAttribute('transform') ?? '');
+
+    expect(marker).not.toBeNull();
+    expect(marker?.querySelector('title')?.textContent).toContain(target.title);
+    expect(coords).not.toBeNull();
+    expect(Number(coords?.[1])).toBeLessThan(64); // target is left of the player's heading
+    expect(Number(coords?.[2])).toBeCloseTo(64); // target is level with the player
+    expect(container.textContent).not.toContain('TURN LEFT');
+  });
 });
 
 const weapons: HudWeapon[] = [

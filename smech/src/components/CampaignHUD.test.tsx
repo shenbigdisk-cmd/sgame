@@ -32,19 +32,8 @@ describe('campaign in-sortie HUD', () => {
     expect(html).not.toContain(future.title);
     expect(html).not.toContain(active.desc);
     expect(html).toContain('STAGE 2');
-  });
-
-  it('provides a clear bearing, target name, and distance', () => {
-    const html = renderToStaticMarkup(
-      <CampaignHUD
-        {...hudProps}
-        waypoints={[{ id: 'target', title: 'RIDGE AMBUSH', dist: 123, relAngle: 0.8, color: '#f59e0b', range: 35 }]}
-      />,
-    );
-    expect(html).toContain('TURN RIGHT');
-    expect(html).toContain('RIDGE AMBUSH');
-    expect(html).toContain('123');
-    expect(html).toContain('METRES');
+    expect(html).not.toContain('TURN LEFT');
+    expect(html).not.toContain('METRES');
   });
 
   it('lets the player collapse the compact mission tracker', async () => {

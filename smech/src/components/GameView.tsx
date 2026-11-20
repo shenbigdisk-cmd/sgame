@@ -266,6 +266,10 @@ export default function GameView({
   );
 
   const accent = VEHICLES[vehicle].accent;
+  const campaignTarget = [...waypoints].sort((a, b) => {
+    if (Boolean(a.optional) !== Boolean(b.optional)) return a.optional ? 1 : -1;
+    return a.dist - b.dist;
+  })[0];
 
   // Hand a boot failure to the error boundary by throwing during render.
   if (bootError) throw bootError;
@@ -283,6 +287,7 @@ export default function GameView({
           settings={settings}
           onExtract={() => gameRef.current?.extractNow()}
           onWeapon={(id) => gameRef.current?.useWeapon(id)}
+          campaignTarget={campaignMission ? campaignTarget : undefined}
         />
       )}
       {campaignMission && (
@@ -291,7 +296,6 @@ export default function GameView({
           stage={campaignStage}
           transmission={activeTransmission}
           extractionReady={extractionReady}
-          waypoints={waypoints}
           missionTitle={campaignMission.title}
           operationName={campaignMission.operationName}
         />
