@@ -440,8 +440,11 @@ export class Game {
   private burns: Burn[] = [];
   private recoil = 0;
   private armRecoil = [0, 0];
+  private armRecoilVel = [0, 0];
   private recoilPitch = 0;
   private shake = 0;
+  private landDip = 0;
+  private prevSpeed = 0;
   private floaters = new Floaters();
   private floaterAnchor = new THREE.Vector3();
   /** rising edge tracker for the LAST CIRCUIT signature upgrade */
@@ -1459,9 +1462,18 @@ export class Game {
       if (this.secOverheat && this.secHeat <= 0.15) this.secOverheat = false;
     }
     this.recoil *= Math.exp(-dt * 9);
-    this.armRecoil[0] *= Math.exp(-dt * 10);
-    this.armRecoil[1] *= Math.exp(-dt * 10);
-    this.recoilPitch *= Math.exp(-dt * 7);
+    for (let i = 0; i < 2; i++) {
+      const springK = 140;
+      const damping = 18;
+      const force = -springK * this.armRecoil[i] - damping * this.armRecoilVel[i];
+      this.armRecoilVel[i] += force * dt;
+      this.armRecoil[i] += this.armRecoilVel[i] * dt;
+      if (this.armRecoil[i] < 0) {
+        this.armRecoil[i] = 0;
+        this.armRecoilVel[i] = 0;
+      }
+    }
+    this.recoilPitch *= Math.exp(-dt * 8);
     const speedRatio = Math.max(-0.5, Math.min(1.2, this.speed / Math.max(1, this.cfg.maxSpeed)));
     const targetFov = this.zoom ? 32 : (this.settings.fov + speedRatio * 3.5);
     if (Math.abs(targetFov - this.fovCurrent) > 0.05) {
@@ -1676,6 +1688,7 @@ export class Game {
     shell.weapon = 'cannon';
     shell.rangeLeft = c.secondaryRange;
     this.armRecoil[1] = 1;
+    this.armRecoilVel[1] = -14;
     this.recoilPitch += 0.015;
     this.shake = Math.max(this.shake, over ? 0.22 : 0.08);
     this.muzzleLight.position.copy(this.muzzleLocal('secondary'));
@@ -1713,6 +1726,7 @@ export class Game {
     this.muzzleLight.intensity = coil ? 100 : 75;
     this.muzzleFlash(muzzle, dir, 0.3);
     this.armRecoil[0] = coil ? .45 : .7;
+    this.armRecoilVel[0] = coil ? -7 : -10;
     this.recoilPitch += 0.001;
     this.audio.playMG(coil ? 'coil' : 'autocannon');
     this.mgNoiseTimer -= c.mgInterval;
@@ -1746,6 +1760,7 @@ export class Game {
       pellet.rangeLeft = c.primaryRange;
     }
     this.armRecoil[0] = 1;
+    this.armRecoilVel[0] = -16;
     this.recoilPitch += 0.035;
     this.shake = Math.max(this.shake, over ? 0.24 : 0.16);
     this.muzzleLight.position.copy(this.muzzleLocal('primary'));
@@ -1850,6 +1865,7 @@ export class Game {
     this.muzzleLight.position.copy(this.muzzleLocal('secondary'));
     this.muzzleLight.intensity = flame ? 160 : discrete ? 320 : 110;
     this.armRecoil[1] = flame ? .25 : .16;
+    this.armRecoilVel[1] = -4;
     this.makeNoise(55);
   }
 
@@ -1993,6 +2009,7 @@ export class Game {
     this.secCd = c.empReload * this.stats.reloadMul;
     this.secCdMax = this.secCd;
     this.armRecoil[1] = 0.55;
+    this.armRecoilVel[1] = -8;
     this.muzzleLight.position.copy(this.muzzleLocal('secondary'));
     this.muzzleLight.intensity = 200;
     this.muzzleFlash(muzzle, dir, 0.45);
@@ -2018,6 +2035,7 @@ export class Game {
     mesh.material = this.mats.playerRocket;
     mesh.scale.setScalar(1.35);
     this.armRecoil[1] = .8;
+    this.armRecoilVel[1] = -12;
     this.secCd = this.cryoCooldown;
     this.secCdMax = this.cryoCooldown;
     this.muzzleFlash(muzzle, direction, 0.45);
@@ -4782,10 +4800,25 @@ export class Game {
   private updateCamera(dt: number) {
     const c = this.cfg;
     const sf = Math.min(1, Math.abs(this.speed) / c.maxSpeed);
-    const bob = Math.sin(this.walkPhase) * 0.09 * sf;
-    let roll = Math.sin(this.walkPhase * 0.5) * 0.012 * sf;
-    // lean into lateral movement (arcade strafing) so the player feels the shift
-    roll -= this.lean * 0.055;
+
+    // Coupled stride harmonics (Saltline bobX, bobY & stride thump):
+    // 1. bobY: downward chassis compression on foot strikes (double harmonic)
+    const stepThump = Math.sin(this.walkPhase * 2);
+    const bobY = (stepThump * 0.055 - Math.abs(stepThump) * 0.04) * sf;
+    // 2. bobX: lateral chassis weight transfer
+    const bobX = Math.cos(this.walkPhase) * 0.035 * sf;
+
+    // Deceleration & braking compression dip (Saltline landDip):
+    const accel = (this.speed - this.prevSpeed) / Math.max(0.001, dt);
+    this.prevSpeed = this.speed;
+    if (accel < -2.0) {
+      this.landDip = Math.min(0.24, this.landDip + Math.abs(accel) * 0.0035);
+    }
+    this.landDip *= Math.exp(-dt * 5.0);
+
+    // Lean into lateral movement with strafe banking (Saltline rollStrafe)
+    let roll = Math.sin(this.walkPhase) * 0.012 * sf;
+    roll -= this.lean * 0.075;
     // follow the slope: pitch/roll the view with the terrain under the vehicle
     {
       const fx = Math.sin(this.hullYaw);
@@ -4805,14 +4838,18 @@ export class Game {
       this.tiltPitch += (tp - this.tiltPitch) * k;
       this.tiltRoll += (tr - this.tiltRoll) * k;
     }
-    let camY = c.camHeight + bob;
+    let camY = c.camHeight + bobY - this.landDip;
     if (!this.alive) {
       camY = Math.max(0.9, c.camHeight - this.deathTimer * 1.1);
       roll = Math.min(0.55, this.deathTimer * 0.45);
     }
-    // shift the viewpoint slightly sideways while strafing for a weighty feel
+    // shift the viewpoint sideways with strafing and stride sway for a weighty feel
     const right = rightOf(this.turretYaw, this.tmpC);
-    this.camera.position.set(this.pos.x + right.x * this.lean * 1.1, camY + this.pos.y, this.pos.z + right.z * this.lean * 1.1);
+    this.camera.position.set(
+      this.pos.x + right.x * (this.lean * 1.1 + bobX),
+      camY + this.pos.y,
+      this.pos.z + right.z * (this.lean * 1.1 + bobX)
+    );
     const yaw = this.turretYaw;
     const pitch = this.pitch + this.recoilPitch + this.tiltPitch * 0.75;
     roll += this.tiltRoll * 0.75;
@@ -4835,8 +4872,17 @@ export class Game {
 
     this.weapon.visible = !this.zoom;
     this.arms.forEach((arm, i) => {
-      poseHardpoint(arm.root, i, this.camera.aspect, this.settings.fov, this.armRecoil[i], this.swayX, this.swayY);
-      if (arm.rotor) arm.rotor.rotation.z += dt * this.armRecoil[i] * 18;
+      poseHardpoint(
+        arm.root,
+        i,
+        this.camera.aspect,
+        this.settings.fov,
+        this.armRecoil[i],
+        this.swayX,
+        this.swayY,
+        bobY
+      );
+      if (arm.rotor) arm.rotor.rotation.z += dt * (1 + this.armRecoil[i] * 16) * 14;
     });
     this.camera.updateMatrixWorld();
   }

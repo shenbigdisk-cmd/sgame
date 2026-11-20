@@ -90,17 +90,18 @@ export function poseHardpoint(
   fov: number,
   recoil: number,
   swayX = 0,
-  swayY = 0
+  swayY = 0,
+  strideThump = 0
 ) {
   const k = Math.tan((fov * Math.PI) / 360) / Math.tan((70 * Math.PI) / 360);
   const lateral = Math.min(aspect, 2.2);
   root.scale.setScalar(0.68 * k * Math.min(1, aspect / 0.95));
   root.position.set(
     (index ? 1 : -1) * 1.13 * lateral * k + swayX * 0.7,
-    -1.42 * k + swayY * 0.7,
-    -2.48 + recoil * 0.24
+    -1.42 * k + swayY * 0.7 + strideThump * 0.35 + recoil * 0.05,
+    -2.48 + recoil * 0.35
   );
-  root.rotation.x = recoil * 0.16 - swayY * 0.9;
-  root.rotation.y = swayX * 0.9;
-  root.rotation.z = -swayX * 0.5;
+  root.rotation.x = recoil * 0.22 - swayY * 0.9 + strideThump * 0.15;
+  root.rotation.y = swayX * 0.9 + (index ? -1 : 1) * recoil * 0.035;
+  root.rotation.z = -swayX * 0.5 + (index ? 1 : -1) * recoil * 0.045;
 }
