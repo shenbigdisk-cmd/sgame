@@ -389,7 +389,7 @@ export const CAMPAIGN_MISSIONS: CampaignMission[] = [
         stage: 1,
         type: 'neutralize_outpost',
         title: 'Clear the Memorial Road Pickets',
-        desc: 'Kill all three pickets: a Wisp skimmer, Hound Walker and T-90 Raider. Red radar contacts mark live hostiles.',
+        desc: 'Kill all three pickets: a Wisp skimmer, Hound Walker and T-90 Raider. Coloured hostile contacts mark live units on radar.',
         targetCount: 3,
         currentCount: 0,
         completed: false,
