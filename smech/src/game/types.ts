@@ -146,6 +146,9 @@ export interface HudState {
   secIsHeat: boolean;
   secHeat: number; // 0..1
   secOverheat: boolean;
+  secCharging?: boolean;
+  secCharge?: number;
+  secCooldownLeft?: number;
   score: number;
   kills: number;
   wave: number;

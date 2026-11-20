@@ -249,6 +249,12 @@ export class AudioManager {
   // ---------------------------------------------------------------------------
   // Player weapons
   // ---------------------------------------------------------------------------
+  playDry() {
+    const d = this.route(0, 0.08);
+    this.T(d, { type: 'square', f0: 360, f1: 120, dur: 0.035, gain: 0.07 });
+    this.N(d, { dur: 0.04, type: 'bandpass', f0: 2200, f1: 800, q: 2.0, gain: 0.05 });
+  }
+
   playCannon() {
     const d = this.route(0, 0.32);
     const pitch = rr(0.94, 1.06);

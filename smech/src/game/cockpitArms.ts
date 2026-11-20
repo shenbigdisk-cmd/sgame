@@ -3,11 +3,28 @@ import type { VehicleConfig } from './vehicles';
 import type { WeaponId } from './types';
 import { createBeveledBox, getBrushedMetalNormalTexture } from './saltlineVisuals';
 
+export interface HardpointArm {
+  root: THREE.Group;
+  tip: THREE.Object3D;
+  rotor?: THREE.Group;
+  breech?: THREE.Group;
+  indicator?: THREE.Mesh;
+  coils?: THREE.Mesh[];
+  updateCharge?: (charge: number, time: number) => void;
+}
+
+const clamp01 = (v: number) => Math.max(0, Math.min(1, v));
+
 /** First-person hardpoints. Local forward is -Z, with the breech towards the pilot. */
-export function makeHardpoint(id: WeaponId | null, cfg: VehicleConfig) {
+export function makeHardpoint(id: WeaponId | null, cfg: VehicleConfig): HardpointArm {
   const root=new THREE.Group(), tip=new THREE.Object3D();
   root.name=`hardpoint:${id ?? 'empty'}`; root.add(tip);
   let rotor: THREE.Group | undefined;
+  let breech: THREE.Group | undefined;
+  let indicator: THREE.Mesh | undefined;
+  let coils: THREE.Mesh[] | undefined;
+  let updateCharge: ((charge: number, time: number) => void) | undefined;
+
   if(!id){root.visible=false;return {root,tip,rotor};}
   const normalMap = getBrushedMetalNormalTexture();
   const mat = (color: THREE.ColorRepresentation, metalness = 0.68, roughness = 0.36) =>
@@ -22,10 +39,10 @@ export function makeHardpoint(id: WeaponId | null, cfg: VehicleConfig) {
   const lamp=new THREE.MeshStandardMaterial({color:cfg.accent,emissive:cfg.accent,emissiveIntensity:1.8,toneMapped:false});
   const ember=new THREE.MeshStandardMaterial({color:0xffb271,emissive:0xff5a18,emissiveIntensity:2.0,toneMapped:false});
   const mesh=(geo:THREE.BufferGeometry,m:THREE.Material,x:number,y:number,z:number,parent:THREE.Object3D=root)=>{const o=new THREE.Mesh(geo,m);o.position.set(x,y,z);parent.add(o);return o};
-  const box=(w:number,h:number,d:number,x:number,y:number,z:number,m:THREE.Material)=>mesh(createBeveledBox(w,h,d,0.012),m,x,y,z);
+  const box=(w:number,h:number,d:number,x:number,y:number,z:number,m:THREE.Material,parent:THREE.Object3D=root)=>mesh(createBeveledBox(w,h,d,0.012),m,x,y,z,parent);
   const tube=(r:number,end:number,len:number,x:number,y:number,z:number,m:THREE.Material,n=20,parent:THREE.Object3D=root)=>{const o=mesh(new THREE.CylinderGeometry(end,r,len,n),m,x,y,z,parent);o.rotation.x=-Math.PI/2;return o};
-  const hoop=(r:number,t:number,z:number,m:THREE.Material)=>mesh(new THREE.TorusGeometry(r,t,6,18),m,0,0,z);
-  const rib=(z:number)=>box(.48,.046,.065,0,.206,z,dark);
+  const hoop=(r:number,t:number,z:number,m:THREE.Material,parent:THREE.Object3D=root)=>mesh(new THREE.TorusGeometry(r,t,6,18),m,0,0,z,parent);
+  const rib=(z:number,parent:THREE.Object3D=root)=>box(.48,.046,.065,0,.206,z,dark,parent);
   const tipAt=(z:number,x=0,y=0)=>tip.position.set(x,y,z);
   // The heel disappears below the sill; nothing floats in front of the windscreen.
   box(.34,.32,1.65,0,-.13,.43,dark);
@@ -34,13 +51,27 @@ export function makeHardpoint(id: WeaponId | null, cfg: VehicleConfig) {
       tube(.38,.30,.99,0,0,-.08,alloy,8);rotor=new THREE.Group();root.add(rotor);
       for(let i=0;i<5;i++){const a=i*2*Math.PI/5;tube(.087,.087,1.35,.157*Math.cos(a),.157*Math.sin(a),-1.15,steel,10,rotor)}
       for(const z of [-.66,-1.48])hoop(.206,.047,z,dark);
-      box(.32,.08,.55,0,.32,-.06,steel);box(.07,.02,.32,0,.368,-.06,lamp);tipAt(-1.85);break;
+      box(.32,.08,.55,0,.32,-.06,steel);indicator=box(.07,.02,.32,0,.368,-.06,lamp);tipAt(-1.85);break;
     }
     case 'cannon': {
-      box(.54,.41,1.18,0,0,-.14,alloy);for(const z of [.25,.05,-.15,-.35])rib(z);
-      tube(.22,.16,1.0,0,0,-1.08,steel);const brake=box(.39,.32,.47,0,0,-1.65,dark);
-      for(const z of [-1.52,-1.69])box(.395,.04,.065,0,.12,z,steel);
-      box(.07,.045,.52,-.21,.224,.02,lamp);tipAt(brake.position.z-.245);break;
+      breech = new THREE.Group(); root.add(breech);
+      box(.54,.41,1.18,0,0,-.14,alloy,breech);
+      for(const z of [.25,.05,-.15,-.35])rib(z,breech);
+      tube(.22,.16,1.0,0,0,-1.08,steel,20,breech);
+      const brake=box(.39,.32,.47,0,0,-1.65,dark,breech);
+      for(const z of [-1.52,-1.69])box(.395,.04,.065,0,.12,z,steel,breech);
+      indicator=box(.07,.045,.52,-.21,.224,.02,lamp,breech);
+      tipAt(brake.position.z-.245);
+      updateCharge = (charge: number, time: number) => {
+        const c = clamp01(charge);
+        const cycle = Math.sin((1 - c) * Math.PI);
+        breech!.position.z = cycle * 0.28;
+        breech!.rotation.x = -cycle * 0.05;
+        lamp.emissiveIntensity = c < 1.0 ? 0.3 + 1.8 * Math.pow(c, 2) + Math.sin(time * 24) * (1 - c) * 0.4 : 1.8;
+        lamp.color.setRGB(1.0, 0.2 + 0.75 * c, 0.1 + 0.9 * Math.pow(c, 2));
+        lamp.emissive.copy(lamp.color);
+      };
+      break;
     }
     case 'scatter': {
       // Short, broad bank of six ports with brass-backed rounds visible above the breech.
@@ -57,7 +88,12 @@ export function makeHardpoint(id: WeaponId | null, cfg: VehicleConfig) {
       }
       tube(.14,.29,.47,0,0,-1.36,copper,8);hoop(.238,.033,-1.51,ember);hoop(.29,.032,-1.59,dark);
       const pilot=mesh(new THREE.OctahedronGeometry(.14),ember,.14,.15,-1.59);pilot.scale.z=1.6;
-      tipAt(-1.64);break;
+      tipAt(-1.64);
+      updateCharge = (charge: number, time: number) => {
+        const c = clamp01(charge);
+        ember.emissiveIntensity = 0.4 + 2.2 * c + (c < 1 ? Math.sin(time * 18) * 0.4 : 0);
+      };
+      break;
     }
     case 'coil': case 'cryo': {
       const len=id==='coil'?2.12:1.85;
@@ -67,19 +103,46 @@ export function makeHardpoint(id: WeaponId | null, cfg: VehicleConfig) {
       tipAt(-len);break;
     }
     case 'cryoball': {
-      tube(.34,.34,.91,0,0,-.18,bone,8);tube(.24,.30,.72,0,0,-.91,alloy,8);hoop(.29,.046,-1.24,lamp);
+      tube(.34,.34,.91,0,0,-.18,bone,8);tube(.24,.30,.72,0,0,-.91,alloy,8);
+      indicator=hoop(.29,.046,-1.24,lamp);
       for(const x of [-.22,0,.22]){tube(.094,.094,.67,x,.275,-.19,lamp);for(const z of [.1,-.45])tube(.107,.107,.095,x,.275,z,steel)}
-      tipAt(-1.30);break;
+      tipAt(-1.30);
+      updateCharge = (charge: number, time: number) => {
+        const c = clamp01(charge);
+        lamp.emissiveIntensity = 0.3 + 2.4 * Math.pow(c, 2) + (c < 1 ? Math.sin(time * 20) * 0.4 : 0);
+        lamp.color.setHSL(0.55, 0.9, 0.25 + 0.55 * c);
+        lamp.emissive.copy(lamp.color);
+      };
+      break;
     }
     case 'emp': {
       const electric=new THREE.MeshStandardMaterial({color:0x84e9ff,emissive:0x29bce8,emissiveIntensity:1.8});
       box(.58,.42,1.12,0,0,-.22,dark);tube(.13,.10,1.6,0,0,-.97,electric,10);
       for(const x of [-.23,.23]){box(.10,.23,1.55,x,0,-.92,alloy);box(.055,.025,1.22,x,.14,-.92,electric)}
-      for(const z of [-.65,-1.1,-1.5])hoop(.25,.035,z,electric);
-      tipAt(-1.78);break;
+      const hoopList: THREE.Mesh[] = [];
+      for(const z of [-.65,-1.1,-1.5]) {
+        const h = hoop(.25,.035,z,electric.clone());
+        hoopList.push(h);
+      }
+      coils = hoopList;
+      indicator = box(.055, .025, 1.22, 0, .24, -.92, electric);
+      tipAt(-1.78);
+      updateCharge = (charge: number, time: number) => {
+        const c = clamp01(charge);
+        hoopList.forEach((coil, idx) => {
+          const segStart = idx / hoopList.length;
+          const segEnd = (idx + 1) / hoopList.length;
+          const cVal = clamp01((c - segStart) / (segEnd - segStart));
+          const cMat = coil.material as THREE.MeshStandardMaterial;
+          cMat.emissiveIntensity = 0.2 + 2.4 * Math.pow(cVal, 2) + (c < 1 && cVal > 0 ? Math.sin(time * 30 + idx * 2) * 0.5 : 0);
+          coil.scale.setScalar(0.92 + 0.12 * cVal);
+        });
+        electric.emissiveIntensity = 0.4 + 2.0 * Math.pow(c, 2);
+      };
+      break;
     }
   }
-  return {root,tip,rotor};
+  return {root,tip,rotor,breech,indicator,coils,updateCharge};
 }
 
 /** Fit to the *unzoomed* frustum so narrow screens retain a clear center lane. */
@@ -91,14 +154,21 @@ export function poseHardpoint(
   recoil: number,
   swayX = 0,
   swayY = 0,
-  strideThump = 0
+  strideThump = 0,
+  charge = 1.0,
+  time = 0
 ) {
   const k = Math.tan((fov * Math.PI) / 360) / Math.tan((70 * Math.PI) / 360);
   const lateral = Math.min(aspect, 2.2);
   root.scale.setScalar(0.68 * k * Math.min(1, aspect / 0.95));
+  const c = clamp01(charge);
+  const isCharging = index === 1 && c < 1.0;
+  const chargeHum = isCharging ? Math.sin(time * 48) * (1 - c) * 0.003 : 0;
+  const chargeLateral = isCharging ? (1 - c) * 0.015 * Math.cos(time * 36) : 0;
+
   root.position.set(
-    (index ? 1 : -1) * 1.13 * lateral * k + swayX * 0.7,
-    -1.42 * k + swayY * 0.7 + strideThump * 0.35 + recoil * 0.05,
+    (index ? 1 : -1) * 1.13 * lateral * k + swayX * 0.7 + chargeLateral,
+    -1.42 * k + swayY * 0.7 + strideThump * 0.35 + recoil * 0.05 + chargeHum,
     -2.48 + recoil * 0.35
   );
   root.rotation.x = recoil * 0.22 - swayY * 0.9 + strideThump * 0.15;

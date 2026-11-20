@@ -104,7 +104,7 @@ function harness(cfg = buildConfig(STARTER_EQUIPPED)): Harness {
     armRecoil: [0, 0], armRecoilVel: [0, 0], recoilPitch: 0, shake: 0, shotCounter: 0, primaryShots: 0, mgNoiseTimer: 0,
     shellDrop: 0, cannonCd: 0, secCd: 0, secCdMax: 0, time: 1, alive: true,
     muzzleFlash: vi.fn(), makeNoise: vi.fn(), sparks: vi.fn(), dust: vi.fn(), elementBurst: vi.fn(), addFeed: vi.fn(),
-    audio: { playMG: vi.fn(), playCannon: vi.fn(), playScatter: vi.fn(), playEmp: vi.fn(), playFlame: vi.fn(), playCryo: vi.fn(), playArc: vi.fn() },
+    audio: { playMG: vi.fn(), playCannon: vi.fn(), playScatter: vi.fn(), playEmp: vi.fn(), playFlame: vi.fn(), playCryo: vi.fn(), playArc: vi.fn(), playReady: vi.fn(), playDry: vi.fn() },
     fire: { emit: vi.fn() }, smoke: { emit: vi.fn() }, weaponFx: { beam: vi.fn(), shockwave: vi.fn() },
     hasLOS: () => true, traceCover: vi.fn((_origin, _dir, range: number) => range),
     damageEnemy: vi.fn((e: TestEnemy, damage: number) => { e.hp -= damage; }), beamHit: vi.fn(), enemyShoot: vi.fn(),

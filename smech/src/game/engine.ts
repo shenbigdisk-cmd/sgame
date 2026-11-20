@@ -415,7 +415,6 @@ export class Game {
   private alive = true;
   private deathTimer = 0;
   private cannonCd = 0;
-  private reloading = false;
   /** reload of a scattergun mounted in the primary socket */
   private primaryCd = 0;
   private mgTimer = 0;
@@ -433,6 +432,8 @@ export class Game {
   private secCd = 0;
   /** the cooldown `secCd` was primed with — used for an accurate readiness bar */
   private secCdMax = 0;
+  private secDryTimer = 0;
+  private prevSecReady = 1.0;
   /** interval between two beam ticks (flamethrower / cryo lance) */
   private beamCd = 0;
   private mines: Mine[] = [];
@@ -872,10 +873,11 @@ export class Game {
     this.mgOverheat = false;
     this.secCd = 0;
     this.secCdMax = 0;
+    this.secDryTimer = 0;
+    this.prevSecReady = 1.0;
     this.beamCd = 0;
     this.secHeat = 0;
     this.secOverheat = false;
-    this.reloading = false;
 
     // a repair kit lands next to the mech so the new sector starts fair
     const a = rand(0, TWO_PI);
@@ -1428,9 +1430,20 @@ export class Game {
     this.mgBurstPauseTimer = Math.max(0, this.mgBurstPauseTimer - dt * rate);
     this.secCd = Math.max(0, this.secCd - dt);
     this.beamCd = Math.max(0, this.beamCd - dt);
-    if (this.reloading && this.cannonCd <= 0) { this.reloading = false; this.audio.playReady(); }
+    this.secDryTimer = Math.max(0, this.secDryTimer - dt);
+    const secReady = this.secondaryReadiness();
+    if (this.prevSecReady < 1.0 && secReady >= 1.0) {
+      this.audio.playReady();
+    }
+    this.prevSecReady = secReady;
     const priHeld = this.mouse.left || this.keys.has('Space') || this.padFire.primary;
     const secHeld = this.mouse.right || this.keys.has('KeyC') || this.keys.has('ControlLeft') || this.keys.has('ControlRight') || this.padFire.secondary;
+    if (secHeld && secReady < 1.0 && c.loadout.secondary) {
+      if (this.secDryTimer <= 0) {
+        this.secDryTimer = 0.28;
+        this.audio.playDry();
+      }
+    }
     if (priHeld && !this.mgOverheat && c.loadout.primary) {
       if (c.loadout.primary === 'scatter') {
         if (this.primaryCd <= 0 && this.spendPower(c.loadout.primary)) {
@@ -1768,7 +1781,6 @@ export class Game {
     this.shotCounter++;
     const over = this.stats.overcharge > 0 && this.shotCounter % 5 === 0;
     this.cannonCd = c.cannonReload * this.stats.reloadMul;
-    this.reloading = true;
     this.camera.updateMatrixWorld();
     const muzzle = this.camera.localToWorld(this.muzzleLocal('secondary').clone());
     const dir = this.camera.getWorldDirection(new THREE.Vector3());
@@ -4995,7 +5007,10 @@ export class Game {
     this.swayTargetY *= Math.exp(-dt * 8);
 
     this.weapon.visible = !this.zoom;
+    const secArmReady = this.secondaryReadiness();
+    const priCharge = this.mgOverheat ? 0 : (1 - this.mgHeat * 0.5);
     this.arms.forEach((arm, i) => {
+      const armCharge = i === 1 ? secArmReady : priCharge;
       poseHardpoint(
         arm.root,
         i,
@@ -5004,8 +5019,11 @@ export class Game {
         this.armRecoil[i],
         this.swayX,
         this.swayY,
-        bobY
+        bobY,
+        armCharge,
+        this.time
       );
+      arm.updateCharge?.(armCharge, this.time);
       if (arm.rotor) arm.rotor.rotation.z += dt * (1 + this.armRecoil[i] * 16) * 14;
     });
     this.camera.updateMatrixWorld();
@@ -5209,6 +5227,9 @@ export class Game {
       secIsHeat,
       secHeat: this.secHeat,
       secOverheat: this.secOverheat,
+      secCharging: secReady < 1.0,
+      secCharge: secReady,
+      secCooldownLeft: sec === 'cannon' ? this.cannonCd : this.secCd,
       score: this.score,
       kills: this.kills,
       wave: this.wave,

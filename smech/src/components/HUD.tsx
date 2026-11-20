@@ -278,6 +278,12 @@ function Notice({
         overheated
       </strong>
     );
+  if (hud.secCharging && (hud.secCooldownLeft ?? 0) > 0.1)
+    return (
+      <strong className="cp-danger">
+        Secondary recharging · {(hud.secCooldownLeft ?? 0).toFixed(1)}s
+      </strong>
+    );
   if (hud.relay)
     return (
       <>
