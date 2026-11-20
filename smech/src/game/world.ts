@@ -16,8 +16,11 @@ export {
   heightAt,
   inWater,
   zoneRadius,
+  onBridge,
+  BRIDGES,
+  RIVERS,
 } from './layout';
-export type { District, DistrictType, Layout, Theme } from './layout';
+export type { District, DistrictType, Layout, Theme, Bridge, RiverSegment } from './layout';
 export { randomSeedCode, seedFromString, stageSeedCode } from './rng';
 export { nearObstacles, obsCorners, obsDist, obsResolve } from './colliders';
 export type { Obstacle } from './colliders';

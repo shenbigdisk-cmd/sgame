@@ -79,7 +79,7 @@ const THEMES: Theme[] = [
 // ---------------------------------------------------------------------------
 // Layout data
 // ---------------------------------------------------------------------------
-export type DistrictType = 'city' | 'industrial' | 'ruins' | 'highlands' | 'marsh' | 'outpost' | 'mesas' | 'crater';
+export type DistrictType = 'city' | 'industrial' | 'ruins' | 'highlands' | 'marsh' | 'outpost' | 'mesas' | 'crater' | 'forest' | 'beach' | 'grassplain';
 
 export interface District {
   type: DistrictType;
@@ -117,9 +117,29 @@ interface Water {
   level: number;
 }
 
+export interface RiverSegment {
+  x0: number;
+  z0: number;
+  x1: number;
+  z1: number;
+  width: number;
+  level: number;
+}
+
+export interface Bridge {
+  x: number;
+  z: number;
+  length: number;
+  width: number;
+  angle: number;
+  y: number;
+}
+
 export let HILLS: Hill[] = [];
 export let FLATS: Circle[] = [];
 export let WATER: Water[] = [];
+export let RIVERS: RiverSegment[] = [];
+export let BRIDGES: Bridge[] = [];
 let ROAD_SEGS: number[][] = [];
 let DISTRICTS: District[] = [];
 
@@ -132,6 +152,9 @@ const NAMES: Record<DistrictType, string[]> = {
   outpost: ['FORWARD BASE', 'OUTPOST DELTA', 'RELAY STATION', 'CHECKPOINT NINE'],
   mesas: ['STONE FOREST', 'PILLAR FIELD', 'RED MESAS', 'THE SPIRES'],
   crater: ['IMPACT BASIN', 'THE PIT', 'SCORCH CRATER', 'GROUND ZERO'],
+  forest: ['JADE CANOPY', 'CEDAR RIDGE', 'BLACKWOOD TAIGA', 'MISTY VALE', 'EMERALD PINES'],
+  beach: ['COASTAL SHALLOWS', 'AZURE COVE', 'REEF STRAND', 'DRIFTWOOD SHOAL', 'WHITE SANDS'],
+  grassplain: ['STEPPE REACH', 'VERDANT BASIN', 'GOLDEN MEADOW', 'SAVANNAH FLAT', 'PRAIRIE RUN'],
 };
 
 const SIZES: Record<DistrictType, [number, number]> = {
@@ -143,19 +166,25 @@ const SIZES: Record<DistrictType, [number, number]> = {
   outpost: [24, 30],
   mesas: [38, 50],
   crater: [34, 44],
+  forest: [40, 52],
+  beach: [36, 46],
+  grassplain: [44, 56],
 };
 
 const ROAD_REACH: Record<DistrictType, number> = {
   city: 0.35, industrial: 0.45, ruins: 0.4, outpost: 0.3, highlands: 0.95, marsh: 0.95, mesas: 0.85, crater: 0.95,
+  forest: 0.65, beach: 0.7, grassplain: 0.5,
 };
 
-const ALL_TYPES: DistrictType[] = ['city', 'industrial', 'ruins', 'highlands', 'marsh', 'outpost', 'mesas', 'crater'];
+const ALL_TYPES: DistrictType[] = ['city', 'industrial', 'ruins', 'highlands', 'marsh', 'outpost', 'mesas', 'crater', 'forest', 'beach', 'grassplain'];
 
 export function generateLayout(code: string): Layout {
   seedRng(seedFromString(code));
   HILLS = [];
   FLATS = [{ x: 0, z: 0, r: 40 }];
   WATER = [];
+  RIVERS = [];
+  BRIDGES = [];
   ROAD_SEGS = [];
   DISTRICTS = [];
   const theme = pick(THEMES);
@@ -231,6 +260,18 @@ export function generateLayout(code: string): Layout {
         WATER.push({ x: d.x + Math.sin(a) * off, z: d.z + Math.cos(a) * off, rx: rand(15, 25), rz: rand(11, 18), level: 0.55 });
       }
       HILLS.push({ x: d.x, z: d.z, r: d.r * 0.9, h: rand(2, 3.5) });
+    } else if (d.type === 'forest') {
+      HILLS.push({ x: d.x, z: d.z, r: d.r * 0.8, h: rand(4.5, 8.5) });
+      for (let k = 0; k < 2; k++) {
+        const a = rnd() * TWO_PI;
+        HILLS.push({ x: d.x + Math.sin(a) * d.r * 0.5, z: d.z + Math.cos(a) * d.r * 0.5, r: rand(18, 26), h: rand(3, 6) });
+      }
+    } else if (d.type === 'beach') {
+      FLATS.push({ x: d.x, z: d.z, r: d.r + 5 });
+      const a = rnd() * TWO_PI;
+      WATER.push({ x: d.x + Math.sin(a) * d.r * 0.35, z: d.z + Math.cos(a) * d.r * 0.35, rx: rand(18, 28), rz: rand(14, 22), level: 0.45 });
+    } else if (d.type === 'grassplain') {
+      HILLS.push({ x: d.x, z: d.z, r: d.r * 0.85, h: rand(2.5, 5) });
     }
   }
   // a guaranteed low ridge near the spawn, plus scattered rolling hills
@@ -255,6 +296,40 @@ export function generateLayout(code: string): Layout {
     const a = ridgeAngle + Math.PI * 0.6 + rand(-0.5, 0.5);
     const dist = rand(58, 80);
     WATER.push({ x: Math.sin(a) * dist, z: Math.cos(a) * dist, rx: rand(13, 18), rz: rand(9, 12), level: 0.55 });
+  }
+
+  // ---- continuous river system ----
+  const riverA = rnd() * TWO_PI;
+  const riverTargetA = riverA + Math.PI + rand(-0.6, 0.6);
+  const riverW = rand(15, 20);
+  const riverLevel = 0.5;
+
+  const rWaypoints: [number, number][] = [];
+  const startDist = WORLD_RADIUS - 65;
+  rWaypoints.push([Math.sin(riverA) * startDist, Math.cos(riverA) * startDist]);
+
+  const midSteps = 4;
+  for (let s = 1; s <= midSteps; s++) {
+    const t = s / (midSteps + 1);
+    const ang = riverA + (riverTargetA - riverA) * t + rand(-0.35, 0.35);
+    const dist = rand(70, 210);
+    rWaypoints.push([Math.sin(ang) * dist, Math.cos(ang) * dist]);
+  }
+  rWaypoints.push([Math.sin(riverTargetA) * startDist, Math.cos(riverTargetA) * startDist]);
+
+  for (let i = 0; i < rWaypoints.length - 1; i++) {
+    const p0 = rWaypoints[i];
+    const p1 = rWaypoints[i + 1];
+    const segs = Math.max(3, Math.ceil(Math.hypot(p1[0] - p0[0], p1[1] - p0[1]) / 26));
+    for (let k = 0; k < segs; k++) {
+      const t0 = k / segs;
+      const t1 = (k + 1) / segs;
+      const x0 = p0[0] + (p1[0] - p0[0]) * t0;
+      const z0 = p0[1] + (p1[1] - p0[1]) * t0;
+      const x1 = p0[0] + (p1[0] - p0[0]) * t1;
+      const z1 = p0[1] + (p1[1] - p0[1]) * t1;
+      RIVERS.push({ x0, z0, x1, z1, width: riverW, level: riverLevel });
+    }
   }
 
   // ---- roads connecting districts ----
@@ -298,6 +373,33 @@ export function generateLayout(code: string): Layout {
     nodes.push({ x: d.x, z: d.z, r: d.r });
   }
 
+  // ---- road bridges across rivers ----
+  for (const pts of roads) {
+    for (let i = 0; i < pts.length - 1; i++) {
+      const p0 = pts[i];
+      const p1 = pts[i + 1];
+      const mx = (p0[0] + p1[0]) / 2;
+      const mz = (p0[1] + p1[1]) / 2;
+      const rd = riverDist(mx, mz);
+      if (rd.seg && rd.dist < rd.seg.width * 0.7) {
+        if (!BRIDGES.some((b) => Math.hypot(b.x - mx, b.z - mz) < 28)) {
+          const dx = p1[0] - p0[0];
+          const dz = p1[1] - p0[1];
+          const angle = Math.atan2(dx, dz);
+          const approachY = Math.max(rd.seg.level + 0.88, (heightAt(p0[0], p0[1]) + heightAt(p1[0], p1[1])) / 2 + 0.5);
+          BRIDGES.push({
+            x: mx,
+            z: mz,
+            length: Math.max(26, rd.seg.width * 1.65),
+            width: 11.2,
+            angle,
+            y: approachY,
+          });
+        }
+      }
+    }
+  }
+
   return { code, theme, districts: DISTRICTS, roads };
 }
 
@@ -328,6 +430,38 @@ export function roadDist(x: number, z: number) {
   return best;
 }
 
+export function riverDist(x: number, z: number): { dist: number; seg?: RiverSegment } {
+  let best = Infinity;
+  let bestSeg: RiverSegment | undefined;
+  for (const r of RIVERS) {
+    const dx = r.x1 - r.x0;
+    const dz = r.z1 - r.z0;
+    const l2 = dx * dx + dz * dz || 1;
+    const t = Math.max(0, Math.min(1, ((x - r.x0) * dx + (z - r.z0) * dz) / l2));
+    const d = Math.hypot(x - (r.x0 + dx * t), z - (r.z0 + dz * t));
+    if (d < best) {
+      best = d;
+      bestSeg = r;
+    }
+  }
+  return { dist: best, seg: bestSeg };
+}
+
+export function onBridge(x: number, z: number): Bridge | null {
+  for (const b of BRIDGES) {
+    const dx = x - b.x;
+    const dz = z - b.z;
+    const cos = Math.cos(-b.angle);
+    const sin = Math.sin(-b.angle);
+    const u = dx * cos - dz * sin;
+    const v = dx * sin + dz * cos;
+    if (Math.abs(u) <= b.length / 2 + 1.2 && Math.abs(v) <= b.width / 2) {
+      return b;
+    }
+  }
+  return null;
+}
+
 // ---------------------------------------------------------------------------
 // Terrain
 // ---------------------------------------------------------------------------
@@ -345,6 +479,9 @@ const smoothstep = (t: number) => t * t * (3 - 2 * t);
 
 /** Ground height at a world position. Used for driving, projectiles and line of sight. */
 export function heightAt(x: number, z: number) {
+  const bridge = onBridge(x, z);
+  if (bridge) return bridge.y;
+
   let h = 0;
   for (const hl of HILLS) {
     const dx = x - hl.x;
@@ -364,11 +501,20 @@ export function heightAt(x: number, z: number) {
       h += (w.level - 0.35 - h) * blend;
     }
   }
+  const rd = riverDist(x, z);
+  if (rd.seg && rd.dist < rd.seg.width * 1.3) {
+    const rLimit = rd.seg.width * 1.3;
+    const blend = smoothstep(Math.max(0, Math.min(1, (rLimit - rd.dist) / (rd.seg.width * 0.5))));
+    h += (rd.seg.level - 0.42 - h) * blend;
+  }
   return h;
 }
 
 export function inWater(x: number, z: number) {
+  if (onBridge(x, z)) return false;
   for (const w of WATER) if (Math.hypot((x - w.x) / w.rx, (z - w.z) / w.rz) < 0.9) return true;
+  const rd = riverDist(x, z);
+  if (rd.seg && rd.dist < rd.seg.width * 0.52) return true;
   return false;
 }
 

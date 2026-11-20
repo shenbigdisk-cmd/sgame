@@ -1,12 +1,15 @@
 import { describe, expect, it } from 'vitest';
 import {
+  BRIDGES,
   MAX_ZONE,
+  RIVERS,
   START_RADIUS,
   WORLD_RADIUS,
   districtAt,
   generateLayout,
   heightAt,
   inWater,
+  onBridge,
   randomSeedCode,
   seedFromString,
   stageSeedCode,
@@ -76,15 +79,15 @@ describe('golden layout', () => {
       'city:HARBOR HEIGHTS',
       'marsh:MIRROR LAKES',
       'ruins:OLD TOWN',
-      'ruins:THE WRECKAGE',
-      'industrial:SCRAPWORKS',
-      'mesas:RED MESAS',
-      'crater:THE PIT',
-      'city:CENTRAL BLOCKS',
-      'marsh:SALT MARSH',
       'highlands:IRON HILLS',
+      'ruins:THE WRECKAGE',
+      'beach:REEF STRAND',
+      'outpost:FORWARD BASE',
       'crater:SCORCH CRATER',
-      'mesas:THE SPIRES',
+      'grassplain:SAVANNAH FLAT',
+      'forest:JADE CANOPY',
+      'marsh:SALT MARSH',
+      'crater:GROUND ZERO',
     ]);
     expect(layout.roads).toHaveLength(14);
   });
@@ -95,7 +98,19 @@ describe('golden layout', () => {
     for (let i = 0; i < 500; i++) {
       sum += heightAt((i * 37) % 600 - 300, (i * 91) % 600 - 300);
     }
-    expect(Math.round(sum * 1000) / 1000).toBe(1214.593);
+    expect(Math.round(sum * 1000) / 1000).toBe(1289.401);
+  });
+});
+
+describe('rivers and bridges', () => {
+  it('generates river network and road bridges', () => {
+    generateLayout('IRON-9');
+    expect(RIVERS.length).toBeGreaterThan(0);
+    expect(BRIDGES.length).toBeGreaterThan(0);
+    const b = BRIDGES[0];
+    expect(onBridge(b.x, b.z)).toBeDefined();
+    expect(inWater(b.x, b.z)).toBe(false);
+    expect(heightAt(b.x, b.z)).toBe(b.y);
   });
 });
 

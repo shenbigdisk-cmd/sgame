@@ -1,11 +1,11 @@
 import { StructureField } from './structures';
-import { enhanceGroundMaterial, enhanceObstacleMaterial, getBrushedMetalNormalTexture } from './saltlineVisuals';
+import { enhanceGroundMaterial, enhanceObstacleMaterial, enhanceWaterMaterial, getBrushedMetalNormalTexture } from './saltlineVisuals';
 /**
  * World builder: turns a sector layout into a dressed, lit and animated arena.
  */
 
 import * as THREE from 'three';
-import { FLATS, HILLS, START_RADIUS, WATER, WORLD_RADIUS, heightAt, inWater, roadDist, type District, type Layout } from './layout';
+import { BRIDGES, FLATS, HILLS, RIVERS, START_RADIUS, WATER, WORLD_RADIUS, heightAt, inWater, roadDist, type Bridge, type District, type Layout } from './layout';
 import { chance, pick, rand, rnd, shuffle } from './rng';
 
 const TWO_PI = Math.PI * 2;
@@ -380,6 +380,12 @@ export function buildMap(parent: THREE.Object3D, obstacles: Obstacle[], makeWrec
   waterTexture.colorSpace = THREE.SRGBColorSpace;
   const waterGeo = new THREE.CircleGeometry(1, 72);
   const waterMat = new THREE.MeshStandardMaterial({ map: waterTexture, color: 0x9ccac3, roughness: 0.28, metalness: 0.35, transparent: true, opacity: 0.9, side: THREE.DoubleSide });
+  enhanceWaterMaterial(waterMat);
+  animators.push((_dt, t) => {
+    if (waterMat.userData.shader?.uniforms?.uTime) {
+      waterMat.userData.shader.uniforms.uTime.value = t;
+    }
+  });
   const shoreGeo = new THREE.RingGeometry(1, 1.045, 72);
   const shoreMat = new THREE.MeshBasicMaterial({ color: 0xaac8b8, transparent: true, opacity: 0.42, side: THREE.DoubleSide, depthWrite: false });
   for (const w of WATER) {
@@ -393,6 +399,22 @@ export function buildMap(parent: THREE.Object3D, obstacles: Obstacle[], makeWrec
     shore.scale.set(w.rx, w.rz, 1);
     shore.position.set(w.x, w.level + 0.02, w.z);
     parent.add(water, shore);
+  }
+
+  // Continuous flowing river ribbons
+  for (const r of RIVERS) {
+    const dx = r.x1 - r.x0;
+    const dz = r.z1 - r.z0;
+    const len = Math.hypot(dx, dz) || 1;
+    const angle = Math.atan2(dx, dz);
+    const cx = (r.x0 + r.x1) / 2;
+    const cz = (r.z0 + r.z1) / 2;
+    const riverMesh = new THREE.Mesh(new THREE.PlaneGeometry(r.width, len + 1.2), waterMat);
+    riverMesh.rotation.x = -Math.PI / 2;
+    riverMesh.rotation.z = -angle;
+    riverMesh.position.set(cx, r.level, cz);
+    riverMesh.receiveShadow = true;
+    parent.add(riverMesh);
   }
 
   // ---- roads -------------------------------------------------------------
@@ -597,10 +619,14 @@ export function buildMap(parent: THREE.Object3D, obstacles: Obstacle[], makeWrec
 
   const rocks = new Pool(parent, new THREE.DodecahedronGeometry(1, 1), new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 1, flatShading: true }), 640);
   const rockColors = [0x75685a, 0x6b6256, 0x84766a, 0x7a6a58, 0x66605a].map((c) => new THREE.Color(c));
+  const foliageColors = [0x224926, 0x2e5c30, 0x1d3d22, 0x386634, 0x48692c].map((c) => new THREE.Color(c));
+  const grassColors = [0x7d7a45, 0x5a7538, 0x8c8646, 0x4d6932].map((c) => new THREE.Color(c));
   const barkMat = new THREE.MeshStandardMaterial({ color: 0x3a2e24, roughness: 1 });
-  const trunks = new Pool(parent, new THREE.CylinderGeometry(0.18, 0.35, 1, 5), barkMat, 180);
+  const trunks = new Pool(parent, new THREE.CylinderGeometry(0.18, 0.35, 1, 5), barkMat, 280);
   const branches = new Pool(parent, new THREE.CylinderGeometry(0.18, 0.35, 1, 5), barkMat, 720, false);
-  const reeds = new Pool(parent, new THREE.ConeGeometry(0.1, 1, 4), new THREE.MeshStandardMaterial({ color: 0x7d7a45, roughness: 1 }), 900, false);
+  const pineCanopies = new Pool(parent, new THREE.ConeGeometry(1, 2.2, 6), new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.85, flatShading: true }), 400);
+  const broadCanopies = new Pool(parent, new THREE.DodecahedronGeometry(1, 1), new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.85, flatShading: true }), 300);
+  const reeds = new Pool(parent, new THREE.ConeGeometry(0.1, 1, 4), new THREE.MeshStandardMaterial({ color: 0x7d7a45, roughness: 1 }), 1400, false);
   const berms = new Pool(parent, new THREE.BoxGeometry(1, 1, 1), new THREE.MeshStandardMaterial({ color: 0x9c8a62, roughness: 1 }), 160);
   const blocks = new Pool(parent, new THREE.BoxGeometry(1, 1, 1), concrete, 60);
   const containers = new Pool(parent, new THREE.BoxGeometry(12, 2.6, 2.5), new THREE.MeshStandardMaterial({ map: makeContainerTexture(), color: 0xffffff, roughness: 0.7, metalness: 0.35 }), 300);
@@ -1207,6 +1233,169 @@ export function buildMap(parent: THREE.Object3D, obstacles: Obstacle[], makeWrec
     barrelCluster(d.x + d.r * 0.5, d.z, 3);
   };
 
+  const buildForest = (d: District) => {
+    // Dense coniferous and broadleaf tree clusters
+    for (let i = 0, made = 0; i < 90 && made < 45; i++) {
+      const a = rnd() * TWO_PI;
+      const rr = rand(0.1, 0.92) * d.r;
+      const x = d.x + Math.sin(a) * rr;
+      const z = d.z + Math.cos(a) * rr;
+      if (inWater(x, z) || !free(x, z, 1.6, 1.6, 0, 1.8)) continue;
+      const h = rand(6, 11);
+      const y = heightAt(x, z) - 0.2;
+      const rot = rand(0, TWO_PI);
+      trunks.add(x, y + h / 2, z, 1.2, h, 1.2, rot);
+      if (rnd() < 0.65) {
+        pineCanopies.add(x, y + h * 0.72, z, rand(2.2, 3.2), rand(3.5, 4.8), rand(2.2, 3.2), rot, 0, 0, pick(foliageColors));
+        pineCanopies.add(x, y + h * 0.95, z, rand(1.6, 2.4), rand(2.8, 3.8), rand(1.6, 2.4), rot + 0.5, 0, 0, pick(foliageColors));
+      } else {
+        broadCanopies.add(x, y + h + rand(0.8, 1.6), z, rand(2.5, 3.8), rand(2.2, 3.2), rand(2.5, 3.8), rot, rand(0, 0.2), rand(0, 0.2), pick(foliageColors));
+      }
+      made++;
+    }
+    // Mossy boulders and fallen logs
+    for (let i = 0, made = 0; i < 20 && made < 5; i++) {
+      const a = rnd() * TWO_PI;
+      const x = d.x + Math.sin(a) * d.r * rand(0.2, 0.8);
+      const z = d.z + Math.cos(a) * d.r * rand(0.2, 0.8);
+      if (inWater(x, z) || !free(x, z, 3, 3, 0, 2)) continue;
+      addRock(x, z, rand(2.8, 5));
+      made++;
+    }
+  };
+
+  const buildBeach = (d: District) => {
+    // Coastal leaning palms
+    for (let i = 0, made = 0; i < 35 && made < 16; i++) {
+      const a = rnd() * TWO_PI;
+      const rr = rand(0.15, 0.9) * d.r;
+      const x = d.x + Math.sin(a) * rr;
+      const z = d.z + Math.cos(a) * rr;
+      if (!free(x, z, 2, 2, 0, 2)) continue;
+      const h = rand(7, 12);
+      const y = heightAt(x, z);
+      const lean = rand(0.15, 0.35);
+      const rot = rand(0, TWO_PI);
+      trunks.add(x, y + h / 2, z, 1, h, 1, rot, lean, 0);
+      pineCanopies.add(x + Math.sin(rot) * 2, y + h * 0.95, z + Math.cos(rot) * 2, rand(3.4, 4.8), 1.2, rand(3.4, 4.8), rot, 0, 0, pick(foliageColors));
+      made++;
+    }
+    // Beach driftwood timbers and smooth tidal stones
+    for (let i = 0, made = 0; i < 25 && made < 6; i++) {
+      const a = rnd() * TWO_PI;
+      const x = d.x + Math.sin(a) * d.r * rand(0.2, 0.85);
+      const z = d.z + Math.cos(a) * d.r * rand(0.2, 0.85);
+      if (!free(x, z, 2.5, 2.5, 0, 2)) continue;
+      addRock(x, z, rand(2.5, 4.2));
+      made++;
+    }
+  };
+
+  const buildGrassplain = (d: District) => {
+    // Wild grass clumps across plain
+    for (let i = 0; i < 80; i++) {
+      const a = rnd() * TWO_PI;
+      const rr = rand(0.1, 0.95) * d.r;
+      const x = d.x + Math.sin(a) * rr;
+      const z = d.z + Math.cos(a) * rr;
+      const h = rand(1.2, 2.2);
+      const y = heightAt(x, z);
+      reeds.add(x, y + h / 2, z, 1.2, h, 1.2, 0, rand(-0.2, 0.2), rand(-0.2, 0.2), pick(grassColors));
+    }
+    // Savannah umbrella acacia trees
+    for (let i = 0, made = 0; i < 30 && made < 12; i++) {
+      const a = rnd() * TWO_PI;
+      const rr = rand(0.2, 0.85) * d.r;
+      const x = d.x + Math.sin(a) * rr;
+      const z = d.z + Math.cos(a) * rr;
+      if (inWater(x, z) || !free(x, z, 3, 3, 0, 2)) continue;
+      const h = rand(7, 10);
+      const y = heightAt(x, z);
+      const rot = rand(0, TWO_PI);
+      trunks.add(x, y + h / 2, z, 1.2, h, 1.2, rot);
+      broadCanopies.add(x, y + h, z, rand(4.2, 6.2), 1.2, rand(4.2, 6.2), rot, 0, 0, pick(foliageColors));
+      made++;
+    }
+    // Dry-stack stone agricultural windbreak walls
+    for (let i = 0, made = 0; i < 15 && made < 4; i++) {
+      const a = rnd() * TWO_PI;
+      const x = d.x + Math.sin(a) * d.r * 0.55;
+      const z = d.z + Math.cos(a) * d.r * 0.55;
+      const rot = rand(0, TWO_PI);
+      if (free(x, z, 6, 1.2, rot, 2)) {
+        addBerm(x, z, 12, rot);
+        made++;
+      }
+    }
+  };
+
+  // Road bridges across rivers
+  const buildBridge = (b: Bridge) => {
+    const g = new THREE.Group();
+    const barrierMat = darkConcrete;
+    const hazardMat = new THREE.MeshStandardMaterial({
+      color: 0xddaa22,
+      roughness: 0.7,
+      emissive: 0x443300,
+    });
+
+    // Main structural deck slab
+    const deck = new THREE.Mesh(new THREE.BoxGeometry(b.length, 0.8, b.width), concrete);
+    deck.position.y = -0.4;
+    g.add(deck);
+
+    // Road surface layer
+    const roadSurface = new THREE.Mesh(
+      new THREE.BoxGeometry(b.length, 0.08, b.width - 1.2),
+      new THREE.MeshStandardMaterial({ map: makeRoadTexture(), roughness: 0.95 })
+    );
+    roadSurface.position.y = 0.04;
+    g.add(roadSurface);
+
+    // Side barrier curbs with warning hazard striping
+    const hw = b.width / 2 - 0.3;
+    for (const side of [-1, 1]) {
+      const barrier = new THREE.Mesh(new THREE.BoxGeometry(b.length, 0.7, 0.5), barrierMat);
+      barrier.position.set(0, 0.35, side * hw);
+      const stripe = new THREE.Mesh(new THREE.BoxGeometry(b.length, 0.22, 0.52), hazardMat);
+      stripe.position.set(0, 0.35, side * hw);
+      g.add(barrier, stripe);
+    }
+
+    // Concrete riverbed piers
+    const pierGeo = new THREE.CylinderGeometry(1.2, 1.6, 9, 8);
+    for (const px of [-b.length * 0.26, b.length * 0.26]) {
+      const pier = new THREE.Mesh(pierGeo, concrete);
+      pier.position.set(px, -4.5, 0);
+      g.add(pier);
+    }
+
+    // Corner beacon posts
+    for (const cx of [-b.length / 2 + 0.9, b.length / 2 - 0.9]) {
+      for (const cz of [-hw, hw]) {
+        const post = new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.08, 1.2, 6), metal);
+        post.position.set(cx, 0.6, cz);
+        const beacon = new THREE.Mesh(new THREE.SphereGeometry(0.2, 8, 8), beaconMat);
+        beacon.position.set(cx, 1.25, cz);
+        g.add(post, beacon);
+      }
+    }
+
+    g.position.set(b.x, b.y, b.z);
+    g.rotation.y = b.angle;
+    setShadows(g);
+    parent.add(g);
+
+    // Add barrier collision boxes
+    for (const side of [-1, 1]) {
+      const bx = b.x - Math.sin(b.angle) * (side * hw);
+      const bz = b.z + Math.cos(b.angle) * (side * hw);
+      addBox(bx, bz, b.length / 2, 0.35, 1.2, b.angle, b.y - 0.2);
+    }
+  };
+
+  BRIDGES.forEach(buildBridge);
+
   for (const d of layout.districts) {
     switch (d.type) {
       case 'city': buildCity(d); break;
@@ -1217,6 +1406,9 @@ export function buildMap(parent: THREE.Object3D, obstacles: Obstacle[], makeWrec
       case 'outpost': buildOutpost(d); break;
       case 'mesas': buildMesas(d); break;
       case 'crater': buildCrater(d); break;
+      case 'forest': buildForest(d); break;
+      case 'beach': buildBeach(d); break;
+      case 'grassplain': buildGrassplain(d); break;
     }
   }
 
@@ -1415,7 +1607,7 @@ export function buildMap(parent: THREE.Object3D, obstacles: Obstacle[], makeWrec
     if (barrels.length >= 44) break;
   }
 
-  for (const p of [rocks, trunks, branches, reeds, berms, blocks, containers, lampPoles, lampHeads]) p.finish();
+  for (const p of [rocks, trunks, branches, reeds, berms, blocks, containers, lampPoles, lampHeads, pineCanopies, broadCanopies]) p.finish();
   for (const f of fires) f.y = Math.max(f.y, heightAt(f.x, f.z) + 0.5);
 
   // Each relay is a one-use objective in the initial playable perimeter.

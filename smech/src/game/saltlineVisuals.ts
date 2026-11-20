@@ -684,6 +684,52 @@ export function enhanceGroundMaterial(material: THREE.Material): void {
 }
 
 // ---------------------------------------------------------------------------
+// 5b. Procedural Flowing Water & Ripple Wave Shading (Saltline Water Shader)
+// ---------------------------------------------------------------------------
+export function enhanceWaterMaterial(material: THREE.Material): void {
+  const noise = getNoiseTexture();
+  material.onBeforeCompile = (shader) => {
+    material.userData.shader = shader;
+    shader.uniforms.tNoise = { value: noise };
+    shader.uniforms.uTime = { value: 0 };
+
+    shader.vertexShader = `
+      varying vec3 vWaterWorldPos;
+      ${shader.vertexShader}
+    `.replace(
+      '#include <begin_vertex>',
+      `
+      #include <begin_vertex>
+      vWaterWorldPos = (modelMatrix * vec4(transformed, 1.0)).xyz;
+      `
+    );
+
+    shader.fragmentShader = `
+      varying vec3 vWaterWorldPos;
+      uniform sampler2D tNoise;
+      uniform float uTime;
+      ${shader.fragmentShader}
+    `.replace(
+      '#include <map_fragment>',
+      `
+      #include <map_fragment>
+      vec2 wuv = vWaterWorldPos.xz * 0.045;
+      vec2 flow1 = wuv + vec2(uTime * 0.024, uTime * 0.012);
+      vec2 flow2 = wuv * 1.65 - vec2(uTime * 0.017, -uTime * 0.021);
+      float n1 = texture2D(tNoise, flow1).r;
+      float n2 = texture2D(tNoise, flow2).g;
+      float ripple = (n1 + n2) * 0.5;
+
+      // River flow ripple highlights and glints
+      diffuseColor.rgb += vec3(0.08, 0.18, 0.22) * (ripple - 0.5) * 1.35;
+      float foam = smoothstep(0.74, 0.90, ripple);
+      diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.82, 0.95, 0.92), foam * 0.42);
+      `
+    );
+  };
+}
+
+// ---------------------------------------------------------------------------
 // 6. Procedural Paint Damage & Weathering for Obstacles (Saltline paintDmg model)
 // ---------------------------------------------------------------------------
 export function enhanceObstacleMaterial(
