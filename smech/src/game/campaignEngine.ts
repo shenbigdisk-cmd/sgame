@@ -17,6 +17,7 @@ export class CampaignEngine {
   extractionReady = false;
   missionCompleted = false;
   timeElapsed = 0;
+  private destroyedInstallations = new Set<string>();
 
   constructor(mission: CampaignMission, callbacks: CampaignEngineCallbacks = {}) {
     this.mission = mission;
@@ -46,7 +47,7 @@ export class CampaignEngine {
     return this.mission.tacticalSpawns.filter((s) => s.stage === stage);
   }
 
-  onEnemyKilled(kind: EnemyKind, pos?: { x: number; z: number }, isBoss?: boolean): void {
+  onEnemyKilled(kind: EnemyKind, _pos?: { x: number; z: number }, isBoss?: boolean): void {
     let changed = false;
     const activeStageObjs = this.objectives.filter(
       (o) => o.stage === this.currentStage && !o.completed,
@@ -54,15 +55,6 @@ export class CampaignEngine {
 
     for (const obj of activeStageObjs) {
       if (obj.type === 'neutralize_outpost' || obj.type === 'secure_fob') {
-        // If coordinate radius is specified, check if enemy was within the outpost perimeter
-        if (pos && obj.pos) {
-          const dx = pos.x - obj.pos[0];
-          const dz = pos.z - obj.pos[1];
-          const dist = Math.hypot(dx, dz);
-          const maxRadius = (obj.radius || 35) + 35; // allow margin for enemy pursuit
-          if (dist > maxRadius) continue;
-        }
-
         if (obj.targetKind && obj.targetKind !== kind) {
           continue;
         }
@@ -75,7 +67,7 @@ export class CampaignEngine {
         this.callbacks.onObjectiveUpdate?.(obj);
         break; // Count each kill toward one active objective
       } else if (obj.type === 'eliminate_warlord') {
-        if (isBoss || (obj.targetKind && obj.targetKind === kind) || !obj.targetKind) {
+        if (isBoss && (!obj.targetKind || obj.targetKind === kind)) {
           obj.currentCount += 1;
           if (obj.currentCount >= obj.targetCount) {
             obj.completed = true;
@@ -93,37 +85,24 @@ export class CampaignEngine {
   }
 
   onInstallationDestroyed(idOrName: string, pos?: { x: number; z: number }): void {
-    let changed = false;
-    const activeStageObjs = this.objectives.filter(
-      (o) => o.stage === this.currentStage && !o.completed && o.type === 'demolish_installation',
-    );
+    // Remember future targets destroyed by stray fire, so they cannot soft-lock a later stage.
+    const obj = this.objectives.find((o) => o.type === 'demolish_installation' &&
+      (o.id === idOrName || o.installationName?.toLowerCase() === idOrName.toLowerCase() ||
+       (pos && Math.hypot(pos.x - o.pos[0], pos.z - o.pos[1]) < 5)));
+    if (!obj || this.destroyedInstallations.has(obj.id)) return;
+    this.destroyedInstallations.add(obj.id);
+    this.applyDestroyedInstallations();
+  }
 
-    for (const obj of activeStageObjs) {
-      const nameMatch =
-        obj.installationName &&
-        (obj.installationName.toLowerCase().includes(idOrName.toLowerCase()) ||
-          idOrName.toLowerCase().includes(obj.installationName.toLowerCase()));
-
-      let posMatch = false;
-      if (pos && obj.pos) {
-        const dist = Math.hypot(pos.x - obj.pos[0], pos.z - obj.pos[1]);
-        if (dist < 40) posMatch = true;
-      }
-
-      if (nameMatch || posMatch || activeStageObjs.length === 1) {
-        obj.currentCount += 1;
-        if (obj.currentCount >= obj.targetCount) {
-          obj.completed = true;
-        }
-        changed = true;
+  private applyDestroyedInstallations(): void {
+    for (const obj of this.objectives) {
+      if (obj.stage === this.currentStage && !obj.completed && this.destroyedInstallations.has(obj.id)) {
+        obj.currentCount = obj.targetCount;
+        obj.completed = true;
         this.callbacks.onObjectiveUpdate?.(obj);
-        break;
       }
     }
-
-    if (changed) {
-      this.evaluateStageProgress();
-    }
+    this.evaluateStageProgress();
   }
 
   update(dt: number, playerX: number, playerZ: number, _playerHpRatio: number): void {
@@ -137,7 +116,15 @@ export class CampaignEngine {
     );
 
     for (const obj of activeStageObjs) {
-      if (obj.type === 'infiltrate_zone' && obj.pos) {
+      if (obj.type === 'hold_zone') {
+        const inside = Math.hypot(playerX - obj.pos[0], playerZ - obj.pos[1]) <= (obj.radius || 30);
+        if (inside) {
+          obj.currentCount = Math.min(obj.targetCount, obj.currentCount + Math.max(0, dt));
+          if (obj.currentCount >= obj.targetCount) obj.completed = true;
+          this.callbacks.onObjectiveUpdate?.(obj);
+          if (obj.completed) { this.evaluateStageProgress(); return; }
+        }
+      } else if (obj.type === 'infiltrate_zone' && obj.pos) {
         const dx = playerX - obj.pos[0];
         const dz = playerZ - obj.pos[1];
         const dist = Math.hypot(dx, dz);
@@ -181,15 +168,15 @@ export class CampaignEngine {
         // Advance to next stage
         this.currentStage = nextStage;
         const newSpawns = this.getSpawnsForStage(nextStage);
-        this.callbacks.onStageAdvance?.(nextStage, newSpawns);
 
         // Check if next stage opens extraction
         if (nextStageObjs.some((o) => o.type === 'reach_extraction')) {
           this.extractionReady = true;
         }
 
-        // Fire transmissions for this stage
+        this.callbacks.onStageAdvance?.(nextStage, newSpawns);
         this.checkTransmissionsForStage(nextStage);
+        this.applyDestroyedInstallations();
       } else {
         // No further stages
         if (!this.missionCompleted) {

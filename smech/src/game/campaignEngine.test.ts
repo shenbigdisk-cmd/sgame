@@ -2,96 +2,73 @@ import { describe, expect, it, vi } from 'vitest';
 import { CAMPAIGN_MISSIONS } from './campaign';
 import { CampaignEngine } from './campaignEngine';
 
-describe('CampaignEngine Stage Progression', () => {
-  it('fires stage 1 transmission on creation', () => {
-    const onTransmission = vi.fn();
-    const mission = CAMPAIGN_MISSIONS[0];
-    new CampaignEngine(mission, { onTransmission });
-
-    expect(onTransmission).toHaveBeenCalledTimes(1);
-    expect(onTransmission.mock.calls[0][0].callsign).toBe('OVERLORD');
-    expect(onTransmission.mock.calls[0][0].stageTrigger).toBe(1);
-  });
-
-  it('progresses through military operational stages sequentially', () => {
-    const onStageAdvance = vi.fn();
-    const onTransmission = vi.fn();
-    const onObjectiveUpdate = vi.fn();
-    const mission = CAMPAIGN_MISSIONS[0];
-    const engine = new CampaignEngine(mission, {
-      onStageAdvance,
-      onTransmission,
-      onObjectiveUpdate,
-    });
-
-    expect(engine.currentStage).toBe(1);
-
-    // Stage 1: Neutralize Forward Pickets (targetCount: 3)
-    // Kill 3 pickets near highway [50, 70]
-    engine.onEnemyKilled('skimmer', { x: 50, z: 70 });
-    expect(engine.currentStage).toBe(1);
-    engine.onEnemyKilled('mech', { x: 52, z: 68 });
-    expect(engine.currentStage).toBe(1);
-    engine.onEnemyKilled('tank', { x: 48, z: 72 });
-
-    // Should now advance to Stage 2
-    expect(engine.currentStage).toBe(2);
-    expect(onStageAdvance).toHaveBeenCalledWith(2, expect.any(Array));
-
-    // Stage 2 transmissions should have fired
-    const stage2Trans = onTransmission.mock.calls.find(
-      (c) => c[0].stageTrigger === 2,
-    );
-    expect(stage2Trans).toBeDefined();
-
-    // Stage 2: Demolish Flak Battery Alpha and Flak Battery Bravo
-    engine.onInstallationDestroyed('FLAK BATTERY ALPHA', { x: -90, z: 80 });
-    expect(engine.currentStage).toBe(2);
-    engine.onInstallationDestroyed('FLAK BATTERY BRAVO', { x: -120, z: -40 });
-
-    // Should now advance to Stage 3
-    expect(engine.currentStage).toBe(3);
-    expect(onStageAdvance).toHaveBeenCalledWith(3, expect.any(Array));
-
-    // Stage 3: Secure FOB Falcon (targetCount: 4 garrison defenders)
-    for (let i = 0; i < 4; i++) {
-      engine.onEnemyKilled('heavy', { x: 80, z: -110 });
+describe('campaign operations', () => {
+  it('plays every operation through its actual stages and completes once', () => {
+    for (const mission of CAMPAIGN_MISSIONS) {
+      const onMissionSuccess = vi.fn();
+      const onTransmission = vi.fn();
+      const engine = new CampaignEngine(mission, { onMissionSuccess, onTransmission });
+      for (let stage = 1; stage <= Math.max(...mission.objectives.map(o => o.stage)); stage++) {
+        expect(engine.currentStage).toBe(stage);
+        for (const obj of engine.objectives.filter(o => o.stage === stage)) {
+          switch (obj.type) {
+            case 'neutralize_outpost':
+            case 'secure_fob':
+              for (let n = 0; n < obj.targetCount; n++) engine.onEnemyKilled(obj.targetKind || 'tank');
+              break;
+            case 'eliminate_warlord':
+              engine.onEnemyKilled('heavy', undefined, true);
+              break;
+            case 'demolish_installation':
+              engine.onInstallationDestroyed(obj.id);
+              break;
+            case 'infiltrate_zone':
+            case 'reach_extraction':
+              engine.update(0.1, ...obj.pos, 1);
+              break;
+            case 'hold_zone':
+              engine.update(obj.targetCount, ...obj.pos, 1);
+              break;
+          }
+        }
+      }
+      expect(engine.missionCompleted).toBe(true);
+      engine.update(1, 0, 0, 1);
+      expect(onMissionSuccess).toHaveBeenCalledTimes(1);
+      expect(onTransmission).toHaveBeenCalledTimes(mission.transmissions.length);
     }
-
-    // Should now advance to Stage 4 (Extraction)
-    expect(engine.currentStage).toBe(4);
-    expect(engine.extractionReady).toBe(true);
-
-    const stage4Trans = onTransmission.mock.calls.find(
-      (c) => c[0].stageTrigger === 4,
-    );
-    expect(stage4Trans).toBeDefined();
   });
 
-  it('completes mission when player enters extraction zone during extraction stage', () => {
-    const onMissionSuccess = vi.fn();
-    const mission = CAMPAIGN_MISSIONS[0];
-    const engine = new CampaignEngine(mission, { onMissionSuccess });
+  it('pauses a defensive hold outside the perimeter', () => {
+    const engine = new CampaignEngine(CAMPAIGN_MISSIONS[1]);
+    engine.update(1, 0, 90, 1);
+    const hold = engine.objectives.find(o => o.type === 'hold_zone')!;
+    engine.update(10, 0, 90, 1);
+    engine.update(20, 200, 200, 1);
+    expect(hold.currentCount).toBe(10);
+    expect(hold.completed).toBe(false);
+    engine.update(20, 0, 90, 1);
+    expect(hold.completed).toBe(true);
+  });
 
-    // Advance Stage 1
-    for (let i = 0; i < 3; i++) engine.onEnemyKilled('tank', { x: 50, z: 70 });
-    // Advance Stage 2
-    engine.onInstallationDestroyed('FLAK BATTERY ALPHA', { x: -90, z: 80 });
-    engine.onInstallationDestroyed('FLAK BATTERY BRAVO', { x: -120, z: -40 });
-    // Advance Stage 3
-    for (let i = 0; i < 4; i++) engine.onEnemyKilled('tank', { x: 80, z: -110 });
+  it('remembers future installations destroyed early and ignores duplicate events', () => {
+    const engine = new CampaignEngine(CAMPAIGN_MISSIONS[0]);
+    engine.onInstallationDestroyed('battery');
+    engine.onInstallationDestroyed('battery');
+    for (let n = 0; n < 3; n++) engine.onEnemyKilled('tank');
+    expect(engine.currentStage).toBe(3);
+    expect(engine.objectives.find(o => o.id === 'battery')?.currentCount).toBe(1);
+  });
 
+  it('requires the command mech, not an ordinary heavy, for the final target', () => {
+    const mission = CAMPAIGN_MISSIONS[4];
+    const engine = new CampaignEngine(mission);
+    for (let n = 0; n < 3; n++) engine.onEnemyKilled('tank');
+    engine.onInstallationDestroyed('strike');
+    engine.onEnemyKilled('heavy', undefined, false);
+    expect(engine.currentStage).toBe(3);
+    engine.onEnemyKilled('heavy', undefined, true);
     expect(engine.currentStage).toBe(4);
     expect(engine.extractionReady).toBe(true);
-
-    // Outside extraction zone [80, -110], radius 30
-    engine.update(0.1, 0, 0, 1.0);
-    expect(engine.missionCompleted).toBe(false);
-    expect(onMissionSuccess).not.toHaveBeenCalled();
-
-    // Inside extraction zone
-    engine.update(0.1, 80, -110, 1.0);
-    expect(engine.missionCompleted).toBe(true);
-    expect(onMissionSuccess).toHaveBeenCalledTimes(1);
   });
 });

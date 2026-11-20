@@ -39,7 +39,7 @@ describe('CampaignWorldManager', () => {
     const hit = manager.checkHit(start, end, 900, 5);
     expect(hit).toBe(true);
     expect(onDestroyed).toHaveBeenCalledWith(
-      expect.stringContaining('flak_a'),
+      'battery',
       'FLAK BATTERY ALPHA',
       -90,
       80,

@@ -15,17 +15,13 @@ export default function CampaignHUD({
   extractionReady,
   waypoints = [],
 }: CampaignHUDProps) {
-  const [activeTransmission, setActiveTransmission] = useState<RadioTransmission | null>(null);
-
+  const [expiredTransmission, setExpiredTransmission] = useState<RadioTransmission | null>(null);
   useEffect(() => {
-    if (transmission) {
-      setActiveTransmission(transmission);
-      const timer = setTimeout(() => {
-        setActiveTransmission(null);
-      }, 7000);
-      return () => clearTimeout(timer);
-    }
+    if (!transmission) return;
+    const timer = setTimeout(() => setExpiredTransmission(transmission), 7000);
+    return () => clearTimeout(timer);
   }, [transmission]);
+  const activeTransmission = transmission !== expiredTransmission ? transmission : null;
 
   return (
     <>
@@ -97,7 +93,7 @@ export default function CampaignHUD({
                 {obj.title}
                 {obj.targetCount > 1 && !obj.completed && (
                   <span className="text-amber-300 ml-1.5">
-                    ({obj.currentCount}/{obj.targetCount})
+                    ({obj.type === 'hold_zone' ? Math.floor(obj.currentCount) : obj.currentCount}/{obj.targetCount}{obj.type === 'hold_zone' ? 's' : ''})
                   </span>
                 )}
               </span>

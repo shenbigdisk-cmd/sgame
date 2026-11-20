@@ -179,7 +179,8 @@ export type ObjectiveType =
   | 'neutralize_outpost'
   | 'secure_fob'
   | 'eliminate_warlord'
-  | 'reach_extraction';
+  | 'reach_extraction'
+  | 'hold_zone';
 
 export interface CampaignObjective {
   id: string;
@@ -240,382 +241,163 @@ export interface CampaignMission {
   transmissions: RadioTransmission[];
   extractionZone: { x: number; z: number; radius: number };
   salvagePool: SalvageItem[];
+  debrief: string;
 }
+
+// Each operation uses the same rules as the live simulation: marked armor, destructible
+// installations and timed defensive positions. No off-screen escort is implied.
+const objective = (id: string, stage: number, type: ObjectiveType, title: string, desc: string,
+  pos: [number, number], targetCount = 1, extra: Partial<CampaignObjective> = {}): CampaignObjective =>
+  ({ id, stage, type, title, desc, pos, targetCount, currentCount: 0, completed: false, ...extra });
+const radio = (id: string, stageTrigger: number, sender: string, callsign: string, text: string): RadioTransmission =>
+  ({ id, stageTrigger, sender, callsign, text });
+const salvage = (prefix: string): SalvageItem[] => [
+  { id: `${prefix}_alloy`, name: 'Recovered armor plate', kind: 'scrap', detail: 'Field recovery sold for forge credits.', value: 200 },
+  { id: `${prefix}_core`, name: 'Reactor components', kind: 'component', detail: 'Damaged components recovered from the battlefield.', value: 250 },
+  { id: `${prefix}_gun`, name: 'Recovered cannon assembly', kind: 'weapon', detail: 'A battlefield recovery for the collection.', value: 300, weaponId: 'cannon' },
+];
 
 export const CAMPAIGN_MISSIONS: CampaignMission[] = [
   {
-    id: 'op_iron_vanguard',
-    operationNumber: 1,
-    title: 'Operation Iron Vanguard',
-    operationName: 'SPEARHEAD RIVERINE',
-    theater: 'Sector 4: Industrial Valley & Flak Corridors',
+    id: 'line_break', operationNumber: 1, title: 'The Broken Line', operationName: 'FIRST CONTACT',
+    theater: 'Orison Valley // Southern approach', seed: 'LINE-01', themeName: 'DUSK', threatLevel: 'TACTICAL',
+    rewards: { credits: 650, xp: 450 },
     briefingTranscript: [
-      'Nomad-Actual, this is Command. Vanguard armor has dug into the southern industrial valley.',
-      'Their automated Anti-Air Flak batteries have closed our airspace. Friendly dropships are grounded.',
-      'Advance along Grid Alpha, demolish both Flak Batteries, secure FOB Falcon, and punch through to the extraction zone.',
-      'Dismissed. Good hunting.',
+      'The frontier ceasefire has collapsed. Vanguard armor is advancing through Orison Valley, and civilian traffic is trapped behind our retreating line.',
+      'Captain Mara Voss will coordinate your insertion. Clear the forward screen, knock out its air-defense battery, and hold the evacuation junction until the last transports are away.',
+      'The junction is a defensive position, not a convoy escort. Stay inside its marked perimeter while the evacuation proceeds.',
     ],
-    seed: 'VANGUARD-01',
-    themeName: 'DUSK',
-    threatLevel: 'TACTICAL',
-    rewards: {
-      credits: 650,
-      xp: 450,
-    },
     objectives: [
-      {
-        id: 'obj_stage1_picket',
-        stage: 1,
-        type: 'neutralize_outpost',
-        title: 'Neutralize Forward Picket',
-        desc: 'Engage and eliminate Vanguard scout pickets guarding Highway Alpha.',
-        targetCount: 3,
-        currentCount: 0,
-        completed: false,
-        pos: [50, 70],
-        radius: 35,
-      },
-      {
-        id: 'obj_stage2_flak_a',
-        stage: 2,
-        type: 'demolish_installation',
-        title: 'Demolish Flak Battery Alpha',
-        desc: 'Destroy the hardened Anti-Air battery tower at Grid 14-B.',
-        targetCount: 1,
-        currentCount: 0,
-        completed: false,
-        pos: [-90, 80],
-        radius: 20,
-        installationName: 'FLAK BATTERY ALPHA',
-      },
-      {
-        id: 'obj_stage2_flak_b',
-        stage: 2,
-        type: 'demolish_installation',
-        title: 'Demolish Flak Battery Bravo',
-        desc: 'Destroy the secondary Anti-Air battery tower at Grid 14-C.',
-        targetCount: 1,
-        currentCount: 0,
-        completed: false,
-        pos: [-120, -40],
-        radius: 20,
-        installationName: 'FLAK BATTERY BRAVO',
-      },
-      {
-        id: 'obj_stage3_fob',
-        stage: 3,
-        type: 'secure_fob',
-        title: 'Secure Forward Operating Base (FOB Falcon)',
-        desc: 'Clear defending Vanguard garrison and secure the landing perimeter.',
-        targetCount: 4,
-        currentCount: 0,
-        completed: false,
-        pos: [80, -110],
-        radius: 30,
-        installationName: 'FOB FALCON',
-      },
-      {
-        id: 'obj_stage4_extract',
-        stage: 4,
-        type: 'reach_extraction',
-        title: 'Airlift Link-Up',
-        desc: 'Drive into the secured FOB extraction landing pad for airlift extraction.',
-        targetCount: 1,
-        currentCount: 0,
-        completed: false,
-        pos: [80, -110],
-        radius: 30,
-      },
+      objective('screen', 1, 'neutralize_outpost', 'Break the forward screen', 'Destroy the three armored pickets.', [50, 70], 3),
+      objective('battery', 2, 'demolish_installation', 'Silence the air-defense battery', 'Destroy the marked flak battery to open the air corridor.', [-90, 80], 1, { installationName: 'FLAK BATTERY ALPHA' }),
+      objective('junction', 3, 'hold_zone', 'Hold the evacuation junction', 'Stay inside the marked perimeter for 25 seconds; progress pauses outside it.', [70, -80], 25, { radius: 30 }),
+      objective('extract', 4, 'reach_extraction', 'Link up at the junction', 'Enter the marked landing zone.', [70, -80], 1, { radius: 22 }),
     ],
     tacticalSpawns: [
-      // Stage 1 Pickets (Highway Alpha)
-      { kind: 'skimmer', pos: [45, 60], stage: 1 },
-      { kind: 'mech', pos: [55, 80], stage: 1 },
-      { kind: 'tank', pos: [35, 75], stage: 1 },
-
-      // Stage 2 Flak Battery Guards
-      { kind: 'tank', pos: [-80, 90], stage: 2 },
-      { kind: 'bastion', pos: [-95, 70], stage: 2 },
-      { kind: 'sniper', pos: [-130, -30], stage: 2 },
-
-      // Stage 3 FOB Garrison (Counter-attack force)
-      { kind: 'heavy', pos: [90, -90], stage: 3 },
-      { kind: 'mender', pos: [70, -120], stage: 3 },
-      { kind: 'tank', pos: [100, -110], stage: 3 },
-      { kind: 'sapper', pos: [60, -80], stage: 3 },
+      { kind: 'skimmer', pos: [45, 60], stage: 1 }, { kind: 'mech', pos: [55, 80], stage: 1 }, { kind: 'tank', pos: [35, 75], stage: 1 },
+      { kind: 'tank', pos: [-70, 85], stage: 2 }, { kind: 'bastion', pos: [-105, 70], stage: 2 },
+      { kind: 'tank', pos: [90, -100], stage: 3 }, { kind: 'sapper', pos: [45, -100], stage: 3 }, { kind: 'mech', pos: [90, -65], stage: 3 },
     ],
     transmissions: [
-      {
-        id: 'trans_start',
-        sender: 'Command-Actual',
-        callsign: 'OVERLORD',
-        text: 'Nomad, you are clear of the insertion drop. Advance along Highway Alpha. Suppress the enemy forward scouts.',
-        stageTrigger: 1,
-      },
-      {
-        id: 'trans_stage2',
-        sender: 'Command-Actual',
-        callsign: 'OVERLORD',
-        text: 'Pickets eliminated. Radar confirms both Flak Batteries are active west of your position. Demolish them with heavy shell fire.',
-        stageTrigger: 2,
-      },
-      {
-        id: 'trans_stage3',
-        sender: 'Dropship Iron Hawk-2',
-        callsign: 'HAWK-TWO',
-        text: 'All stations, AA fire has ceased! Air corridor is open. Secure FOB Falcon to establish our landing zone!',
-        stageTrigger: 3,
-      },
-      {
-        id: 'trans_stage4',
-        sender: 'Dropship Iron Hawk-2',
-        callsign: 'HAWK-TWO',
-        text: 'FOB perimeter secure! Touchdown in 10 seconds. Move to the extraction pad for immediate airlift!',
-        stageTrigger: 4,
-      },
+      radio('l1', 1, 'Captain Mara Voss', 'OVERLORD', 'Nomad, our line is folding. Break their screen; the road behind us is still full of civilians.'),
+      radio('l2', 2, 'Captain Mara Voss', 'OVERLORD', 'Good. That battery is denying our evacuation aircraft. Take it apart.'),
+      radio('l3', 3, 'Flight Lieutenant Imani Rook', 'ROOK', 'Air corridor is open. Hold the junction while the transports clear; enemy armor is moving to cut them off.'),
+      radio('l4', 4, 'Flight Lieutenant Imani Rook', 'ROOK', 'Last transport is out. Nomad, come to the marker. I have room for you.'),
     ],
-    extractionZone: { x: 80, z: -110, radius: 30 },
-    salvagePool: [
-      { id: 'salv_flak_cannon', name: 'Vanguard 75mm Heavy Breech', kind: 'weapon', detail: 'High-velocity rifled artillery cannon stripped from battery defenses.', value: 350, weaponId: 'cannon' },
-      { id: 'salv_armor_plate', name: 'Hardened Chobham Composite', kind: 'component', detail: 'Reinforced ballistic plating matrix.', value: 250 },
-      { id: 'salv_scrap_iron', name: 'Refined Military Alloy Ingots', kind: 'scrap', detail: 'Dense titanium-alloy salvaged from demolished fortifications.', value: 200 },
-    ],
+    extractionZone: { x: 70, z: -80, radius: 22 }, salvagePool: salvage('line'),
+    debrief: 'The evacuation survives, but a captured targeting packet shows the battery was receiving coordinates from an Allied relay. Voss orders the source traced before reporting it up the chain.',
   },
   {
-    id: 'op_black_ice',
-    operationNumber: 2,
-    title: 'Operation Black Ice',
-    operationName: 'CONVOY EXTRACTION',
-    theater: 'Sector 9: Glacial Salt Flats & Frozen Canals',
+    id: 'dead_channel', operationNumber: 2, title: 'Dead Channel', operationName: 'SIGNAL INTERCEPT',
+    theater: 'Salt flats // Relay corridor', seed: 'CHANNEL-02', themeName: 'ASHFALL', threatLevel: 'TACTICAL',
+    rewards: { credits: 800, xp: 550 },
     briefingTranscript: [
-      'An allied armored hauler carrying orbital reconnaissance telemetry has been pinned down in the frozen salt flats.',
-      'Their escort has taken heavy casualties and their generator is failing.',
-      'Advance across the frozen canal, relieve the survivors, break through the sniper line, and escort the convoy home.',
+      'The packet points to a remote relay maintained by Allied contractor Obsidian. Its distress signal went silent an hour ago.',
+      'Reach the listening post and hold the uplink while analyst Lieutenant Elias Vale copies its logs. Expect a response once the transmission starts.',
     ],
-    seed: 'BLACKICE-02',
-    themeName: 'ASHFALL',
-    threatLevel: 'SEVERE',
-    rewards: {
-      credits: 950,
-      xp: 700,
-    },
     objectives: [
-      {
-        id: 'obj_reach_convoy',
-        stage: 1,
-        type: 'infiltrate_zone',
-        title: 'Reach Pinned Allied Convoy',
-        desc: 'Move across the frozen flats to the allied distress coordinates.',
-        targetCount: 1,
-        currentCount: 0,
-        completed: false,
-        pos: [0, 90],
-        radius: 25,
-      },
-      {
-        id: 'obj_clear_ambush',
-        stage: 2,
-        type: 'neutralize_outpost',
-        title: 'Repel Enemy Canal Ambush',
-        desc: 'Eliminate the hostile snipers and demolition sappers attacking the convoy.',
-        targetCount: 5,
-        currentCount: 0,
-        completed: false,
-        pos: [0, 90],
-        radius: 60,
-      },
-      {
-        id: 'obj_clear_roadblock',
-        stage: 3,
-        type: 'demolish_installation',
-        title: 'Destroy Fortified Canal Roadblock',
-        desc: 'Demolish the armored blockade tower blocking the canal extraction bridge.',
-        targetCount: 1,
-        currentCount: 0,
-        completed: false,
-        pos: [-110, -70],
-        radius: 25,
-        installationName: 'CANAL ROADBLOCK',
-      },
-      {
-        id: 'obj_convoy_extract',
-        stage: 4,
-        type: 'reach_extraction',
-        title: 'Bridge Extraction Zone',
-        desc: 'Cross the secured bridge into friendly lines.',
-        targetCount: 1,
-        currentCount: 0,
-        completed: false,
-        pos: [-110, -70],
-        radius: 30,
-      },
+      objective('approach', 1, 'infiltrate_zone', 'Reach the listening post', 'Move to the marked relay position.', [0, 90], 1, { radius: 24 }),
+      objective('uplink', 2, 'hold_zone', 'Download relay logs', 'Remain in the relay perimeter for 30 seconds. Leaving pauses the download.', [0, 90], 30, { radius: 32 }),
+      objective('interceptors', 3, 'neutralize_outpost', 'Break the interception force', 'Destroy the four pursuing armored units.', [-50, -30], 4),
+      objective('extract', 4, 'reach_extraction', 'Reach the pickup', 'Bring the recovered logs to the extraction marker.', [-110, -70], 1, { radius: 25 }),
     ],
     tacticalSpawns: [
-      { kind: 'sniper', pos: [30, 110], stage: 2 },
-      { kind: 'sniper', pos: [-35, 115], stage: 2 },
-      { kind: 'sapper', pos: [15, 60], stage: 2 },
-      { kind: 'sapper', pos: [-20, 65], stage: 2 },
-      { kind: 'tank', pos: [0, 130], stage: 2 },
-
-      { kind: 'bastion', pos: [-100, -60], stage: 3 },
-      { kind: 'heavy', pos: [-120, -80], stage: 3 },
+      { kind: 'skimmer', pos: [30, 75], stage: 1 },
+      { kind: 'sniper', pos: [-35, 100], stage: 2 }, { kind: 'sapper', pos: [35, 95], stage: 2 }, { kind: 'tank', pos: [10, 55], stage: 2 },
+      { kind: 'mech', pos: [-45, -25], stage: 3 }, { kind: 'tank', pos: [-60, -30], stage: 3 }, { kind: 'skimmer', pos: [-40, -45], stage: 3 }, { kind: 'mender', pos: [-65, -45], stage: 3 },
     ],
     transmissions: [
-      {
-        id: 't_ice_1',
-        sender: 'Convoy Hauler Echo',
-        callsign: 'ECHO-ONE',
-        text: 'Mayday! Echo-1 to all friendly units! We are taking sniper fire on the frozen flats! Hull integrity failing!',
-        stageTrigger: 1,
-      },
-      {
-        id: 't_ice_2',
-        sender: 'Command-Actual',
-        callsign: 'OVERLORD',
-        text: 'Nomad has entered the theater. Eliminate those cliffside snipers and suppress the approaching sappers!',
-        stageTrigger: 2,
-      },
-      {
-        id: 't_ice_3',
-        sender: 'Convoy Hauler Echo',
-        callsign: 'ECHO-ONE',
-        text: 'Ambush broken! Moving toward the canal bridge. Watch out, they have an armored blockade blocking the crossing!',
-        stageTrigger: 3,
-      },
-      {
-        id: 't_ice_4',
-        sender: 'Command-Actual',
-        callsign: 'OVERLORD',
-        text: 'Roadblock destroyed! Bridge is clear! Full throttle across the bridge to safety!',
-        stageTrigger: 4,
-      },
+      radio('d1', 1, 'Lieutenant Elias Vale', 'VALE', 'The relay is still powered. Get me close enough to establish a link.'),
+      radio('d2', 2, 'Lieutenant Elias Vale', 'VALE', 'I am in. Stay on the relay while I copy the logs. Someone is already trying to cut the connection.'),
+      radio('d3', 3, 'Captain Mara Voss', 'OVERLORD', 'The copy is complete. Obsidian armor is closing on your route. Break through.'),
+      radio('d4', 4, 'Lieutenant Elias Vale', 'VALE', 'The logs identify a contractor route, not a Vanguard command net. I need time to verify the rest.'),
     ],
-    extractionZone: { x: -110, z: -70, radius: 30 },
-    salvagePool: [
-      { id: 'salv_railgun', name: 'Longbow Precision Rail Core', kind: 'weapon', detail: 'High-power magnetic rail accelerator.', value: 450, weaponId: 'rail' },
-      { id: 'salv_cryo_cells', name: 'Cryogenic Cooling Drum', kind: 'component', detail: 'High-efficiency heat sinks.', value: 300 },
-      { id: 'salv_scrap_ice', name: 'Hardened Glacial Alloy', kind: 'scrap', detail: 'Cold-treated tungsten scrap.', value: 250 },
-    ],
+    extractionZone: { x: -110, z: -70, radius: 25 }, salvagePool: salvage('channel'),
+    debrief: 'Vale verifies the logs: Obsidian forwarded civilian evacuation coordinates to Vanguard units. The timestamps lead to a contractor depot, but do not yet explain who authorized the transfer.',
   },
   {
-    id: 'op_hammerfall',
-    operationNumber: 3,
-    title: 'Operation Hammerfall',
-    operationName: 'CITADEL SIEGE',
-    theater: 'Sector 1: The Ash Caldera Redoubt',
+    id: 'ledger', operationNumber: 3, title: 'The Ledger', operationName: 'DEPOT RAID',
+    theater: 'Industrial belt // Contractor depot', seed: 'LEDGER-03', themeName: 'DUSK', threatLevel: 'SEVERE',
+    rewards: { credits: 1000, xp: 700 },
     briefingTranscript: [
-      'The enemy mechanized high command has withdrawn inside the central fortified caldera.',
-      'This is a full combined-arms siege.',
-      'Breach the fortress generators, destroy long-range rocket batteries, eliminate the Warlord Titan, and signal extraction.',
+      'Obsidian is moving its records through a fortified depot. Voss has sent the evidence to command; the response was an order to stand down.',
+      'She is sending you anyway. Break the depot perimeter, destroy its communications generator, and hold the records site while Vale transmits a copy to independent receivers.',
     ],
-    seed: 'HAMMER-03',
-    themeName: 'HIGH NOON',
-    threatLevel: 'CRITICAL',
-    rewards: {
-      credits: 1600,
-      xp: 1200,
-    },
     objectives: [
-      {
-        id: 'obj_breach_generators',
-        stage: 1,
-        type: 'demolish_installation',
-        title: 'Breach Outer Shield Generators',
-        desc: 'Demolish the primary power generator feeding the caldera fortress shields.',
-        targetCount: 1,
-        currentCount: 0,
-        completed: false,
-        pos: [0, 80],
-        radius: 20,
-        installationName: 'FORTRESS SHIELD GENERATOR',
-      },
-      {
-        id: 'obj_silence_artillery',
-        stage: 2,
-        type: 'neutralize_outpost',
-        title: 'Neutralize Heavy Artillery Batteries',
-        desc: 'Destroy the 2 heavy Goliath missile tanks shelling your approach.',
-        targetCount: 2,
-        currentCount: 0,
-        completed: false,
-        pos: [-80, 0],
-        radius: 35,
-        targetKind: 'heavy',
-      },
-      {
-        id: 'obj_kill_warlord',
-        stage: 3,
-        type: 'eliminate_warlord',
-        title: 'Eliminate Warlord Titan "Aegis Bane"',
-        desc: 'Engage and destroy the enemy command titan in the center of the citadel.',
-        targetCount: 1,
-        currentCount: 0,
-        completed: false,
-        pos: [0, -80],
-        radius: 40,
-        targetKind: 'heavy',
-      },
-      {
-        id: 'obj_citadel_extract',
-        stage: 4,
-        type: 'reach_extraction',
-        title: 'Orbital Extraction LZ',
-        desc: 'Reach the central caldera extraction beacon before collapse.',
-        targetCount: 1,
-        currentCount: 0,
-        completed: false,
-        pos: [0, -80],
-        radius: 35,
-      },
+      objective('perimeter', 1, 'neutralize_outpost', 'Break the depot perimeter', 'Destroy the three depot defenders.', [45, 75], 3),
+      objective('generator', 2, 'demolish_installation', 'Cut the depot communications', 'Destroy the marked communications generator.', [-75, 60], 1, { installationName: 'COMMUNICATIONS GENERATOR' }),
+      objective('records', 3, 'hold_zone', 'Transmit the records', 'Stay inside the records-site perimeter for 30 seconds.', [65, -85], 30, { radius: 30 }),
+      objective('extract', 4, 'reach_extraction', 'Withdraw from the depot', 'Reach the marked withdrawal point.', [-80, -100], 1, { radius: 25 }),
     ],
     tacticalSpawns: [
-      { kind: 'bastion', pos: [15, 85], stage: 1 },
-      { kind: 'tank', pos: [-20, 75], stage: 1 },
-
-      { kind: 'heavy', pos: [-75, 10], stage: 2 },
-      { kind: 'heavy', pos: [-85, -10], stage: 2 },
-      { kind: 'mender', pos: [-65, 0], stage: 2 },
-
-      { kind: 'heavy', pos: [0, -85], stage: 3, boss: true, name: 'WARLORD AEGIS BANE' },
-      { kind: 'skimmer', pos: [-25, -75], stage: 3 },
-      { kind: 'skimmer', pos: [25, -75], stage: 3 },
+      { kind: 'tank', pos: [45, 75], stage: 1 }, { kind: 'mech', pos: [60, 80], stage: 1 }, { kind: 'bastion', pos: [30, 65], stage: 1 },
+      { kind: 'sniper', pos: [-100, 50], stage: 2 }, { kind: 'tank', pos: [-50, 70], stage: 2 },
+      { kind: 'heavy', pos: [95, -80], stage: 3 }, { kind: 'sapper', pos: [40, -100], stage: 3 }, { kind: 'mech', pos: [70, -110], stage: 3 },
     ],
     transmissions: [
-      {
-        id: 't_ham_1',
-        sender: 'Command-Actual',
-        callsign: 'OVERLORD',
-        text: 'All ground forces: Operation Hammerfall is green. Primary objective: breach the fortress shield generator.',
-        stageTrigger: 1,
-      },
-      {
-        id: 't_ham_2',
-        sender: 'Command-Actual',
-        callsign: 'OVERLORD',
-        text: 'Generator destroyed! Fortress shields are down. Target their heavy artillery platforms to the west.',
-        stageTrigger: 2,
-      },
-      {
-        id: 't_ham_3',
-        sender: 'Warlord Aegis Bane',
-        callsign: 'AEGIS BANE',
-        text: 'YOU ENTER MY CITADEL ONLY TO BE CRUSHED. ALL UNITS: CORE OVERDRIVE ENGAGED.',
-        stageTrigger: 3,
-      },
-      {
-        id: 't_ham_4',
-        sender: 'Command-Actual',
-        callsign: 'OVERLORD',
-        text: 'Warlord Titan confirmed destroyed! Outstanding operational execution. Extraction dropship is inbound!',
-        stageTrigger: 4,
-      },
+      radio('g1', 1, 'Captain Mara Voss', 'OVERLORD', 'Command says leave it alone. People died on that road. We are going in.'),
+      radio('g2', 2, 'Lieutenant Elias Vale', 'VALE', 'Cut their generator. It will stop them wiping the records remotely.'),
+      radio('g3', 3, 'Lieutenant Elias Vale', 'VALE', 'Uploading now. The authorization carries an Allied command signature. Keep the uplink alive.'),
+      radio('g4', 4, 'Captain Mara Voss', 'OVERLORD', 'The copies are away. Command has revoked our orders and marked us hostile. Get out.'),
     ],
-    extractionZone: { x: 0, z: -80, radius: 35 },
-    salvagePool: [
-      { id: 'salv_orbital_core', name: 'Zenith Orbital Uplink Unit', kind: 'weapon', detail: 'High-command orbital strike relay unit.', value: 700, weaponId: 'orbital' },
-      { id: 'salv_titan_reactor', name: 'Warlord Fused Core', kind: 'component', detail: 'Immense power capacity reactor bank.', value: 600 },
-      { id: 'salv_scrap_citadel', name: 'Citadel Master Ingot', kind: 'scrap', detail: 'Hyper-dense hardened titan alloy.', value: 500 },
+    extractionZone: { x: -80, z: -100, radius: 25 }, salvagePool: salvage('ledger'),
+    debrief: 'The ledger implicates General Arden, who sold route data to prolong the war and secure a private reconstruction contract. Voss refuses to call the evidence proof of anything beyond Arden and his network; the wider command may still be trusted.',
+  },
+  {
+    id: 'last_witness', operationNumber: 4, title: 'Last Witness', operationName: 'SAFE PASSAGE',
+    theater: 'Northern crossing // Disputed sector', seed: 'WITNESS-04', themeName: 'ASHFALL', threatLevel: 'SEVERE',
+    rewards: { credits: 1200, xp: 850 },
+    briefingTranscript: [
+      'A militia dispatcher, Sera, holds the original authorization and can authenticate it. Arden has sent armor to seal her evacuation route.',
+      'Reach her position, clear the roadblock, and defend the pickup point. Rook will lift Sera separately; you are securing the route, not driving an escort vehicle.',
     ],
+    objectives: [
+      objective('contact', 1, 'infiltrate_zone', 'Reach the witness position', 'Move to the marked militia position.', [0, 85], 1, { radius: 25 }),
+      objective('roadblock', 2, 'demolish_installation', 'Open the crossing', 'Destroy the marked armored roadblock.', [-80, 20], 1, { installationName: 'CROSSING ROADBLOCK' }),
+      objective('pickup', 3, 'hold_zone', 'Defend the pickup', 'Hold the pickup perimeter for 35 seconds while the witness boards.', [70, -80], 35, { radius: 32 }),
+      objective('extract', 4, 'reach_extraction', 'Withdraw to Rook', 'Enter the pickup marker.', [70, -80], 1, { radius: 22 }),
+    ],
+    tacticalSpawns: [
+      { kind: 'skimmer', pos: [30, 80], stage: 1 }, { kind: 'sniper', pos: [-30, 100], stage: 1 },
+      { kind: 'bastion', pos: [-65, 30], stage: 2 }, { kind: 'tank', pos: [-100, 15], stage: 2 },
+      { kind: 'heavy', pos: [95, -90], stage: 3 }, { kind: 'sapper', pos: [45, -100], stage: 3 }, { kind: 'mech', pos: [90, -60], stage: 3 }, { kind: 'sniper', pos: [35, -65], stage: 3 },
+    ],
+    transmissions: [
+      radio('w1', 1, 'Sera Lin', 'SERA', 'I kept the original because I knew they would erase the logs. Please tell me you are not with Arden.'),
+      radio('w2', 2, 'Captain Mara Voss', 'OVERLORD', 'We are here for you, Sera. Nomad, clear the crossing so Rook can reach her.'),
+      radio('w3', 3, 'Flight Lieutenant Imani Rook', 'ROOK', 'I am coming in low. Hold that position until Sera is aboard.'),
+      radio('w4', 4, 'Sera Lin', 'SERA', 'I am aboard. Arden is transmitting a strike order from the old command station. He is targeting the evacuation hub.'),
+    ],
+    extractionZone: { x: 70, z: -80, radius: 22 }, salvagePool: salvage('witness'),
+    debrief: 'Sera authenticates the order. Independent Allied units accept the evidence, but Arden has isolated the command station and is preparing a strike on the evacuation hub. There is no time to wait for a tribunal.',
+  },
+  {
+    id: 'broken_authority', operationNumber: 5, title: 'Broken Authority', operationName: 'COMMAND STATION',
+    theater: 'Ash caldera // Command station', seed: 'AUTHORITY-05', themeName: 'HIGH NOON', threatLevel: 'CRITICAL',
+    rewards: { credits: 1600, xp: 1200 },
+    briefingTranscript: [
+      'Arden has barricaded himself inside the old command station. His strike relay is still online; destroying it will interrupt the order before it reaches the guns.',
+      'Neutralize the outer armor, destroy the strike generator, and defeat Arden’s command mech. Rook will recover you from the station perimeter.',
+    ],
+    objectives: [
+      objective('outer', 1, 'neutralize_outpost', 'Break the outer armor', 'Destroy the three units covering the station approach.', [40, 75], 3),
+      objective('strike', 2, 'demolish_installation', 'Disable the strike relay', 'Destroy the marked strike generator.', [-70, 30], 1, { installationName: 'STRIKE GENERATOR' }),
+      objective('arden', 3, 'eliminate_warlord', 'Stop Arden’s command mech', 'Destroy the marked command mech.', [0, -80]),
+      objective('extract', 4, 'reach_extraction', 'Leave the command station', 'Reach Rook’s extraction marker.', [80, -90], 1, { radius: 25 }),
+    ],
+    tacticalSpawns: [
+      { kind: 'tank', pos: [40, 75], stage: 1 }, { kind: 'bastion', pos: [55, 80], stage: 1 }, { kind: 'mech', pos: [25, 65], stage: 1 },
+      { kind: 'heavy', pos: [-50, 40], stage: 2 }, { kind: 'sniper', pos: [-95, 30], stage: 2 },
+      { kind: 'heavy', pos: [0, -80], stage: 3, boss: true, name: 'ARDEN COMMAND MECH' }, { kind: 'mender', pos: [-25, -75], stage: 3 }, { kind: 'skimmer', pos: [25, -75], stage: 3 },
+    ],
+    transmissions: [
+      radio('a1', 1, 'Captain Mara Voss', 'OVERLORD', 'Independent units have the evidence. Our job is to stop the strike before anyone else dies.'),
+      radio('a2', 2, 'Lieutenant Elias Vale', 'VALE', 'The relay is still issuing coordinates. Destroy its generator and the order cannot reach the guns.'),
+      radio('a3', 3, 'General Arden', 'ARDEN', 'You think a ceasefire holds without leverage? I built that leverage. You are throwing it away.'),
+      radio('a4', 4, 'Captain Mara Voss', 'OVERLORD', 'Strike canceled. Allied units are securing the station and taking the records. Nomad, come home.'),
+    ],
+    extractionZone: { x: 80, z: -90, radius: 25 }, salvagePool: salvage('authority'),
+    debrief: 'The strike never reaches the evacuation hub. Sera’s testimony and Vale’s copies expose Arden’s network; independent investigators take custody of the records. The ceasefire remains fragile, but the survivors now have a chance to decide what comes next.',
   },
 ];
 
@@ -633,7 +415,7 @@ export interface CampaignState {
   salvageInventory: SalvageItem[];
 }
 
-export const CAMPAIGN_STORAGE_KEY = 'steel-horizon:campaign:v2';
+export const CAMPAIGN_STORAGE_KEY = 'steel-horizon:campaign:v3';
 
 export function xpForLevel(level: number): number {
   return level * 500;
@@ -641,7 +423,7 @@ export function xpForLevel(level: number): number {
 
 export function createFreshCampaign(pilotName = 'Raven', callsign = 'NOMAD-1'): CampaignState {
   return {
-    version: 2,
+    version: 3,
     pilotName,
     callsign,
     xp: 0,
@@ -763,7 +545,7 @@ export function completeCampaignMission(
     {
       ...state,
       completedMissionIds: nextCompleted,
-      activeMissionId: nextMissionId,
+      activeMissionId: state.completedMissionIds.includes(missionId) ? state.activeMissionId : nextMissionId,
       salvageInventory: nextSalvage,
       factions: {
         ...state.factions,

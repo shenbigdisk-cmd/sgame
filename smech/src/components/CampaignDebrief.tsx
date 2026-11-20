@@ -16,12 +16,12 @@ export default function CampaignDebrief({
 
   return (
     <div className="absolute inset-0 z-50 flex items-center justify-center bg-black/85 font-mono text-slate-100 select-none p-6 backdrop-blur-md">
-      <div className="relative flex w-full max-w-2xl flex-col rounded-xl border border-amber-600/60 bg-slate-950 p-8 shadow-[0_0_50px_rgba(245,158,11,0.2)]">
+      <div className="relative flex w-full max-w-2xl max-h-full overflow-y-auto flex-col rounded-xl border border-amber-600/60 bg-slate-950 p-8 shadow-[0_0_50px_rgba(245,158,11,0.2)]">
         {/* Top Header */}
         <div className="border-b border-amber-900/40 pb-4">
           <div className="flex items-center justify-between">
             <span className="text-xs font-bold uppercase tracking-widest text-emerald-400">
-              ✓ SORTIE ACCOMPLISHED // AIRLIFT CONFIRMED
+              ✓ OPERATION COMPLETE // AFTER ACTION
             </span>
             <span className="rounded bg-amber-500/20 px-2.5 py-1 text-xs font-bold text-amber-300 border border-amber-500/40">
               OP-{mission.operationNumber}
@@ -33,6 +33,11 @@ export default function CampaignDebrief({
           <p className="text-xs text-slate-400 mt-1">
             Theater: <span className="font-bold text-cyan-400">{mission.theater}</span>
           </p>
+        </div>
+
+        <div className="mt-4 rounded border border-slate-800 bg-slate-900/60 p-3 text-xs leading-relaxed text-slate-300">
+          <span className="block mb-1 font-bold tracking-wider text-amber-400">AFTER ACTION REPORT</span>
+          {mission.debrief}
         </div>
 
         {/* Rewards Summary */}

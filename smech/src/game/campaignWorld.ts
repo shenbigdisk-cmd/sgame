@@ -7,8 +7,9 @@
  */
 
 import * as THREE from 'three';
-import type { CampaignMission } from './campaign';
+import type { CampaignMission, CampaignObjective } from './campaign';
 import type { AudioManager } from './audio';
+import { heightAt } from './world';
 
 export interface ObjectiveWaypoint {
   id: string;
@@ -52,6 +53,7 @@ export class CampaignWorldManager {
   private extractionLightRing: THREE.Mesh | null = null;
   private beaconPillar: THREE.Mesh | null = null;
   private time = 0;
+  private holdMarkers: { stage: number; mesh: THREE.Mesh }[] = [];
 
   constructor(
     scene: THREE.Scene,
@@ -66,11 +68,12 @@ export class CampaignWorldManager {
 
     this.spawnInstallations();
     this.spawnExtractionPad();
+    this.spawnHoldMarkers();
   }
 
   private spawnInstallations() {
     for (const obj of this.mission.objectives) {
-      if (obj.type === 'demolish_installation' || obj.installationName) {
+      if (obj.type === 'demolish_installation') {
         const [x, z] = obj.pos;
         const name = obj.installationName || obj.title;
         const lower = name.toLowerCase();
@@ -94,7 +97,7 @@ export class CampaignWorldManager {
     z: number,
   ): MilitaryInstallation {
     const group = new THREE.Group();
-    group.position.set(x, 0, z);
+    group.position.set(x, heightAt(x, z), z);
 
     let turretMesh: THREE.Object3D | undefined;
     let beaconMesh: THREE.Mesh | undefined;
@@ -290,7 +293,7 @@ export class CampaignWorldManager {
       type,
       x,
       z,
-      y: 0,
+      y: heightAt(x, z),
       radius: type === 'roadblock' ? 10 : 7.5,
       hp: maxHp,
       maxHp,
@@ -308,7 +311,7 @@ export class CampaignWorldManager {
     const { x, z, radius } = this.mission.extractionZone;
 
     const group = new THREE.Group();
-    group.position.set(x, 0.4, z);
+    group.position.set(x, heightAt(x, z) + 0.4, z);
 
     // Landing ring
     const ringGeo = new THREE.RingGeometry(radius * 0.75, radius, 32);
@@ -338,6 +341,22 @@ export class CampaignWorldManager {
 
     this.scene.add(group);
     this.extractionPad = group;
+  }
+
+  private spawnHoldMarkers(): void {
+    for (const obj of this.mission.objectives) {
+      if (obj.type !== 'hold_zone') continue;
+      const radius = obj.radius || 30;
+      const mesh = new THREE.Mesh(
+        new THREE.RingGeometry(radius - 0.8, radius, 64),
+        new THREE.MeshBasicMaterial({ color: 0x38bdf8, side: THREE.DoubleSide, transparent: true, opacity: 0.7, depthWrite: false }),
+      );
+      mesh.rotation.x = -Math.PI / 2;
+      mesh.position.set(obj.pos[0], heightAt(...obj.pos) + 0.5, obj.pos[1]);
+      mesh.visible = false;
+      this.scene.add(mesh);
+      this.holdMarkers.push({ stage: obj.stage, mesh });
+    }
   }
 
   checkHit(start: THREE.Vector3, end: THREE.Vector3, damage: number, _splash: number): boolean {
@@ -436,8 +455,10 @@ export class CampaignWorldManager {
     _playerX: number,
     _playerZ: number,
     extractionReady: boolean,
+    currentStage = 1,
   ): void {
     this.time += dt;
+    for (const marker of this.holdMarkers) marker.mesh.visible = marker.stage === currentStage;
 
     // Animate active installation elements (radar rotation, beacon pulse)
     for (const inst of this.installations) {
@@ -480,11 +501,12 @@ export class CampaignWorldManager {
     turretYaw: number,
     currentStage: number,
     extractionReady: boolean,
+    objectives: CampaignObjective[] = this.mission.objectives,
   ): ObjectiveWaypoint[] {
     const waypoints: ObjectiveWaypoint[] = [];
 
     // 1. Waypoints for current stage objectives
-    for (const obj of this.mission.objectives) {
+    for (const obj of objectives) {
       if (obj.stage !== currentStage || obj.completed) continue;
 
       const [tx, tz] = obj.pos;
@@ -515,6 +537,12 @@ export class CampaignWorldManager {
   }
 
   dispose(): void {
+    for (const marker of this.holdMarkers) {
+      this.scene.remove(marker.mesh);
+      marker.mesh.geometry.dispose();
+      (marker.mesh.material as THREE.Material).dispose();
+    }
+    this.holdMarkers = [];
     for (const inst of this.installations) {
       this.scene.remove(inst.group);
       inst.group.traverse((obj) => {

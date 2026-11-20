@@ -127,6 +127,7 @@ export default function GameView({
     if (!canvas) return;
     let g: Game | null = null;
     let lockTimer = 0;
+    let lastCampaignHudTime = 0;
     // let the loading screen paint before the (synchronous) map generation starts
     const boot = window.setTimeout(() => {
       try {
@@ -170,7 +171,9 @@ export default function GameView({
             const engine = campaignEngineRef.current;
             if (engine && g) {
               const hpRatio = nextHud.maxHp > 0 ? nextHud.hp / nextHud.maxHp : 1;
-              engine.update(0.05, g.playerPos.x, g.playerPos.z, hpRatio);
+              const elapsed = lastCampaignHudTime ? Math.min(0.1, (now - lastCampaignHudTime) / 1000) : 0;
+              lastCampaignHudTime = now;
+              engine.update(elapsed, g.playerPos.x, g.playerPos.z, hpRatio);
               if (engine.extractionReady !== extractionReady) {
                 setExtractionReady(engine.extractionReady);
               }
@@ -181,6 +184,7 @@ export default function GameView({
                   g.playerPos.x,
                   g.playerPos.z,
                   engine.extractionReady,
+                  engine.currentStage,
                 );
 
                 if (now - lastWaypointUpdateRef.current > 200) {
@@ -191,6 +195,7 @@ export default function GameView({
                     nextHud.turretYaw,
                     engine.currentStage,
                     engine.extractionReady,
+                    engine.objectives,
                   );
                   setWaypoints(wps);
                 }
@@ -209,8 +214,8 @@ export default function GameView({
         (window as unknown as { __steelGame?: Game }).__steelGame = g;
         if (campaignMission) {
           worldManagerRef.current = new CampaignWorldManager(g.worldScene, campaignMission, audio, {
-            onInstallationDestroyed: (_id, name, x, z) => {
-              campaignEngineRef.current?.onInstallationDestroyed(name, { x, z });
+            onInstallationDestroyed: (id, _name, x, z) => {
+              campaignEngineRef.current?.onInstallationDestroyed(id, { x, z });
             },
           });
           const initialSpawns = campaignEngineRef.current?.getSpawnsForStage(1) || [];

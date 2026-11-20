@@ -91,4 +91,28 @@ describe('Campaign data and state persistence', () => {
     expect(completedState.factions.allied_command).toBe(state.factions.allied_command + 25);
     expect(completedState.salvageInventory).toContainEqual(salvageItem);
   });
+  it('keeps later operations unlocked after replaying an earlier one', () => {
+    let state = createFreshCampaign();
+    state = completeCampaignMission(state, CAMPAIGN_MISSIONS[0].id);
+    state = completeCampaignMission(state, CAMPAIGN_MISSIONS[1].id);
+    state = completeCampaignMission(state, CAMPAIGN_MISSIONS[0].id);
+    expect(state.activeMissionId).toBe(CAMPAIGN_MISSIONS[2].id);
+  });
+
+  it('provides enough tactical targets and contiguous stages in every operation', () => {
+    for (const mission of CAMPAIGN_MISSIONS) {
+      const stages = [...new Set(mission.objectives.map(o => o.stage))];
+      expect(stages).toEqual(stages.map((_, i) => i + 1));
+      for (const obj of mission.objectives) {
+        if (obj.type === 'neutralize_outpost' || obj.type === 'secure_fob') {
+          const targets = mission.tacticalSpawns.filter(s => s.stage === obj.stage && (!obj.targetKind || s.kind === obj.targetKind));
+          expect(targets.length).toBeGreaterThanOrEqual(obj.targetCount);
+        }
+        if (obj.type === 'eliminate_warlord') {
+          expect(mission.tacticalSpawns.some(s => s.stage === obj.stage && s.boss)).toBe(true);
+        }
+      }
+    }
+  });
+
 });

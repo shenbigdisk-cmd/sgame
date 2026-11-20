@@ -348,3 +348,21 @@ smech/
 
 ## Licence
 All code and art in this repository is original to the project.
+
+### Story campaign: The Broken Line
+
+Choose **Story Campaign** from the main menu to play five sequential operations as
+Nomad. Break a frontier assault, investigate a compromised relay, and follow the
+evidence to the command station. Completed operations can be replayed; completing
+one unlocks the next. Each briefing explains the current mission and its after-action
+report carries the story forward.
+
+Follow the cockpit waypoint and objective tracker. For a defensive hold, stay inside
+the blue perimeter until the timer fills; leaving pauses progress. Red installation
+markers identify destructible targets, and the extraction beacon turns green when the
+last stage opens. Repairs and loadout changes remain available through the Forge
+between sorties.
+
+This campaign uses a new save slot (`steel-horizon:campaign:v3`): existing v2
+campaign progress is left in browser storage but is not imported. Other garage and
+settings saves are unaffected.

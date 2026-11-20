@@ -66,7 +66,7 @@ export default function CampaignMap({
               CAMPAIGN OPERATIONS // THEATER COMMAND
             </h1>
             <p className="text-[10px] tracking-wider text-slate-400">
-              ALLIED GROUND FORCES // EXPANSIVE BATTLEFIELD OPERATIONS
+              A FRONTIER WAR // FIVE OPERATIONS
             </p>
           </div>
         </div>
@@ -150,12 +150,12 @@ export default function CampaignMap({
             {/* Missions Column */}
             <div className="flex w-1/2 flex-col gap-3 overflow-y-auto pr-2">
               <h2 className="text-xs font-bold uppercase tracking-wider text-slate-400">
-                ACTIVE MILITARY THEATERS
+                BROKEN LINE // CAMPAIGN OPERATIONS
               </h2>
               {CAMPAIGN_MISSIONS.map((mission) => {
                 const isCompleted = campaign.completedMissionIds.includes(mission.id);
                 const isSelected = selectedMission?.id === mission.id;
-                const isUnlocked = true;
+                const isUnlocked = isCompleted || campaign.activeMissionId === mission.id;
 
                 return (
                   <div
@@ -177,6 +177,7 @@ export default function CampaignMap({
                         </span>
                       </div>
                       <div className="flex items-center gap-2">
+                        {!isUnlocked && <span className="text-[9px] text-slate-400">LOCKED</span>}
                         {isCompleted && (
                           <span className="rounded bg-emerald-950 px-2 py-0.5 text-[9px] font-bold text-emerald-400 border border-emerald-700">
                             ✓ SECURED
