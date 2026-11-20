@@ -323,18 +323,20 @@ describe('Pyre orbital factory upgrade', () => {
 
   it('keeps the new factory loadout when selecting and reloading Pyre without purchased parts', () => {
     const selected = selectMech(loadGarage(), 'prebuilt:pyre');
-    expect(selected.equipped.specialQ).toBe('x_orbital');
+    expect(selected.equipped.specialQ).toBe('x_mines');
+    expect(selected.equipped.specialE).toBe('x_orbital');
     expect(selected.owned).not.toContain('x_orbital');
     const restored = loadGarage();
     expect(restored.equipped).toEqual(PRESETS[1].equipped);
-    expect(buildConfig(restored.equipped).loadout).toMatchObject({ abilityQ: 'orbital', abilityE: 'mines' });
+    expect(buildConfig(restored.equipped).loadout).toMatchObject({ abilityQ: 'mines', abilityE: 'orbital' });
   });
 
   it('replaces Cinder on an already selected old factory Pyre and survives another save', () => {
     localStorage.setItem(GARAGE_STORAGE_KEY, JSON.stringify({ ...DEFAULT_GARAGE, activeMechId: 'prebuilt:pyre', equipped: oldFactoryPyre }));
     const restored = loadGarage();
     expect(restored.equipped).toEqual(PRESETS[1].equipped);
-    expect(buildConfig(restored.equipped).loadout.abilityQ).toBe('orbital');
+    expect(buildConfig(restored.equipped).loadout.abilityQ).toBe('mines');
+    expect(buildConfig(restored.equipped).loadout.abilityE).toBe('orbital');
     saveGarage(restored);
     expect(loadGarage().equipped).toEqual(PRESETS[1].equipped);
   });
@@ -345,8 +347,8 @@ describe('Pyre orbital factory upgrade', () => {
     localStorage.setItem(LEGACY_GARAGE_STORAGE_KEY, JSON.stringify(legacy));
     const restored = loadGarage();
     expect(restored.activeMechId).toBe('prebuilt:pyre');
-    expect(restored.equipped.specialQ).toBe('x_orbital');
-    expect(restored.equipped.specialE).toBe('x_mines');
+    expect(restored.equipped.specialQ).toBe('x_mines');
+    expect(restored.equipped.specialE).toBe('x_orbital');
   });
 
   it('does not rewrite custom mechs or saved builds that use Cinder', () => {
@@ -370,6 +372,6 @@ describe('Pyre orbital factory upgrade', () => {
     localStorage.setItem(GARAGE_STORAGE_KEY, JSON.stringify({ ...DEFAULT_GARAGE, activeMechId: 'prebuilt:pyre', equipped }));
     const restored = loadGarage();
     expect(restored.equipped.specialQ).toBeUndefined();
-    expect(restored.equipped.specialE).toBe('x_mines');
+    expect(restored.equipped.specialE).toBe('x_orbital');
   });
 });

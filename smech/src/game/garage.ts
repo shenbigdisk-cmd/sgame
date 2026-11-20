@@ -170,11 +170,24 @@ export function loadGarage(): GarageState {
     // Old saves can predate activeMechId. Recognise the complete original Pyre
     // preset without changing custom Pyre builds that happen to use Cinder.
     const oldPyre = SLOTS.every(
-      (slot) => equippedData[slot] === (slot === 'specialQ' ? 'x_jump' : PRESETS[1].equipped[slot]),
+      (slot) => equippedData[slot] === (slot === 'specialQ' ? 'x_jump' : (slot === 'specialE' ? 'x_mines' : PRESETS[1].equipped[slot]))
+        || equippedData[slot] === (slot === 'specialQ' ? 'x_orbital' : (slot === 'specialE' ? 'x_mines' : PRESETS[1].equipped[slot])),
     );
     const activeMechId = typeof parsed.activeMechId === 'string' && parsed.activeMechId
       ? parsed.activeMechId
       : oldPyre ? 'prebuilt:pyre' : PREBUILT_MECHS[0].id;
+
+    // Migrate prebuilt:pyre if it still has the old factory slots (x_orbital in Q and x_mines in E)
+    if (activeMechId === 'prebuilt:pyre') {
+      if (equippedData.specialQ === 'x_orbital' && equippedData.specialE === 'x_mines') {
+        equippedData.specialQ = 'x_mines';
+        equippedData.specialE = 'x_orbital';
+      } else if (equippedData.specialQ === 'x_jump') {
+        equippedData.specialQ = 'x_mines';
+        equippedData.specialE = 'x_orbital';
+      }
+    }
+
     const prebuilt = PREBUILT_MECHS.find((mech) => mech.id === activeMechId);
     const equipped: Partial<Record<ComponentSlot, string>> = {};
     for (const slot of SLOTS) {
@@ -182,9 +195,11 @@ export function loadGarage(): GarageState {
       // save. Only an invalid component id falls back to the starter part.
       if (!Object.prototype.hasOwnProperty.call(equippedData, slot)) continue;
       const savedId = equippedData[slot];
-      const oldFactoryCanister = activeMechId === 'prebuilt:pyre' && slot === 'specialQ'
-        && savedId === 'x_jump' && equippedData.specialE !== 'x_orbital';
-      const id = oldFactoryCanister ? 'x_orbital' : savedId;
+      const oldFactoryCanister = activeMechId === 'prebuilt:pyre' && (
+        (slot === 'specialQ' && savedId === 'x_jump') ||
+        (slot === 'specialE' && savedId === 'x_jump')
+      );
+      const id = oldFactoryCanister ? (slot === 'specialQ' ? 'x_mines' : 'x_orbital') : savedId;
       if (id === null || id === undefined || id === '') continue;
       const comp = typeof id === 'string' ? getComponent(id) : undefined;
       // Fixed factory mechs can use their supplied parts without purchasing

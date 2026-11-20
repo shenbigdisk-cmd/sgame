@@ -53,9 +53,11 @@ describe('special cartridges', () => {
     expect(onlyQ.count).toEqual({ Q: 5, E: 0 });
   });
 
-  it('gives factory Pyre Skyfall while preserving Cinder in custom builds', () => {
-    expect(VEHICLES.pyre.loadout.abilityQ).toBe('orbital');
-    expect(buildConfig(PRESETS[1].equipped).loadout.abilityQ).toBe('orbital');
+  it('gives factory Pyre Skyfall and Cinder Mines while preserving Cinder in custom builds', () => {
+    expect(VEHICLES.pyre.loadout.abilityQ).toBe('mines');
+    expect(VEHICLES.pyre.loadout.abilityE).toBe('orbital');
+    expect(buildConfig(PRESETS[1].equipped).loadout.abilityQ).toBe('mines');
+    expect(buildConfig(PRESETS[1].equipped).loadout.abilityE).toBe('orbital');
     expect(buildConfig({ frame: 'f_pyre', specialQ: 'x_jump' }).loadout.abilityQ).toBe('cinder');
   });
 });
