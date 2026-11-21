@@ -117,6 +117,28 @@ export function makeHardpoint(id: WeaponId | null, cfg: VehicleConfig): Hardpoin
       };
       break;
     }
+    case 'turret': {
+      // Compact traverse-and-fire sentry pod, distinct from the gun barrels.
+      box(.92,.44,1.02,0,-.02,-.16,alloy);
+      tube(.36,.42,.34,0,.13,-.35,dark,12);
+      for(const side of [-1,1]) {
+        box(.22,.66,.76,side*.48,.03,-.29,steel);
+        box(.12,.42,.68,side*.61,.02,-.31,dark);
+        tube(.13,.13,.22,side*.53,.08,-.55,lamp,10);
+        box(.08,.09,.34,side*.48,.29,-.25,lamp);
+      }
+      box(.62,.16,.66,0,.31,-.12,dark);
+      tube(.21,.24,.38,0,-.07,-.65,dark,12);
+      tube(.12,.10,1.18,0,-.07,-1.31,steel,12);
+      tube(.18,.14,.28,0,-.07,-1.98,dark,10);
+      hoop(.148,.028,-2.13,lamp);
+      const optic=new THREE.Mesh(new THREE.SphereGeometry(.12,10,8),lamp);
+      optic.position.set(0,.19,-.72);root.add(optic);
+      for(const side of [-1,1]) {
+        tube(.055,.055,.94,side*.27,-.28,-1.29,dark,8);
+      }
+      tipAt(-2.18);break;
+    }
     case 'emp': {
       const electric=new THREE.MeshStandardMaterial({color:0x84e9ff,emissive:0x29bce8,emissiveIntensity:1.8});
       box(.58,.42,1.12,0,0,-.22,dark);tube(.13,.10,1.6,0,0,-.97,electric,10);

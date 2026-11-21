@@ -46,7 +46,7 @@ export class CampaignEngine {
     return this.mission.tacticalSpawns.filter((s) => s.stage === stage);
   }
 
-  onEnemyKilled(kind: EnemyKind, pos?: { x: number; z: number }, isBoss?: boolean): void {
+  onEnemyKilled(kind: EnemyKind, _pos?: { x: number; z: number }, isBoss?: boolean): void {
     let changed = false;
     const activeStageObjs = this.objectives.filter(
       (o) => o.stage === this.currentStage && !o.completed,
@@ -54,15 +54,9 @@ export class CampaignEngine {
 
     for (const obj of activeStageObjs) {
       if (obj.type === 'neutralize_outpost' || obj.type === 'secure_fob') {
-        // If coordinate radius is specified, check if enemy was within the outpost perimeter
-        if (pos && obj.pos) {
-          const dx = pos.x - obj.pos[0];
-          const dz = pos.z - obj.pos[1];
-          const dist = Math.hypot(dx, dz);
-          const maxRadius = (obj.radius || 35) + 35; // allow margin for enemy pursuit
-          if (dist > maxRadius) continue;
-        }
-
+        // Campaign mode disables random arena waves, so every stage kill is
+        // part of this tactical encounter. Don't drop credit when pursuers
+        // chase the player away from their original spawn radius.
         if (obj.targetKind && obj.targetKind !== kind) {
           continue;
         }
@@ -131,7 +125,7 @@ export class CampaignEngine {
 
     if (this.missionCompleted) return;
 
-    // Check active zone infiltrate objectives
+    // Check active zone infiltrate / hold / extraction objectives
     const activeStageObjs = this.objectives.filter(
       (o) => o.stage === this.currentStage && !o.completed,
     );
@@ -148,6 +142,28 @@ export class CampaignEngine {
           this.callbacks.onObjectiveUpdate?.(obj);
           this.evaluateStageProgress();
           return;
+        }
+      } else if (obj.type === 'hold_zone' && obj.pos) {
+        // Defense stage: the timer only runs while the player holds the ring.
+        // Leaving pauses the hold (it never resets) — MW-style forgiveness.
+        const dx = playerX - obj.pos[0];
+        const dz = playerZ - obj.pos[1];
+        const dist = Math.hypot(dx, dz);
+        const radius = obj.radius || 35;
+        if (dist <= radius) {
+          const before = Math.floor(obj.currentCount);
+          obj.currentCount += dt;
+          const after = Math.floor(obj.currentCount);
+          if (after !== before) {
+            this.callbacks.onObjectiveUpdate?.(obj);
+          }
+          if (obj.currentCount >= obj.targetCount) {
+            obj.currentCount = obj.targetCount;
+            obj.completed = true;
+            this.callbacks.onObjectiveUpdate?.(obj);
+            this.evaluateStageProgress();
+            return;
+          }
         }
       } else if (obj.type === 'reach_extraction' && this.extractionReady) {
         const targetX = obj.pos ? obj.pos[0] : this.mission.extractionZone.x;
@@ -170,7 +186,10 @@ export class CampaignEngine {
   }
 
   evaluateStageProgress(): void {
-    const stageObjs = this.objectives.filter((o) => o.stage === this.currentStage);
+    // Optional objectives are bonus intel/salvage — they never block advance.
+    const stageObjs = this.objectives.filter(
+      (o) => o.stage === this.currentStage && !o.optional,
+    );
     const allStageDone = stageObjs.length > 0 && stageObjs.every((o) => o.completed);
 
     if (allStageDone) {

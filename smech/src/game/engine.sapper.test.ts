@@ -1,7 +1,9 @@
 import * as THREE from 'three';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { resetColliderGrid } from './colliders';
-import { Game } from './engine';
+import { Game, type GameOptions } from './engine';
+import { CAMPAIGN_MISSIONS } from './campaign';
+import { CampaignEngine } from './campaignEngine';
 import { Floaters } from './floaters';
 import { STARTER_EQUIPPED, buildConfig } from './forge';
 import { defaultStats } from './upgrades';
@@ -80,11 +82,16 @@ function buildSapper(x: number, z = 0) {
   };
 }
 
-function harness(hp = 1000, stats = defaultStats()) {
+function harness(
+  hp = 1000,
+  stats = defaultStats(),
+  onEnemyKilled: NonNullable<GameOptions['onEnemyKilled']> = vi.fn(),
+) {
   const enemies: SimEnemy[] = [];
   const damageDirs: { angle: number; time: number }[] = [];
   const game = Object.assign(Object.create(Game.prototype), {
     cfg: buildConfig(STARTER_EQUIPPED),
+    opts: { onEnemyKilled },
     canvas: { clientHeight: 720 },
     camera: new THREE.PerspectiveCamera(70, 1, 0.1, 500),
     scene: { remove: vi.fn(), add: vi.fn() },
@@ -174,8 +181,9 @@ function harness(hp = 1000, stats = defaultStats()) {
 beforeEach(() => resetColliderGrid());
 
 describe('Ember Sapper detonations', () => {
-  it('ram-detonation wounds the pilot but banks no kill credit', () => {
-    const game = harness();
+  it('ram-detonation wounds the pilot, banks no kill score, but reports the neutralized target', () => {
+    const onEnemyKilled = vi.fn();
+    const game = harness(1000, defaultStats(), onEnemyKilled);
     const rig = sapper(0, 0); // sitting on the hull: inside the fuse radius
     game.enemies.push(rig);
     game.killEnemy(rig as never, false);
@@ -183,6 +191,29 @@ describe('Ember Sapper detonations', () => {
     expect(game.hp).toBeLessThan(1000);
     expect(game.kills).toBe(0);
     expect(game.score).toBe(0);
+    expect(onEnemyKilled).toHaveBeenCalledWith({ kind: 'sapper', pos: { x: 0, z: 0 }, boss: false, elite: false });
+  });
+
+  it('clears the fourth campaign target when the Ember Sapper self-detonates', () => {
+    const campaign = new CampaignEngine(CAMPAIGN_MISSIONS[0]);
+    const game = harness(1000, defaultStats(), (event) => {
+      campaign.onEnemyKilled(event.kind, event.pos, event.boss);
+    });
+
+    campaign.onEnemyKilled('skimmer');
+    campaign.onEnemyKilled('mech');
+    campaign.onEnemyKilled('tank');
+    campaign.onEnemyKilled('tank');
+    campaign.onEnemyKilled('mech');
+    campaign.onEnemyKilled('sniper');
+    expect(campaign.currentStage).toBe(2);
+
+    const rig = sapper(0, 0);
+    game.enemies.push(rig);
+    game.killEnemy(rig as never, false);
+
+    expect(rig.alive).toBe(false);
+    expect(campaign.currentStage).toBe(3);
   });
 
   it('a sapper put down by fire still cooks off, at reduced force', () => {

@@ -34,6 +34,15 @@ describe('factory floor models', () => {
     for (const mech of mechs) disposeMech(mech);
   });
 
+  it('builds a detailed sentry pod on the turret hardpoint', () => {
+    const sentry = buildMech({ ...STARTER_EQUIPPED, specialQ: 'x_turret' });
+    const stock = buildMech(STARTER_EQUIPPED);
+    expect(sentry.getObjectByName('arc-sentry-module')).toBeTruthy();
+    expect(meshCount(sentry)).toBeGreaterThan(meshCount(stock));
+    disposeMech(sentry);
+    disposeMech(stock);
+  });
+
   it('builds a distinct satellite uplink on the Skyfall shoulder', () => {
     const orbital = buildMech({ ...STARTER_EQUIPPED, specialQ: 'x_orbital' });
     const cinder = buildMech({ ...STARTER_EQUIPPED, specialQ: 'x_jump' });

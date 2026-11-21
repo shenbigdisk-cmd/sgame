@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import type { CampaignMission, SalvageItem } from '../game/campaign';
+import { CAMPAIGN_MISSIONS, missionAct, type CampaignMission, type SalvageItem } from '../game/campaign';
 
 interface CampaignDebriefProps {
   mission: CampaignMission;
@@ -14,9 +14,13 @@ export default function CampaignDebrief({
     return mission.salvagePool[0] || null;
   });
 
+  const nextMission = CAMPAIGN_MISSIONS.find(
+    (m) => m.operationNumber === mission.operationNumber + 1,
+  );
+
   return (
-    <div className="absolute inset-0 z-50 flex items-center justify-center bg-black/85 font-mono text-slate-100 select-none p-6 backdrop-blur-md">
-      <div className="relative flex w-full max-w-2xl flex-col rounded-xl border border-amber-600/60 bg-slate-950 p-8 shadow-[0_0_50px_rgba(245,158,11,0.2)]">
+    <div className="absolute inset-0 z-50 flex items-center justify-center bg-black/85 font-mono text-slate-100 select-none p-6 backdrop-blur-md overflow-y-auto">
+      <div className="relative flex w-full max-w-2xl flex-col rounded-xl border border-amber-600/60 bg-slate-950 p-8 shadow-[0_0_50px_rgba(245,158,11,0.2)] my-8">
         {/* Top Header */}
         <div className="border-b border-amber-900/40 pb-4">
           <div className="flex items-center justify-between">
@@ -24,7 +28,7 @@ export default function CampaignDebrief({
               ✓ SORTIE ACCOMPLISHED // AIRLIFT CONFIRMED
             </span>
             <span className="rounded bg-amber-500/20 px-2.5 py-1 text-xs font-bold text-amber-300 border border-amber-500/40">
-              OP-{mission.operationNumber}
+              OP-{mission.operationNumber} — ACT {missionAct(mission)}
             </span>
           </div>
           <h1 className="mt-1 text-2xl font-black tracking-wide text-white">
@@ -34,6 +38,18 @@ export default function CampaignDebrief({
             Theater: <span className="font-bold text-cyan-400">{mission.theater}</span>
           </p>
         </div>
+
+        {/* Story Debrief */}
+        {mission.debriefTranscript && mission.debriefTranscript.length > 0 && (
+          <div className="mt-5 rounded bg-slate-900/60 p-4 text-xs leading-relaxed text-slate-300 border border-slate-800">
+            <p className="font-semibold text-amber-300/90 mb-2">AFTER-ACTION — RAVEN SQUAD:</p>
+            {mission.debriefTranscript.map((line, idx) => (
+              <p key={idx} className="mb-1.5 text-slate-300">
+                &gt; {line}
+              </p>
+            ))}
+          </div>
+        )}
 
         {/* Rewards Summary */}
         <div className="my-6 grid grid-cols-3 gap-4">
@@ -98,6 +114,18 @@ export default function CampaignDebrief({
             })}
           </div>
         </div>
+
+        {/* Next Operation Preview */}
+        {nextMission ? (
+          <div className="mb-6 rounded border border-cyan-900/60 bg-cyan-950/20 p-3 text-xs">
+            <span className="font-bold text-cyan-300">NEXT — OP-{nextMission.operationNumber}: {nextMission.title}</span>
+            <span className="text-slate-400"> — {nextMission.theater}</span>
+          </div>
+        ) : (
+          <div className="mb-6 rounded border border-emerald-900/60 bg-emerald-950/20 p-3 text-xs text-emerald-300 font-bold">
+            ✓ CAMPAIGN COMPLETE — The Kestrel Revenge is finished. The Saltline is free.
+          </div>
+        )}
 
         {/* Confirm Button */}
         <div className="flex items-center justify-end border-t border-slate-800 pt-4">

@@ -2,10 +2,10 @@ import { SIGHT_SIZE } from '../game/aimRing';
 import Canopy from './Canopy';
 import type { CSSProperties } from 'react';
 import './cockpit.css';
-import { SUPPLIES } from '../game/supplies';
 import type { HudBuff, HudState, HudWeapon, VehicleType, RadarBlip, WeaponId } from '../game/types';
 import { VEHICLES, WEAPON_INFO } from '../game/vehicles';
 import type { Settings } from '../game/settings';
+import type { ObjectiveWaypoint } from '../game/campaignWorld';
 import { Icon } from './Icons';
 
 interface Props {
@@ -17,6 +17,7 @@ interface Props {
   onExtract?: () => void;
   onWeapon?: (id: WeaponId) => void;
   settings?: Settings;
+  campaignTarget?: ObjectiveWaypoint;
 }
 
 const TWO_PI = Math.PI * 2;
@@ -69,8 +70,6 @@ const BLIP_COLOR: Record<string, string> = {
   sapper: '#ff6a00',
   bastion: '#ffc55a',
   boss: '#ff003c',
-  pickup: '#00e5ff',
-  drop: '#ffd700',
   obstacle: 'rgba(255,255,255,0.22)',
 };
 
@@ -79,15 +78,21 @@ function Radar({
   hullRel,
   accent,
   size,
+  objective,
 }: {
   blips: RadarBlip[];
   hullRel: number;
   accent: string;
   size: number;
+  objective?: ObjectiveWaypoint;
 }) {
   const range = 180;
   const half = size / 2;
   const scale = half / range;
+  const objectiveRadius = objective ? Math.min(objective.dist * scale, half - 7) : 0;
+  const objectiveX = objective ? half - Math.sin(objective.relAngle) * objectiveRadius : 0;
+  const objectiveY = objective ? half - Math.cos(objective.relAngle) * objectiveRadius : 0;
+  const objectiveColor = objective?.optional ? '#4de3ff' : '#ffd166';
   return (
     <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} className="shrink-0">
       <defs>
@@ -113,6 +118,17 @@ function Radar({
         fillOpacity="0.08"
       />
       <g clipPath="url(#radarClip)">
+        {objective && (
+          <g
+            className="cp-radar-objective"
+            transform={`translate(${objectiveX} ${objectiveY})`}
+            style={{ filter: `drop-shadow(0 0 4px ${objectiveColor})` }}
+          >
+            <title>{`${objective.optional ? 'Bonus objective' : 'Mission objective'}: ${objective.title}, ${objective.dist} metres`}</title>
+            <circle r="8" fill="none" stroke={objectiveColor} strokeWidth="1.5" />
+            <polygon points="0,-4 4,0 0,4 -4,0" fill={objectiveColor} stroke="#061018" strokeWidth="0.8" />
+          </g>
+        )}
         {blips.map((b, i) => {
           let x = half + b.x * scale;
           let y = half - b.y * scale;
@@ -130,7 +146,7 @@ function Radar({
             return <circle key={i} cx={x} cy={y} r={Math.max(1.2, (b.size ?? 3) * scale)} fill={fill} />;
           }
 
-          // 2. Supply Drops (Crates / Nano repair / ammo): distinct glowing crate box with +
+          // 2. Relay sites
           if (b.kind === 'relay')
             return (
               <circle
@@ -143,28 +159,7 @@ function Radar({
                 strokeWidth={1.8}
               />
             );
-          if (b.kind === 'drop' && b.dropKind) {
-            const supply = SUPPLIES[b.dropKind];
-            return (
-              <g key={i} transform={`translate(${x - 5},${y - 5}) scale(0.42)`}>
-                <rect width="24" height="24" rx="3" fill="#102019" stroke={supply.color} />
-                <path d={supply.path} fill="none" stroke={supply.color} strokeWidth="2.8" />
-              </g>
-            );
-          }
-          // 3. Pickups (Credits, scrap, exp): bright neon cyan diamond
-          if (b.kind === 'pickup') {
-            return (
-              <polygon
-                key={i}
-                points={`${x},${y - 3.2} ${x + 3.2},${y} ${x},${y + 3.2} ${x - 3.2},${y}`}
-                fill="#00e5ff"
-                style={{ filter: 'drop-shadow(0 0 3px #00e5ff)' }}
-              />
-            );
-          }
-
-          // 4. Edge indicator for distant or unseen enemy tanks (clamped to perimeter)
+          // 3. Edge indicator for distant or unseen enemy tanks (clamped to perimeter)
           if (b.edge) {
             const angle = Math.atan2(y - half, x - half);
             const edgeRadius = half - 5;
@@ -184,7 +179,7 @@ function Radar({
             );
           }
 
-          // 5. Boss: prominent crowned diamond
+          // 4. Boss: prominent crowned diamond
           if (b.kind === 'boss') {
             const d = Math.hypot(x - half, y - half);
             if (d > half - 6) {
@@ -203,7 +198,7 @@ function Radar({
             );
           }
 
-          // 6. Enemies: hostile directional triangles / chevrons
+          // 5. Enemies: hostile directional triangles / chevrons
           if (b.kind === 'heavy') {
             return (
               <polygon
@@ -541,6 +536,7 @@ export default function HUD({
   onExtract,
   onUnstick,
   settings,
+  campaignTarget,
 }: Props) {
   const accent = VEHICLES[vehicle].accent;
   const visibility = hud.seenBy ? 'Exposed' : hud.detected ? 'Hunted' : 'Undetected';
@@ -722,7 +718,13 @@ export default function HUD({
           <SpecialWeapon slot="E" weapon={hud.weapons[3]} onWeapon={onWeapon} />
         </section>
         <section className="flight-radar" aria-label="Tactical radar">
-          <Radar blips={hud.blips} hullRel={wrap(hud.hullYaw - hud.turretYaw)} accent={accent} size={128} />
+          {campaignTarget && (
+            <div className="cp-radar-legend" aria-label="Radar legend">
+              <span><b className="cp-radar-legend-objective">◆</b> OBJECTIVE</span>
+              <span><b className="cp-radar-legend-hostile">▲</b> HOSTILE</span>
+            </div>
+          )}
+          <Radar blips={hud.blips} hullRel={wrap(hud.hullYaw - hud.turretYaw)} accent={accent} size={128} objective={campaignTarget} />
         </section>
       </footer>
     </div>
