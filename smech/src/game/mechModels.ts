@@ -191,14 +191,62 @@ const WEAPON_MODELS: Record<string, ModelBuilder> = {
   },
   turret: (p) => {
     const g = new THREE.Group();
-    const base = cyl(0.4, 0.46, 0.24, mat(p.dark), 12);
-    const head = box(0.52, 0.4, 0.6, mat(p.hull));
-    head.position.y = 0.3;
-    const gun = barrel(0.95, 0.09, mat(p.dark, { metalness: 0.8 }));
-    gun.position.set(0, 0.3, -0.62);
-    const eye = box(0.3, 0.08, 0.06, glow(p.glow));
-    eye.position.set(0, 0.38, -0.32);
-    g.add(base, head, gun, eye);
+    g.name = 'arc-sentry-module';
+    const base = cyl(0.48, 0.55, 0.28, mat(p.dark, { metalness: 0.82 }), 16);
+    base.position.y = -0.08;
+    const bearing = new THREE.Mesh(new THREE.TorusGeometry(0.42, 0.055, 8, 20), glow(p.glow));
+    bearing.rotation.x = Math.PI / 2;
+    bearing.position.y = 0.08;
+    const pedestal = cyl(0.24, 0.31, 0.42, mat(p.hull, { metalness: 0.82 }), 12);
+    pedestal.position.y = 0.25;
+    const pivot = new THREE.Group();
+    pivot.position.y = 0.44;
+
+    // Armoured yoke, exposed elevation pivots and a sensor mast give the pod a
+    // readable silhouette instead of a box with a tube glued to it.
+    const receiver = box(0.92, 0.52, 0.78, mat(p.dark, { metalness: 0.8 }));
+    receiver.position.set(0, 0.03, 0.02);
+    pivot.add(receiver);
+    for (const side of [-1, 1]) {
+      const cheek = box(0.22, 0.62, 0.68, mat(p.hull, { metalness: 0.78 }));
+      cheek.position.set(side * 0.54, -0.02, 0.03);
+      cheek.rotation.z = side * -0.12;
+      const axle = cyl(0.18, 0.18, 0.16, mat(p.dark), 12);
+      axle.rotation.z = Math.PI / 2;
+      axle.position.set(side * 0.58, -0.02, 0.02);
+      const bolt = cyl(0.075, 0.075, 0.18, glow(p.glow), 8);
+      bolt.rotation.z = Math.PI / 2;
+      bolt.position.copy(axle.position);
+      pivot.add(cheek, axle, bolt);
+    }
+    const roof = box(0.74, 0.14, 0.56, mat(p.hull, { metalness: 0.78 }));
+    roof.position.set(0, 0.36, 0.02);
+    pivot.add(roof);
+
+    const gunShroud = cyl(0.19, 0.23, 0.44, mat(p.dark, { metalness: 0.86 }), 12);
+    gunShroud.rotation.x = Math.PI / 2;
+    gunShroud.position.set(0, -0.08, -0.47);
+    const gun = barrel(1.35, 0.115, mat(0x8b9695, { metalness: 0.9, roughness: 0.28 }));
+    gun.position.set(0, -0.08, -1.2);
+    const muzzle = cyl(0.18, 0.15, 0.3, mat(p.dark, { metalness: 0.85 }), 12);
+    muzzle.rotation.x = Math.PI / 2;
+    muzzle.position.set(0, -0.08, -1.93);
+    const muzzleBand = new THREE.Mesh(new THREE.TorusGeometry(0.145, 0.032, 6, 14), glow(p.glow));
+    muzzleBand.position.set(0, -0.08, -2.1);
+    const eyeFrame = new THREE.Mesh(new THREE.TorusGeometry(0.16, 0.035, 8, 16), mat(p.hull));
+    eyeFrame.position.set(0, 0.17, -0.43);
+    const eye = new THREE.Mesh(new THREE.SphereGeometry(0.105, 10, 8), glow(p.glow));
+    eye.position.set(0, 0.17, -0.46);
+    const mast = box(0.12, 0.3, 0.16, mat(p.dark));
+    mast.position.set(0.29, 0.5, 0.05);
+    const mastLens = new THREE.Mesh(new THREE.SphereGeometry(0.07, 8, 8), glow(0x9ceeff));
+    mastLens.position.set(0.29, 0.68, 0.05);
+    const railL = barrel(1.14, 0.045, mat(p.dark));
+    railL.position.set(-0.25, -0.28, -1.12);
+    const railR = barrel(1.14, 0.045, mat(p.dark));
+    railR.position.set(0.25, -0.28, -1.12);
+    pivot.add(gunShroud, gun, muzzle, muzzleBand, eyeFrame, eye, mast, mastLens, railL, railR);
+    g.add(base, bearing, pedestal, pivot);
     return g;
   },
   orbital: (p) => {

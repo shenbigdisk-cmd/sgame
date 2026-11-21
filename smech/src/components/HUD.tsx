@@ -2,7 +2,6 @@ import { SIGHT_SIZE } from '../game/aimRing';
 import Canopy from './Canopy';
 import type { CSSProperties } from 'react';
 import './cockpit.css';
-import { SUPPLIES } from '../game/supplies';
 import type { HudBuff, HudState, HudWeapon, VehicleType, RadarBlip, WeaponId } from '../game/types';
 import { VEHICLES, WEAPON_INFO } from '../game/vehicles';
 import type { Settings } from '../game/settings';
@@ -71,8 +70,6 @@ const BLIP_COLOR: Record<string, string> = {
   sapper: '#ff6a00',
   bastion: '#ffc55a',
   boss: '#ff003c',
-  pickup: '#00e5ff',
-  drop: '#ffd700',
   obstacle: 'rgba(255,255,255,0.22)',
 };
 
@@ -149,7 +146,7 @@ function Radar({
             return <circle key={i} cx={x} cy={y} r={Math.max(1.2, (b.size ?? 3) * scale)} fill={fill} />;
           }
 
-          // 2. Supply Drops (Crates / Nano repair / ammo): distinct glowing crate box with +
+          // 2. Relay sites
           if (b.kind === 'relay')
             return (
               <circle
@@ -162,28 +159,7 @@ function Radar({
                 strokeWidth={1.8}
               />
             );
-          if (b.kind === 'drop' && b.dropKind) {
-            const supply = SUPPLIES[b.dropKind];
-            return (
-              <g key={i} transform={`translate(${x - 5},${y - 5}) scale(0.42)`}>
-                <rect width="24" height="24" rx="3" fill="#102019" stroke={supply.color} />
-                <path d={supply.path} fill="none" stroke={supply.color} strokeWidth="2.8" />
-              </g>
-            );
-          }
-          // 3. Pickups (Credits, scrap, exp): bright neon cyan diamond
-          if (b.kind === 'pickup') {
-            return (
-              <polygon
-                key={i}
-                points={`${x},${y - 3.2} ${x + 3.2},${y} ${x},${y + 3.2} ${x - 3.2},${y}`}
-                fill="#00e5ff"
-                style={{ filter: 'drop-shadow(0 0 3px #00e5ff)' }}
-              />
-            );
-          }
-
-          // 4. Edge indicator for distant or unseen enemy tanks (clamped to perimeter)
+          // 3. Edge indicator for distant or unseen enemy tanks (clamped to perimeter)
           if (b.edge) {
             const angle = Math.atan2(y - half, x - half);
             const edgeRadius = half - 5;
@@ -203,7 +179,7 @@ function Radar({
             );
           }
 
-          // 5. Boss: prominent crowned diamond
+          // 4. Boss: prominent crowned diamond
           if (b.kind === 'boss') {
             const d = Math.hypot(x - half, y - half);
             if (d > half - 6) {
@@ -222,7 +198,7 @@ function Radar({
             );
           }
 
-          // 6. Enemies: hostile directional triangles / chevrons
+          // 5. Enemies: hostile directional triangles / chevrons
           if (b.kind === 'heavy') {
             return (
               <polygon

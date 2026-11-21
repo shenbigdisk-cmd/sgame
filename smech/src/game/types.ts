@@ -97,12 +97,12 @@ export interface HudWeapon {
   evolved: boolean;
 }
 
+/** Tactical contacts only; pickups and supply crates intentionally stay off radar. */
 export interface RadarBlip {
   x: number; // right component (relative to turret facing)
   y: number; // forward component
-  kind: EnemyKind | 'relay' | 'pickup' | 'obstacle' | 'boss' | 'drop';
+  kind: EnemyKind | 'relay' | 'obstacle' | 'boss';
   size?: number;
-  dropKind?: DropKind;
   /** box footprint corners in radar space (x,y pairs) */
   poly?: number[];
   tall?: boolean;

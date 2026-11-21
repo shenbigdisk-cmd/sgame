@@ -10,8 +10,8 @@
  * - Each mission is 4 stages: three combat stages + extraction.
  * - At most ONE kill-count objective (neutralize/secure) per stage, because
  *   the engine credits each kill to a single objective.
- * - Tactical spawns are staged near their objective; kills count for the
- *   active stage even if pursuers chase the player beyond the original ring.
+ * - Tactical spawns are staged near their objective; every hostile eliminated
+ *   in the active stage counts, even after pursuit or a sapper self-detonation.
  * - Installation names drive the 3D mesh: "GENERATOR" -> reactor,
  *   "ROADBLOCK" -> barrier wall, "FOB"/"BASE" -> command post, else flak.
  */
@@ -389,7 +389,7 @@ export const CAMPAIGN_MISSIONS: CampaignMission[] = [
         stage: 1,
         type: 'neutralize_outpost',
         title: 'Clear the Memorial Road Pickets',
-        desc: 'Kill all three pickets: a Wisp skimmer, Hound Walker and T-90 Raider. Coloured hostile contacts mark live units on radar.',
+        desc: 'Kill the 3 pickets: a Wisp skimmer, Hound Walker and T-90 Raider. Live hostile contacts appear on radar.',
         targetCount: 3,
         currentCount: 0,
         completed: false,
@@ -401,7 +401,7 @@ export const CAMPAIGN_MISSIONS: CampaignMission[] = [
         stage: 2,
         type: 'neutralize_outpost',
         title: 'Break the Ridge Ambush',
-        desc: 'Kane\'s armor is springing a trap on the convoy. Destroy the ambush force.',
+        desc: 'Kill all four: T-90 Raider, Hound Walker, Longbow sniper and Ember Sapper. Its self-detonation counts.',
         targetCount: 4,
         currentCount: 0,
         completed: false,
@@ -413,7 +413,7 @@ export const CAMPAIGN_MISSIONS: CampaignMission[] = [
         stage: 3,
         type: 'secure_fob',
         title: 'Secure the Kestrel Memorial FOB',
-        desc: 'Clear the Vanguard garrison holding the memorial landing ground.',
+        desc: 'Kill all four: Goliath heavy, Mender, T-90 Raider and Hound Walker. Radar edge arrows mark distant hostiles.',
         targetCount: 4,
         currentCount: 0,
         completed: false,

@@ -8,6 +8,11 @@ it('fits the installed hardpoints and gives a stripped socket no visible model',
  expect(makeHardpoint(null,cfg).root.visible).toBe(false);
  expect(makeHardpoint('autocannon',cfg).rotor).toBeInstanceOf(THREE.Group);
  expect(makeHardpoint('scatter',cfg).rotor).toBeUndefined();
+ const turret = makeHardpoint('turret',cfg);
+ let meshes = 0;
+ turret.root.traverse(object => { if ((object as THREE.Mesh).isMesh) meshes += 1; });
+ expect(meshes).toBeGreaterThan(12);
+ expect(turret.tip.position.z).toBeLessThan(-2);
 });
 
 it('keeps each factory muzzle in the lower side of the viewport, away from the reticle',()=>{

@@ -7,6 +7,7 @@ import { ORBITAL, orbitalDamage, orbitalOffset, orbitalRadius } from './orbital'
 import { reserveRecharge } from './forge';
 import { makeSupplyCrate } from './supplyMesh';
 import { SUPPLIES } from './supplies';
+import { createSentryTurret, disposeSentryTurret } from './sentryTurret';
 import { boxImpact } from './colliders';
 import { SALVAGE, cacheValue, crossesVeil, veilStats } from './fieldRules';
 import { conditionFor } from './sectorRules';
@@ -301,6 +302,7 @@ export interface GameOptions {
   onPause: (paused: boolean) => void;
   /** Campaign mode: disables random wave survival loop & expands play area to full sector */
   campaignMode?: boolean;
+  /** Called whenever a hostile is removed, including non-awarded self-detonations. */
   onEnemyKilled?: (e: { kind: EnemyKind; pos: { x: number; z: number }; boss?: boolean; elite?: boolean }) => void;
   onCheckInstallationHit?: (start: THREE.Vector3, end: THREE.Vector3, damage: number, splash: number) => boolean;
   onAreaDamage?: (pos: THREE.Vector3, damage: number, radius: number) => void;
@@ -394,8 +396,8 @@ export class Game {
   private reactiveCd = -99;
   private arcTimer = 6;
   private drops: SupplyDrop[] = [];
-  private dropTimer = 22;
-  private dropTimerTotal = 22;
+  private dropTimer = 60;
+  private dropTimerTotal = 60;
   private lines: { line: THREE.Line; age: number }[] = [];
   private lockWarnTimer = 0;
   private composer!: EffectComposer;
@@ -810,7 +812,10 @@ export class Game {
       (cloud.mesh.material as THREE.Material).dispose();
     }
     this.smokeClouds.length = 0;
-    for (const t of this.turrets) this.scene.remove(t.group);
+    for (const t of this.turrets) {
+      this.scene.remove(t.group);
+      disposeSentryTurret(t.group);
+    }
     this.turrets.length = 0;
     for (const m of this.mines) this.scene.remove(m.group);
     this.mines.length = 0;
@@ -1710,6 +1715,36 @@ export class Game {
     return best;
   }
 
+  /** Pick the visible hostile whose projected position is nearest the reticle. */
+  private closestEnemyToAimCross(from: THREE.Vector3, dir: THREE.Vector3, range = 240): Enemy | null {
+    this.camera.updateMatrixWorld(true);
+    let best: Enemy | null = null;
+    let bestCrossDistance = Infinity;
+    let bestDistance = Infinity;
+    const aspect = this.camera.aspect || 1;
+
+    for (const e of this.enemies) {
+      if (!e.alive) continue;
+      const center = this.tmpA.set(e.pos.x, e.pos.y + e.height * 0.5, e.pos.z);
+      const toTarget = this.tmpB.copy(center).sub(from);
+      const distance = toTarget.length();
+      if (distance < 0.2 || distance > range + e.radius || toTarget.dot(dir) <= 0) continue;
+      if (!this.hasLOS(from, e.pos, 0, e.height * 0.5)) continue;
+
+      const projected = center.project(this.camera);
+      if (projected.z < -1 || projected.z > 1 || Math.abs(projected.x) > 1.1 || Math.abs(projected.y) > 1.1) continue;
+      // NDC x spans the whole viewport width while y spans its height. Weight
+      // x by the aspect ratio so this is a true screen-space distance to center.
+      const crossDistance = (projected.x * aspect) ** 2 + projected.y ** 2;
+      if (crossDistance < bestCrossDistance || (crossDistance === bestCrossDistance && distance < bestDistance)) {
+        best = e;
+        bestCrossDistance = crossDistance;
+        bestDistance = distance;
+      }
+    }
+    return best;
+  }
+
   /** Automatically moves aim crosshair elevation (pitch up/down) to track targeted enemies. */
   private updatePitchAssist(dt: number) {
     if (!this.settings.pitchAssist || !this.alive || !this.enemies.length) return;
@@ -2539,12 +2574,13 @@ export class Game {
     this.addFeed(`STASIS NOVA: ${affected} HOSTILES FROZEN`);
   }
 
-  /** Warden's sentry: an automated gun that holds a position for 30s. */
+  /** Warden's sentry: an armoured, automated gun platform that holds a flank for 24s. */
   private deployTurret() {
     while (this.turrets.length >= 1) {
       const old = this.turrets.shift()!;
       this.explosion(old.pos, 0.8);
       this.scene.remove(old.group);
+      disposeSentryTurret(old.group);
     }
     const f = fwd(this.turretYaw, new THREE.Vector3());
     let bx = 0;
@@ -2561,23 +2597,7 @@ export class Game {
       bz = cz;
     }
     const y = heightAt(bx, bz);
-    const g = new THREE.Group();
-    const dark = new THREE.MeshStandardMaterial({ color: 0x23262b, roughness: 0.7, metalness: 0.4 });
-    const trim = new THREE.MeshStandardMaterial({ color: this.cfg.accent, emissive: this.cfg.accent, emissiveIntensity: 1.2 });
-    const base = new THREE.Mesh(new THREE.CylinderGeometry(1.2, 1.5, 0.8, 10), dark);
-    base.position.y = 0.4;
-    const column = new THREE.Mesh(new THREE.BoxGeometry(0.9, 1.2, 0.9), dark);
-    column.position.y = 1.4;
-    const head = new THREE.Group();
-    head.position.y = 2.2;
-    const housing = new THREE.Mesh(new THREE.BoxGeometry(1.1, 0.7, 1.4), dark);
-    const gun = new THREE.Mesh(new THREE.CylinderGeometry(0.12, 0.14, 2.2, 8), dark);
-    gun.rotation.x = Math.PI / 2;
-    gun.position.z = 1.6;
-    const eye = new THREE.Mesh(new THREE.SphereGeometry(0.18, 8, 8), trim);
-    eye.position.set(0, 0.45, 0.4);
-    head.add(housing, gun, eye);
-    g.add(base, column, head);
+    const { group: g, head } = createSentryTurret(this.cfg.accent);
     g.position.set(bx, y, bz);
     setShadows(g);
     this.scene.add(g);
@@ -2594,6 +2614,7 @@ export class Game {
       if (t.life <= 0) {
         this.explosion(this.tmpA.set(t.pos.x, t.pos.y + 1.5, t.pos.z), 0.9);
         this.scene.remove(t.group);
+        disposeSentryTurret(t.group);
         this.turrets.splice(i, 1);
         continue;
       }
@@ -2968,11 +2989,7 @@ export class Game {
     const local = this.tmpD.set(side * 2.0, -0.6, -2.2);
     const muzzle = this.camera.localToWorld(local.clone());
     const dir = this.camera.getWorldDirection(new THREE.Vector3());
-    let assist = this.assistTarget(muzzle, dir) ?? this.nearestEnemyInFront(dir);
-    if (this.evolved('missiles')) {
-      const visible = this.enemies.filter((e) => e.alive && e.pos.distanceTo(this.pos) < 180 && this.hasLOS(muzzle, e.pos, 0, e.height * 0.5));
-      if (visible.length) assist = visible[this.missileQueue % visible.length];
-    }
+    const assist = this.closestEnemyToAimCross(muzzle, dir);
     // launch outward/upward, then the homing steers it in
     const vel = dir.clone().addScaledVector(rightOf(this.turretYaw, this.tmpC), side * 0.45).add(new THREE.Vector3(0, 0.35, 0)).normalize().multiplyScalar(70);
     const dmg = 23 * this.stats.missileDmgMul;
@@ -2983,23 +3000,6 @@ export class Game {
     this.audio.playMissile(side * 0.22);
     this.makeNoise(90);
     this.shake = Math.max(this.shake, 0.05);
-  }
-
-  private nearestEnemyInFront(dir: THREE.Vector3) {
-    let best: Enemy | null = null;
-    let bestD = Infinity;
-    for (const e of this.enemies) {
-      if (!e.alive) continue;
-      const v = this.tmpA.set(e.pos.x - this.pos.x, 0, e.pos.z - this.pos.z);
-      const d = v.length();
-      if (d > 200) continue;
-      if (v.divideScalar(d).dot(dir) < 0.55 || !this.hasLOS(this.pos, e.pos, this.cfg.camHeight, e.height * 0.5)) continue;
-      if (d < bestD) {
-        bestD = d;
-        best = e;
-      }
-    }
-    return best;
   }
 
   private updateStrikes(dt: number) {
@@ -3187,7 +3187,7 @@ export class Game {
   // Supply drops
   // -------------------------------------------------------------------------
   private rollDropKind(): DropKind {
-    // Once a rack runs dry, the next ordinary shipment is a rearm unless one is already on the field.
+    // Salvage crates can rearm an empty rack; sky deliveries are explicitly repair-only.
     if (this.ordnance.missing && !this.drops.some(d=>d.kind==='ammo') && (this.ordnance.dry || Math.random()<0.35)) return 'ammo';
     const total = DROP_WEIGHTS.reduce((sum, [, w]) => sum + w, 0);
     let r = Math.random() * total;
@@ -3198,7 +3198,13 @@ export class Game {
     return 'repair';
   }
 
-  private spawnDrop(fx?: number, fz?: number, forced?: DropKind, recovered?: number) {
+  private spawnDrop(
+    fx?: number,
+    fz?: number,
+    forced?: DropKind,
+    recovered?: number,
+    source: 'airdrop' | 'salvage' = 'airdrop',
+  ) {
     const kind = forced ?? this.rollDropKind();
     const close = this.stats.dropRate > 0;
     const dist = rand(close ? 45 : 75, close ? 95 : 150);
@@ -3227,20 +3233,22 @@ export class Game {
     const credits = kind === 'coins' ? recovered ?? cacheValue(Math.random()) : 0;
     const {group,ring} = makeSupplyCrate(kind,credits);
     const y = heightAt(x,z);
-    group.position.set(x, y + (recovered ? 1.6 : 110), z);
+    const falling = source === 'airdrop';
+    group.position.set(x, y + (falling ? 110 : 1.6), z);
     this.scene.add(group);
-    this.drops.push({ credits, kind, group, ring, pos: new THREE.Vector3(x, y, z), falling: !recovered, vy: 8, life: 120, ping: rand(0.5, 2) });
-    if (recovered) this.addFeed(`JACKAL CARGO RELEASED — ${recovered} CR`);
-    else { this.setMessage(`SUPPLY DROP INBOUND — ${SUPPLIES[kind].name.toUpperCase()}`); this.audio.playIncoming(); }
+    this.drops.push({ credits, kind, group, ring, pos: new THREE.Vector3(x, y, z), falling, vy: 8, life: 120, ping: rand(0.5, 2) });
+    if (recovered !== undefined) this.addFeed(`JACKAL CARGO RELEASED — ${recovered} CR`);
+    else if (falling) { this.setMessage(`SUPPLY DROP INBOUND — ${SUPPLIES[kind].name.toUpperCase()}`); this.audio.playIncoming(); }
+    else this.addFeed(`WRECK SALVAGE — ${SUPPLIES[kind].name.toUpperCase()}`);
   }
 
   private updateDrops(dt: number) {
     if (this.alive) {
       this.dropTimer -= dt * (1 + this.stats.dropRate * 0.35);
-      if (this.dropTimer <= 0 && this.drops.length < 3) {
-        this.dropTimerTotal = rand(38, 55);
+      if (this.dropTimer <= 0 && this.drops.length < 1) {
+        this.dropTimerTotal = rand(75, 100);
         this.dropTimer = this.dropTimerTotal;
-        this.spawnDrop();
+        this.spawnDrop(undefined, undefined, 'repair');
       }
     }
     for (let i = this.drops.length - 1; i >= 0; i--) {
@@ -4499,12 +4507,6 @@ export class Game {
     if (award) {
       this.score += gained;
       this.kills++;
-      this.opts?.onEnemyKilled?.({
-        kind: e.kind,
-        pos: { x: e.pos.x, z: e.pos.z },
-        boss: e.boss,
-        elite: e.elite,
-      });
       this.power=Math.min(this.cfg.powerCapacity,this.power+8*(this.taken.get('induction')??0));
       this.addFeed(`${e.cfg.name.toUpperCase()} DESTROYED  +${gained}${this.streak > 1 ? `  ×${this.streak} STREAK` : ''}`);
       this.floaters.addScore(this.tmpA.set(e.pos.x, e.pos.y + e.height * 0.75, e.pos.z), gained, this.streak);
@@ -4512,6 +4514,14 @@ export class Game {
     } else {
       this.addFeed(`${e.cfg.name.toUpperCase()} DETONATED`);
     }
+    // Objective progress follows a hostile leaving the field, not the score
+    // attribution. Sappers can self-detonate without an awarded player kill.
+    this.opts?.onEnemyKilled?.({
+      kind: e.kind,
+      pos: { x: e.pos.x, z: e.pos.z },
+      boss: e.boss,
+      elite: e.elite,
+    });
     this.scene.remove(e.bar);
     e.bar.traverse((o) => {
       const m = o as THREE.Mesh;
@@ -4525,10 +4535,12 @@ export class Game {
       e.laser.geometry.dispose();
     }
     this.leaveWreck(e);
-    if (e.cargo) this.spawnDrop(e.pos.x, e.pos.z, 'coins', e.cargo);
-    if (e.elite) {
-      this.spawnDrop(e.pos.x, e.pos.z);
-      this.addFeed('ELITE DOWN — SUPPLY POD INBOUND');
+    if (e.cargo) this.spawnDrop(e.pos.x, e.pos.z, 'coins', e.cargo, 'salvage');
+    if (e.elite || e.boss) {
+      this.spawnDrop(e.pos.x, e.pos.z, undefined, undefined, 'salvage');
+      this.addFeed(`${e.elite ? 'ELITE' : 'BOSS'} DOWN — WRECK SALVAGE RECOVERED`);
+    } else if (Math.random() < 0.08 * this.stats.pickupMul) {
+      this.spawnDrop(e.pos.x, e.pos.z, undefined, undefined, 'salvage');
     }
     if (e.boss) {
       this.setMessage(`${BOSS_NAME} DESTROYED`);
@@ -4651,7 +4663,6 @@ export class Game {
       this.addFeed('THE CROWD ROARS YOUR NAME');
       this.victoryPending = true;
       this.victoryTimer = this.waveTag === 'SALVAGE RUSH' && this.drops.some(d => d.kind === 'coins') ? 10 : STAGE_CLEAR_DELAY;
-      this.dropTimer = Math.min(this.dropTimer, 10);
       // field repairs between waves: guarantee at least 50% max HP, or +35% max HP
       this.hp = Math.min(this.maxHp, Math.max(this.hp + this.maxHp * 0.35, this.maxHp * 0.5));
       this.shieldHp = this.stats.shieldMax;
@@ -4686,12 +4697,7 @@ export class Game {
     this.audio.playExpand();
     this.setMessage(`PERIMETER EXPANDING — ${Math.round(this.arenaTarget)}M`);
     this.addFeed(opened.length ? `NEW SECTORS: ${opened.join(' · ')}` : 'PERIMETER EXPANDED');
-    // reward for pushing out: two supply pods land in the newly opened ring
-    for (let i = 0; i < 2; i++) {
-      const a = rand(0, TWO_PI);
-      const dd = rand(from + 12, this.arenaTarget - 14);
-      this.spawnDrop(Math.sin(a) * dd, Math.cos(a) * dd);
-    }
+    // Field supplies now come from repair-only airdrops or enemy wreck salvage.
     this.shake = Math.max(this.shake, 0.3);
   }
 
@@ -4774,13 +4780,12 @@ export class Game {
       }
     }
     if (tag === 'salvage') {
-      // Scatter a short trail in one quadrant: a tempting detour, not a free wallet refill.
-      const heading = rand(0, TWO_PI);
-      for (let i = 0; i < 3; i++) {
-        const angle = heading + i * 0.45, reach = 32 + i * 18;
-        this.spawnDrop(this.pos.x + Math.sin(angle) * reach, this.pos.z + Math.cos(angle) * reach, i < 2 ? 'coins' : Math.random() < 0.5 ? 'overcharge' : 'aegis');
+      // The Jackal carries the cache itself: destroy the runner to recover it.
+      const runner = this.enemies.find((e) => e.alive && e.kind === 'jackal');
+      if (runner) {
+        runner.cargo = cacheValue(Math.random());
+        this.addFeed(`JACKAL CARRYING ${runner.cargo} CR — DESTROY IT TO RECOVER THE CACHE`);
       }
-      this.addFeed('SUPPLY FLIGHT — RACE THE JACKAL TO GOLD CACHES');
     }
     // an elite champion drops a supply pod when destroyed
     const elite = !bossWave && this.wave >= 3 && Math.random() < 0.35 + Math.min(0.3, this.wave * 0.02);
@@ -4792,11 +4797,11 @@ export class Game {
       this.spawnEnemy('heavy', undefined, undefined, true);
       this.setMessage(`STAGE ${this.wave}  —  ${BOSS_NAME} ENTERS THE ARENA`);
       this.addFeed('PRIORITY TARGET: HEAVY TITAN CHASSIS');
-      // Emergency tactical supply drop for the pilot entering a boss duel
+      // The only scripted sky delivery in a boss fight is a repair kit.
       const a = rand(0, TWO_PI);
       const px = clamp(this.pos.x + Math.sin(a) * 22, -this.arenaR + 24, this.arenaR - 24);
       const pz = clamp(this.pos.z + Math.cos(a) * 22, -this.arenaR + 24, this.arenaR - 24);
-      this.spawnDrop(px, pz);
+      this.spawnDrop(px, pz, 'repair');
     } else if (this.waveTag) {
       this.setMessage(`STAGE ${this.wave}  —  ${this.waveTag}`);
     } else {
@@ -5125,14 +5130,6 @@ export class Game {
         }
         blips.push({ x: r.x, y: r.y, kind: 'obstacle', poly, tall: o.h > 6 });
       } else blips.push({ x: r.x, y: r.y, kind: 'obstacle', size: o.r, tall: o.h > 6 });
-    }
-    for (const p of this.pickups) {
-      const r = rel(p.pos.x, p.pos.z);
-      if (r.d < 180) blips.push({ x: r.x, y: r.y, kind: 'pickup' });
-    }
-    for (const d of this.drops) {
-      const r = rel(d.pos.x, d.pos.z);
-      if (r.d < 260) blips.push({ x: r.x, y: r.y, kind: 'drop', dropKind: d.kind, size: d.falling ? 4.5 : 3.5 });
     }
     for (const relay of this.mapApi.relays) {
       if (relay.claimed) continue;

@@ -30,7 +30,7 @@ describe('campaign in-sortie HUD', () => {
     expect(html).toContain(active.title);
     expect(html).not.toContain(previous.title);
     expect(html).not.toContain(future.title);
-    expect(html).not.toContain(active.desc);
+    expect(html).toContain(active.desc);
     expect(html).toContain('STAGE 2');
     expect(html).not.toContain('TURN LEFT');
     expect(html).not.toContain('METRES');

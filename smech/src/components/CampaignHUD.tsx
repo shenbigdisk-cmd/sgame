@@ -110,7 +110,7 @@ export default function CampaignHUD({
                           </span>
                           {counter && <span className="shrink-0 text-[10px] tabular-nums text-amber-200">{counter}</span>}
                         </div>
-                        <div className="ml-4 truncate text-[9px] text-slate-400">
+                        <div className="ml-4 line-clamp-2 whitespace-normal text-[9px] leading-snug text-slate-400">
                           {obj.desc || OBJECTIVE_HINT[obj.type]}
                         </div>
                         {isHold && (
